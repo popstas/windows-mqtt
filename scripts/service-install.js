@@ -4,7 +4,7 @@ const path = require('path');
 const packageJson = require('../package.json');
 
 const serviceWorkdir = fs.realpathSync(path.join(__dirname, '..'));
-const servicePath = path.join(serviceWorkdir, 'index.js');
+const servicePath = path.join(serviceWorkdir, 'src/index.js');
 
 // Create a new service object
 const svc = new Service({

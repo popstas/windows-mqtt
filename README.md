@@ -19,7 +19,7 @@ Keys:
 - `f1-f12`
 - `enter, escape, tab, space, backspace`
 - `up, down, left, right`
-- `home, end, insert, delete, pageup, pagedown`,
+- `home, end, insert, delete, pageup, pagedown`
 - `control, shift, alt, command`
 - `audio_prev, audio_next, audio_pause`
 
@@ -34,6 +34,9 @@ Modifiers `control|ctrl|^, shift, alt, command|cmd|win` can be used: `(ctrl+alt+
 
 ### tts
 - `tts` - TTS received message
+
+## Bugs
+Keyboard and mouse emulation not work while `windows-mqtt` running as Windows service.
 
 ## Install
 1. Copy [src/config.example.js](src/config.example.js) to `src/config.js`

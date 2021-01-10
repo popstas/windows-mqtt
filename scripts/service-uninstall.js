@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const packageJson = require('../package.json');
 
-const servicePath = fs.realpathSync(path.join(__dirname, '..', 'index.js'));
+const servicePath = fs.realpathSync(path.join(__dirname, '..', 'src/index.js'));
 
 const svc = new Service({
   name: packageJson.name,
