@@ -1,5 +1,21 @@
 # Windows MQTT - control Windows PC with MQTT
 
+## Features (modules)
+### audio
+- `home/room/pc/audio/volume/set` - set volume, `0-100`
+- `home/room/pc/audio/mute/set` - set mute, `0 or 1`
+
+Publish to:
+
+- `home/room/pc/audio/volume`
+- `home/room/pc/audio/mute`
+
+### mouse
+- `home/room/pc/mouse/click` - click button, `left|right|middle`
+
+### tts
+- `tts` - TTS received message
+
 ## Install
 1. Copy [src/config.example.js](src/config.example.js) to `src/config.js`
 

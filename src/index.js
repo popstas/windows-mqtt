@@ -19,6 +19,10 @@ async function start() {
   for (let name of modulesEnabled) {
     const opts = config.modules[name] || {};
     const mod = require('./modules/' + name);
+
+    // default mqtt base
+    if (!opts.base) opts.base = `${config.mqtt.base}/${name}`
+
     console.log('load module: ' + name);
     const modInited = await mod(mqtt, opts)
     modules.push(modInited);
@@ -30,6 +34,7 @@ async function start() {
     const modTopics = mod.subscriptions.map(sub => Array.isArray(sub.topics) ? sub.topics : [sub.topics]).flat();
     topics = [...topics, ...modTopics];
   }
+  console.log(`\nSubscribe to topics:\n- ${topics.flat().join('\n- ')}\n`);
   mqtt.subscribe(topics.flat());
 
   // on receive message
@@ -39,6 +44,7 @@ async function start() {
       console.log(`Cannot find handler for topic ${topic}`);
       return;
     }
+    // console.log(`< ${topic}: ${message}`);
 
     handler(topic, message);
   });

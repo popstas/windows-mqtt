@@ -6,11 +6,12 @@ module.exports = {
     port: 1883,
     user: 'user',
     password: 'password',
+    base: 'home/room/pc',
   },
   modules: {
     audio: {
       interval: 5,
-      base: 'home/room/pc/audio',
+      // base: 'home/room/pc/audio',
       volume: {
         set: '/volume/set',
         stat: '/volume',
@@ -19,6 +20,9 @@ module.exports = {
         set: '/mute/set',
         stat: '/mute',
       },
+    },
+    mouse: {
+      // base: 'home/room/pc/mouse',
     },
     tts: {
       // enabled: false,

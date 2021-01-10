@@ -9,19 +9,19 @@ async function publishMqtt() {
   const mute = await loudness.getMuted() ? '1' : '0';
   if (volume != lastVolume) {
     lastVolume = volume;
-    console.log(`< ${volumeStatTopic}: ${volume}`);
+    console.log(`> ${volumeStatTopic}: ${volume}`);
     mqtt.publish(volumeStatTopic, `${volume}`);
   }
 
   if (mute !== lastMute) {
     lastMute = mute;
-    console.log(`< ${muteStatTopic}: ${mute}`);
+    console.log(`> ${muteStatTopic}: ${mute}`);
     mqtt.publish(muteStatTopic, mute);
   }
 }
 
 async function onVolumeSet(topic, message) {
-  console.log(`> volume/set: ${message}`);
+  console.log(`< volume/set: ${message}`);
   const volume = parseInt(message);
   lastVolume = volume;
   await loudness.setVolume(volume);
@@ -31,7 +31,7 @@ async function onVolumeSet(topic, message) {
 async function onMuteSet(topic, message) {
   const mute = `${message}` == '1';
   await loudness.setMuted(mute);
-  console.log(`> mute/set: ${message}`);
+  console.log(`< mute/set: ${message}`);
   mqtt.publish(muteStatTopic, `${mute}`);
 }
 
