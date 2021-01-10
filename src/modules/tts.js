@@ -1,35 +1,18 @@
 const fs = require('fs');
 const os = require('os');
-const isWindows = os.platform == 'win32';
 const execSync = require('child_process').execSync;
-let windowsLogger;
-if (isWindows) {
-  const EventLogger = require('node-windows').EventLogger;
-  windowsLogger = new EventLogger('mqtt2tts');
-}
 
 const maxRetry = 10;
 const retryDelay = 1000;
 const ttsDelay = 0; // макс. время задержки в получении и генерации mp3, если в сообщении приходит msg|1234567889, то в конце - время отправки
 
-let config;
+let config, log;
 
 // for tts cache
 const mp3Path = './data'; // TODO:
 if (!fs.existsSync(mp3Path)) {
   fs.mkdir(mp3Path, () => {});
 }
-
-const log = (msg, type = 'info') => {
-  const tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
-  const d = new Date(Date.now() - tzoffset).
-    toISOString().
-    replace(/T/, ' ').      // replace T with a space
-    replace(/\..+/, '')     // delete the dot and everything after
-
-  console[type](`${d} ${msg}`);
-  if (isWindows && process.env.NODE_ENV == 'production') windowsLogger[type](msg);
-};
 
 const ttsSay = (msg, tryNum = 1) => {
   msg = msg.toLowerCase();
@@ -83,8 +66,9 @@ const ttsSay = (msg, tryNum = 1) => {
   }
 };
 
-module.exports = (mqtt, configModule) => {
+module.exports = (mqtt, configModule, configLog) => {
   config = configModule;
+  log = configLog;
 
   return {
     subscriptions: [{

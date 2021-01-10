@@ -1,9 +1,9 @@
 const robot = require('robotjs');
 
-module.exports = async (mqtt, config) => {
+module.exports = async (mqtt, config, log) => {
   async function onClick(topic, message) {
     message = `${message}`;
-    console.log(`< ${topic}: ${message}`);
+    log(`< ${topic}: ${message}`);
     const button = ['left', 'middle', 'right'].includes(message) ? message : 'left';
     robot.mouseClick(button);
   }

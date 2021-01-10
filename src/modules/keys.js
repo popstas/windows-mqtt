@@ -1,9 +1,9 @@
 const robot = require('robotjs');
 
-module.exports = async (mqtt, config) => {
+module.exports = async (mqtt, config, log) => {
   async function onPress(topic, message) {
     message = `${message}`;
-    console.log(`< ${topic}: ${message}`);
+    log(`< ${topic}: ${message}`);
 
     let mods = [];
     const res = message.match(/^\((.*?)\) ?/);
@@ -20,13 +20,13 @@ module.exports = async (mqtt, config) => {
     }
 
     const modsStr = mods.length > 0 ? `${mods.join('+')}+` : '';
-    console.log(`press ${modsStr}${message}`);
+    log(`press ${modsStr}${message}`);
     robot.keyTap(message, mods);
   }
 
   async function onType(topic, message) {
     message = `${message}`;
-    console.log(`< ${topic}: ${message}`);
+    log(`< ${topic}: ${message}`);
     robot.typeString(message);
   }
 
