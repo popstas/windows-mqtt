@@ -10,6 +10,25 @@ Publish to:
 - `home/room/pc/audio/volume`
 - `home/room/pc/audio/mute`
 
+### keys
+- `home/room/pc/keys/press` - press a single key
+- `home/room/pc/keys/type` - type a string
+
+Keys:
+
+- `f1-f12`
+- `enter, escape, tab, space, backspace`
+- `up, down, left, right`
+- `home, end, insert, delete, pageup, pagedown`,
+- `control, shift, alt, command`
+- `audio_prev, audio_next, audio_pause`
+
+[Full keys list](https://robotjs.io/docs/syntax#keys)
+
+Modifiers `control|ctrl|^, shift, alt, command|cmd|win` can be used: `(ctrl+alt+win)t`
+
+
+
 ### mouse
 - `home/room/pc/mouse/click` - click button, `left|right|middle`
 

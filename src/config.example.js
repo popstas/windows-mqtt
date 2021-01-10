@@ -21,6 +21,9 @@ module.exports = {
         stat: '/mute',
       },
     },
+    keys: {
+      // base: 'home/room/pc/keys',
+    },
     mouse: {
       // base: 'home/room/pc/mouse',
     },
