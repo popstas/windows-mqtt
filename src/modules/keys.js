@@ -1,14 +1,22 @@
 const robot = require('robotjs');
 
 module.exports = async (mqtt, config, log) => {
-  async function onPress(topic, message) {
+  function onPress(topic, message) {
     message = `${message}`;
+    const keys = `${message}`.split(' ');
+
     log(`< ${topic}: ${message}`);
 
+    for (let key of keys) {
+      pressKey(key);
+    }
+  }
+
+  function pressKey(key) {
     let mods = [];
-    const res = message.match(/^\((.*?)\) ?/);
+    const res = key.match(/^\((.*?)\) ?/);
     if (res) {
-      message = message.replace(/^\((.*?)\) ?/, '');
+      key = key.replace(/^\((.*?)\) ?/, '');
       mods = res[1].split(/[,|+-]/);
 
       // modifiers aliases
@@ -20,11 +28,11 @@ module.exports = async (mqtt, config, log) => {
     }
 
     const modsStr = mods.length > 0 ? `${mods.join('+')}+` : '';
-    log(`press ${modsStr}${message}`);
-    robot.keyTap(message, mods);
+    log(`press ${modsStr}${key}`);
+    robot.keyTap(key, mods);
   }
 
-  async function onType(topic, message) {
+  function onType(topic, message) {
     message = `${message}`;
     log(`< ${topic}: ${message}`);
     robot.typeString(message);

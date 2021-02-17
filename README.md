@@ -11,7 +11,7 @@ Publish to:
 - `home/room/pc/audio/mute`
 
 ### keys
-- `home/room/pc/keys/press` - press a single key
+- `home/room/pc/keys/press` - press a single key, you can pass several keys, space delimeted
 - `home/room/pc/keys/type` - type a string
 
 Keys:
@@ -27,6 +27,9 @@ Keys:
 
 Modifiers `control|ctrl|^, shift, alt, command|cmd|win` can be used: `(ctrl+alt+win)t`
 
+Examples:
+
+- `(win)x up up right down` - suspend for Windows 10
 
 
 ### mouse
