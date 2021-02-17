@@ -10,6 +10,9 @@ Publish to:
 - `home/room/pc/audio/volume`
 - `home/room/pc/audio/mute`
 
+### exec
+- `home/room/pc/exec/cmd` - execute command with arguments in system shell
+
 ### keys
 - `home/room/pc/keys/press` - press a single key, you can pass several keys, space delimeted
 - `home/room/pc/keys/type` - type a string
