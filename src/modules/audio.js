@@ -7,7 +7,8 @@ let lastVolume, lastMute;
 async function publishMqtt() {
   const volume = await loudness.getVolume();
   const mute = await loudness.getMuted() ? '1' : '0';
-  if (volume != lastVolume) {
+
+  if (!isNaN(volume) && volume != lastVolume) {
     lastVolume = volume;
     console.log(`> ${volumeStatTopic}: ${volume}`);
     mqtt.publish(volumeStatTopic, `${volume}`);
