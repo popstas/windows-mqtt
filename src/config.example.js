@@ -27,6 +27,17 @@ module.exports = {
     mouse: {
       // base: 'home/room/pc/mouse',
     },
+    notify: {
+      title: 'MQTT',
+      appIcons: {
+        'Messages': 'sms.png', // place to assets/icons/sms.png
+      },
+      appSounds: {
+        'Messages': false, // https://docs.microsoft.com/en-us/uwp/schemas/tiles/toastschema/element-audio?redirectedfrom=MSDN
+      },
+      clearNotificationWebhook: 'https://trigger.macrodroid.com/123123123/notification-clear',
+      markAsReadText: 'Mark as readed',
+    },
     tts: {
       // enabled: false,
       ttsTopic: 'tts',

@@ -10,8 +10,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "axios": "^0.21.1",
     "loudness": "^0.4.1",
     "mqtt": "^4.2.6",
+    "node-notifier": "^9.0.1",
     "node-windows": "^1.0.0-beta.5",
     "robotjs": "^0.6.0"
   }
