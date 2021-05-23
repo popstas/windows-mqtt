@@ -1,7 +1,7 @@
 {
   "name": "windows-mqtt",
   "version": "0.0.1",
-  "description": "Windows service for control PC with MQTT, modular",
+  "description": "Control PC with MQTT, modular",
   "scripts": {
     "start": "node src/index.js",
     "install-windows": "node scripts/service-install.js",

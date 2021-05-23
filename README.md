@@ -1,4 +1,6 @@
-# Windows MQTT - control Windows PC with MQTT
+# Control PC with MQTT
+
+Tested on Windows 10 and Ubuntu Desktop 20.04
 
 ## Features (modules)
 ### audio
@@ -11,7 +13,8 @@ Publish to:
 - `home/room/pc/audio/mute`
 
 ### exec
-- `home/room/pc/exec/cmd` - execute command with arguments in system shell
+- `home/room/pc/exec/cmd 'shell cmd'` - simple execute command with arguments in system shell
+- `home/room/pc/exec/cmd '{"cmd": "shell cmd", "success_tts": "Success", "error_tts": "Error"}` - execute command with tts feedback. You can define default tts feedback in config. Set `success_tts: 'stdout'` for answer with command output
 
 ### keys
 - `home/room/pc/keys/press` - press a single key, you can pass several keys, space delimeted

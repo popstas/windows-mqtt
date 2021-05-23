@@ -21,6 +21,10 @@ module.exports = {
         stat: '/mute',
       },
     },
+    exec: {
+      success_tts: 'Command success', // 'stdout' for answer with command output
+      error_tts: 'Command error',
+    },
     keys: {
       // base: 'home/room/pc/keys',
     },
