@@ -73,14 +73,12 @@ module.exports = async (mqtt, config, log) => {
     if (!config.clearNotificationWebhook) return;
 
     let msg = `${message}`;
-    msg = msg.replace(/[\[\]]/g, '?'); // [] вызывают 400 ошибку
+    msg = msg.replace(/[\[\]*]/g, '?'); // [] вызывают 400 ошибку
     // msg = msg.substring(0, 64);
 
     try {
       const res = await axios.get(config.clearNotificationWebhook, {
-        params: {
-          msg: msg
-        }
+        params: { msg }
       });
     }
 
