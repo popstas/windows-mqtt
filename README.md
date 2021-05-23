@@ -38,6 +38,11 @@ Examples:
 ### mouse
 - `home/room/pc/mouse/click` - click button, `left|right|middle`
 
+### notify
+- `home/room/pc/notify/notify 'message'` - simple notify
+- `home/room/pc/notify/notify '{"title": "title", "msg": "msg", "app": "Planfix", "icon": "/path/to/planfix.png", "actions": ["OK"]}'` - full notify
+
+
 ### tts
 - `tts` - TTS received message
 
