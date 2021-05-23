@@ -38,7 +38,7 @@ module.exports = async (mqtt, config, log) => {
       if (obj.msg) data.message = obj.msg;
       if (obj.title) data.title = obj.title;
       if (obj.actions) data.actions = [...data.actions, ...obj.actions.split(', ')];
-      if (obj.answer_topic) {
+      if (obj.answer_topic) { // TODO: answer_topic
         const answerTopic = obj.answer_topic;
         data.actions = [];
         data.tb = true;
@@ -59,17 +59,7 @@ module.exports = async (mqtt, config, log) => {
         // mark as readed in Android
         if (clickedButton == config.markAsReadText.toLowerCase()) {
           console.log('mark as read');
-          try {
-            const res = await axios.get(config.clearNotificationWebhook, {
-              params: {
-                msg: obj.msg.substring(0, 32)
-              }
-            });
-          }
-
-          catch (e) {
-            console.log('error clearNotificationWebhook', e);
-          }
+          await notifyClear(topic, obj.msg);
         }
       }
     } catch(e){}
@@ -79,11 +69,35 @@ module.exports = async (mqtt, config, log) => {
     notifier.notify(data, notifyCallback);
   }
 
+  async function notifyClear(topic, message) {
+    if (!config.clearNotificationWebhook) return;
+
+    let msg = `${message}`;
+    msg = msg.replace(/[\[\]]/g, '?'); // [] вызывают 400 ошибку
+    // msg = msg.substring(0, 64);
+
+    try {
+      const res = await axios.get(config.clearNotificationWebhook, {
+        params: {
+          msg: msg
+        }
+      });
+    }
+
+    catch (e) {
+      console.log('error clearNotificationWebhook', e);
+    }
+  }
+
   return {
     subscriptions: [
       {
         topics: [ config.base + '/notify' ],
         handler: notify
+      },
+      {
+        topics: [ config.base + '/clear' ],
+        handler: notifyClear
       },
     ]
   }
