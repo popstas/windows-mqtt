@@ -18,9 +18,11 @@ module.exports = async (mqtt, config, log) => {
     try {
       const obj = JSON.parse(cmd);
       if (obj.cmd) data.cmd = obj.cmd;
-      if (obj.success_tts) data.success_tts = obj.success_tts;
+      if (obj.success_tts !== undefined) data.success_tts = obj.success_tts;
       if (obj.error_tts) data.error_tts = obj.error_tts;
     } catch(e){}
+
+    const start = Date.now();
 
     exec(data.cmd, (error, stdout, stderr) => {
       if (error) {
@@ -29,13 +31,16 @@ module.exports = async (mqtt, config, log) => {
         return;
       }
 
+      const isLong = Date.now() - start > config.long_time_sec * 1000;
+      if (!isLong && data.success_tts == config.success_tts) data.success_tts = '';
+
       if (ttsTopic && data.success_tts) {
         if (data.success_tts == 'stdout') data.success_tts = stdout;
         mqtt.publish(ttsTopic, data.success_tts);
       }
 
-      console.log(`stdout: ${stdout}`);
-      console.error(`stderr: ${stderr}`);
+      if (stdout) console.log(`stdout: ${stdout}`);
+      if (stderr) console.error(`stderr: ${stderr}`);
     });
   }
 
