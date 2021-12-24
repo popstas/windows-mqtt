@@ -20,4 +20,6 @@ function mqttInit() {
   return client;
 }
 
-module.exports = mqttInit();
+module.exports = {
+  mqttInit
+};

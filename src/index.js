@@ -1,4 +1,4 @@
-const mqtt = require('./mqtt');
+const {mqttInit} = require('./mqtt');
 const config = require('./config');
 
 const os = require('os');
@@ -9,7 +9,29 @@ if (isWindows) {
   windowsLogger = new EventLogger('windows-mqtt');
 }
 
+let mqtt; // global object
+
 start();
+
+
+
+
+async function start() {
+  log('windows-mqtt started');
+
+  mqtt = mqttInit(); // global set
+
+  const modulesEnabled = getModulesEnabled();
+
+  const modules = await initModules(modulesEnabled);
+
+  subscribeToModuleTopics(modules);
+
+  listenModulesMQTT(modules);
+}
+
+
+
 
 function log(msg, type = 'info') {
   const tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
