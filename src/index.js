@@ -1,8 +1,10 @@
 const {mqttInit} = require('./mqtt');
 const config = require('./config');
+const SysTray = require('systray2').default;
+const {showConsole, hideConsole} = require('node-hide-console-window');
 
 const os = require('os');
-const isWindows = os.platform == 'win32';
+const isWindows = os.platform() == 'win32';
 let windowsLogger;
 if (isWindows) {
   const EventLogger = require('node-windows').EventLogger;
@@ -10,6 +12,7 @@ if (isWindows) {
 }
 
 let mqtt; // global object
+let systray; // global object
 
 start();
 
@@ -20,6 +23,11 @@ async function start() {
   log('windows-mqtt started');
 
   mqtt = mqttInit(); // global set
+
+  if (config.systray) {
+    initSysTray();
+    hideConsole();
+  }
 
   const modulesEnabled = getModulesEnabled();
 
@@ -42,18 +50,15 @@ function log(msg, type = 'info') {
 
   console[type](`${d} ${msg}`);
   if (isWindows && process.env.NODE_ENV == 'production') windowsLogger[type](msg);
-}
+  if (isWindows && systray && systray._process) {
+    const menu = getSysTrayMenu();
+    menu.tooltip = `${d} ${msg}`;
 
-async function start() {
-  log('windows-mqtt started');
-
-  const modulesEnabled = getModulesEnabled();
-
-  const modules = await initModules(modulesEnabled);
-
-  subscribeToModuleTopics(modules);
-
-  listenModulesMQTT(modules);
+    systray.sendAction({
+      type: 'update-menu',
+      menu: menu,
+    });
+  }
 }
 
 function listenModulesMQTT(modules) {
@@ -113,4 +118,81 @@ function getHandler(topic, modules) {
     if (sub) handler = sub.handler;
   }
   return handler;
+}
+
+function getSysTrayMenu() {
+  const itemReconnect = {
+    title: 'Reconnect MQTT',
+    enabled: true,
+    click() {
+      mqtt = mqttInit();
+    }
+  }
+
+  const itemShowConsole = {
+    title: 'Show console',
+    enabled: true,
+    click() {
+      showConsole();
+    }
+  }
+
+  const itemHideConsole = {
+    title: 'Hide console',
+    enabled: true,
+    click() {
+      hideConsole();
+    }
+  }
+
+  const itemExit = {
+    title: 'Exit',
+    tooltip: 'bb',
+    checked: false,
+    enabled: true,
+    click() {
+      systray.kill(true)
+    }
+  }
+
+  const menu = {
+    // you should use .png icon on macOS/Linux, and .ico format on Windows
+    icon: os.platform() === 'win32' ? './assets/trayicon.ico' : './assets/trayicon.png',
+    // a template icon is a transparency mask that will appear to be dark in light mode and light in dark mode
+    isTemplateIcon: os.platform() === 'darwin',
+    title: 'windows-mqtt',
+    tooltip: 'windows-mqtt',
+    items: [
+      itemShowConsole,
+      itemHideConsole,
+      itemReconnect,
+      // SysTray.separator, // SysTray.separator is equivalent to a MenuItem with "title" equals "<SEPARATOR>"
+      // item2,
+      itemExit
+    ]
+  };
+  return menu;
+}
+
+function initSysTray() {
+  const menu = getSysTrayMenu();
+
+  systray = new SysTray({ // global set
+    menu: menu,
+    debug: false,
+    copyDir: false // copy go tray binary to an outside directory, useful for packing tool like pkg.
+  })
+  
+  systray.onClick(action => {
+    if (action.item.click != null) {
+      action.item.click()
+    }
+  })
+  
+  // Systray.ready is a promise which resolves when the tray is ready.
+  systray.ready().then(() => {
+    console.log('systray started')
+  }).catch(err => {
+    console.log('systray failed to start: ' + err.message)
+  })
 }

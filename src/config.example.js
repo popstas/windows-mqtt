@@ -1,6 +1,7 @@
 const os = require('os');
 
 module.exports = {
+  systray: true,
   mqtt: {
     host: 'host',
     port: 1883,

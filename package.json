@@ -15,6 +15,7 @@
     "mqtt": "^4.2.6",
     "node-notifier": "^9.0.1",
     "node-windows": "^1.0.0-beta.5",
-    "robotjs": "^0.6.0"
+    "robotjs": "^0.6.0",
+    "systray2": "^2.1.4"
   }
 }
