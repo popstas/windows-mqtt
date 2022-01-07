@@ -69,5 +69,9 @@ module.exports = {
       gapLinux: 200,
       gapNoLinux: 0,
     },
+    windows: {
+      enabled: false, // module windows-manager not published yet, sorry
+      placeWindowOnOpen: true,
+    },
   },
 };
