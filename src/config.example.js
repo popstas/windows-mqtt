@@ -25,9 +25,27 @@ module.exports = {
     exec: {
       success_tts: 'Command success', // 'stdout' for answer with command output
       error_tts: 'Command error',
+      long_time_sec: 5,
     },
     keys: {
       // base: 'home/room/pc/keys',
+    },
+    midi: {
+      listen: true,
+      portName: 'WORLDE easy control',
+      // portNum: 1,
+      hotkeys: [
+        // send keys
+        {
+          midi: [176, 2, 127],
+          keys: 'alt+control+shift j',
+        },
+        // send mqtt
+        {
+          midi: [176, 67, 127],
+          mqtt: ['home/room/pc/windows/autoplace', '1'],
+        },
+      ]
     },
     mouse: {
       // base: 'home/room/pc/mouse',
