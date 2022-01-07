@@ -19,17 +19,27 @@ module.exports = async (mqtt, config, log) => {
 
 
 
+  const isDeviceConfigured = config.device?.vid && config.device?.pid;
 
   // переподключение, когда найдено midi устройство
-  if (config.device.vid && config.device.pid) {
-    usbDetect.startMonitoring();
-    // чтобы узнать нужные vid и pid, надо подписаться просто на 'add'
+  usbDetect.startMonitoring();
+  if (isDeviceConfigured) {
     usbDetect.on(`add:${config.device.vid}:${config.device.pid}`, function(device) {
       console.log('add', device);
       setTimeout(openMidi, 500);
     });
+    listenKeys();
   }
-
+  else {
+    console.log('Try to reconnect your midi device to see config');
+    // list all devices add
+    usbDetect.on(`add`, function(device) {
+      console.log('add', device);
+      console.log('add to midi: {} section in config:');
+      console.log(`portName: '${device.deviceName}',`);
+      console.log(`device: { vid: ${device.vendorId}, pid: ${device.productId} },`)
+    });
+  }
 
 
   function openMidi() {
@@ -153,8 +163,6 @@ module.exports = async (mqtt, config, log) => {
     lastMessage.date = Date.now();
     lastMessage.message = m;
   }
-
-  if (config.listen) listenKeys();
 
   return {
     subscriptions: []
