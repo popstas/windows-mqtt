@@ -1,14 +1,14 @@
 const {mqttInit} = require('./mqtt');
 const config = require('./config');
 const SysTray = require('systray2').default;
-const {showConsole, hideConsole} = require('node-hide-console-window');
-
 const os = require('os');
 const isWindows = os.platform() == 'win32';
 let windowsLogger;
 if (isWindows) {
   const EventLogger = require('node-windows').EventLogger;
   windowsLogger = new EventLogger('windows-mqtt');
+
+  const {showConsole, hideConsole} = require('node-hide-console-window');
 }
 
 let mqtt; // global object
@@ -26,7 +26,7 @@ async function start() {
 
   if (config.systray) {
     initSysTray();
-    hideConsole();
+    if (isWindows) hideConsole();
   }
 
   const modulesEnabled = getModulesEnabled();
@@ -155,6 +155,15 @@ function getSysTrayMenu() {
     }
   }
 
+  const items = [];
+  if (isWindows) {
+    items.push(...[itemShowConsole, itemHideConsole]);
+  }
+  items.push(...[
+    itemReconnect,
+    itemExit
+  ]);
+
   const menu = {
     // you should use .png icon on macOS/Linux, and .ico format on Windows
     icon: os.platform() === 'win32' ? './assets/trayicon.ico' : './assets/trayicon.png',
@@ -162,14 +171,7 @@ function getSysTrayMenu() {
     isTemplateIcon: os.platform() === 'darwin',
     title: 'windows-mqtt',
     tooltip: 'windows-mqtt',
-    items: [
-      itemShowConsole,
-      itemHideConsole,
-      itemReconnect,
-      // SysTray.separator, // SysTray.separator is equivalent to a MenuItem with "title" equals "<SEPARATOR>"
-      // item2,
-      itemExit
-    ]
+    items
   };
   return menu;
 }

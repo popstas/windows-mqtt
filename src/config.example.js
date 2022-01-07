@@ -31,7 +31,6 @@ module.exports = {
       // base: 'home/room/pc/keys',
     },
     midi: {
-      listen: true,
       portName: 'WORLDE easy control',
       // portNum: 1,
       hotkeys: [
