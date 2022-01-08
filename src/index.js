@@ -4,11 +4,14 @@ const SysTray = require('systray2').default;
 const os = require('os');
 const isWindows = os.platform() == 'win32';
 let windowsLogger;
+let showConsole, hideConsole;
 if (isWindows) {
   const EventLogger = require('node-windows').EventLogger;
   windowsLogger = new EventLogger('windows-mqtt');
 
-  const {showConsole, hideConsole} = require('node-hide-console-window');
+  const lib = require('node-hide-console-window');
+  showConsole = lib.showConsole;
+  hideConsole = lib.hideConsole;
 }
 
 let mqtt; // global object
