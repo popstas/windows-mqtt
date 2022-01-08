@@ -44,6 +44,16 @@ module.exports = {
           midi: [176, 67, 127],
           mqtt: ['home/room/pc/windows/autoplace', '1'],
         },
+        // range controller
+        {
+          midi: [176,9],
+          type: 'range',
+          mqtt: ['home/hall/station/volume', '{{payload}}'],
+          // min: 0,
+          // max: 127,
+          // to_min: 0,
+          // to_max: 10,
+        },
       ]
     },
     mouse: {

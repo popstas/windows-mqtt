@@ -11,6 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "axios": "^0.21.1",
+    "lodash.debounce": "^4.0.8",
     "loudness": "^0.4.1",
     "midi": "^2.0.0",
     "mqtt": "^4.2.6",
