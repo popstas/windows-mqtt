@@ -13,6 +13,7 @@ if (isWindows) {
 
 let mqtt; // global object
 let systray; // global object
+let modules; // global object
 
 start();
 
@@ -24,14 +25,14 @@ async function start() {
 
   mqtt = mqttInit(); // global set
 
-  if (config.systray) {
-    initSysTray();
-    if (isWindows) hideConsole();
-  }
-
   const modulesEnabled = getModulesEnabled();
 
-  const modules = await initModules(modulesEnabled);
+  modules = await initModules(modulesEnabled);
+
+  if (config.systray) {
+    initSysTray(modules);
+    if (isWindows) hideConsole();
+  }
 
   subscribeToModuleTopics(modules);
 
@@ -51,7 +52,7 @@ function log(msg, type = 'info') {
   console[type](`${d} ${msg}`);
   if (isWindows && process.env.NODE_ENV == 'production') windowsLogger[type](msg);
   if (isWindows && systray && systray._process) {
-    const menu = getSysTrayMenu();
+    const menu = getSysTrayMenu(modules);
     menu.tooltip = `${d} ${msg}`;
 
     systray.sendAction({
@@ -95,7 +96,13 @@ async function initModules(modulesEnabled) {
       opts.base = `${config.mqtt.base}/${name}`;
 
     log('load module: ' + name);
-    const modInited = await mod(mqtt, opts, log);
+    const modInited = {
+      ...{
+        name: name,
+      },
+      ...opts,
+      ...await mod(mqtt, opts, log),
+    };
     modules.push(modInited);
   };
   return modules;
@@ -120,7 +127,7 @@ function getHandler(topic, modules) {
   return handler;
 }
 
-function getSysTrayMenu() {
+function getSysTrayMenu(modules = []) {
   const itemReconnect = {
     title: 'Reconnect MQTT',
     enabled: true,
@@ -164,6 +171,35 @@ function getSysTrayMenu() {
     itemExit
   ]);
 
+  // modules switches
+  items.push(SysTray.separator);
+  items.push({
+    title: 'Modules:',
+    enabled: false,
+    tooltip: '',
+  });
+  for (let mod of modules) {
+    const isCanStop = typeof mod.onStop === 'function' && typeof mod.onStart === 'function';
+    mod.enabled = mod.enabled !== undefined ? !!mod.enabled : true;
+    const item = {
+      title: mod.name,
+      enabled: isCanStop,
+      checked: mod.enabled,
+      click() {
+        mod.enabled = !mod.enabled;
+        this.checked = mod.enabled;
+
+        if (mod.enabled) {
+          mod.onStart();
+        } else {
+          mod.onStop();
+        }
+      }
+    };
+    items.push(item);
+  }
+
+
   const menu = {
     // you should use .png icon on macOS/Linux, and .ico format on Windows
     icon: os.platform() === 'win32' ? './assets/trayicon.ico' : './assets/trayicon.png',
@@ -176,8 +212,8 @@ function getSysTrayMenu() {
   return menu;
 }
 
-function initSysTray() {
-  const menu = getSysTrayMenu();
+function initSysTray(modules) {
+  const menu = getSysTrayMenu(modules);
 
   systray = new SysTray({ // global set
     menu: menu,
@@ -187,7 +223,13 @@ function initSysTray() {
   
   systray.onClick(action => {
     if (action.item.click != null) {
-      action.item.click()
+      action.item.click();
+
+      // update menu for modules checkboxes
+      systray.sendAction({
+        type: 'update-item',
+        item: action.item,
+      });
     }
   })
   

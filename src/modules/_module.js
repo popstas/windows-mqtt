@@ -1,4 +1,8 @@
+// module example
+
 module.exports = async (mqtt, config) => {
+
+  let modulePaused = false; // optional
 
   async function publishMqtt() {
     const topic = config.base + '/random';
@@ -7,8 +11,16 @@ module.exports = async (mqtt, config) => {
   }
 
   async function onStatus(topic, message) {
+    if (modulePaused) return;
     const status = 'ok';
     mqtt.publish(topic, status);
+  }
+
+  function onStop() {
+    modulePaused = true;
+  }
+  function onStart() {
+    modulePaused = false;
   }
 
   await publishMqtt();
@@ -23,6 +35,8 @@ module.exports = async (mqtt, config) => {
         ],
         handler: onStatus
       },
-    ]
+    ],
+    onStop,
+    onStart,
   }
 }

@@ -8,6 +8,7 @@ const maxRangeDelay = 1000; // for ranges should be at least 2 events per maxRan
 module.exports = async (mqtt, config, log) => {
   const input = new midi.Input();
   let lastMessage = { date: 0, message: {}}; // for detect midi disconnect, watchdogTimeout
+  let modulePaused = false;
   const lastMidi = {}; // for detect range bounces, maxRangeDelay
 
   // main handler
@@ -16,6 +17,8 @@ module.exports = async (mqtt, config, log) => {
     //   [status, data1, data2]
     // https://www.cs.cf.ac.uk/Dave/Multimedia/node158.html has some helpful
     // information interpreting the messages.
+
+    if (modulePaused) return;
 
     let keys = '';
     let sendMqtt = '';
@@ -224,8 +227,18 @@ module.exports = async (mqtt, config, log) => {
     openMidi();
   }
 
+  function onStop() {
+    modulePaused = true;
+    log('Stop midi listening');
+  }
+  function onStart() {
+    modulePaused = false;
+    log('Start midi listening');
+  }
 
   return {
-    subscriptions: []
+    subscriptions: [],
+    onStop,
+    onStart
   }
 }
