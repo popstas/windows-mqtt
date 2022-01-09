@@ -81,6 +81,7 @@ module.exports = {
     windows: {
       enabled: false, // module windows-manager not published yet, sorry
       placeWindowOnOpen: true,
+      notifyPlaced: true,
     },
   },
 };

@@ -10,7 +10,16 @@ module.exports = async (mqtt, config, log) => {
 
   async function autoplace(topic, message) {
     log(`< ${topic}: ${message}`);
-    await winMan.placeWindows();
+    const placed = await winMan.placeWindows();
+
+    const msg = `Placed ${placed.length} windows`;
+    log(msg);
+
+    // notify
+    if (config.notifyPlaced && placed.length > 0) {
+      const topic = globalConfig.mqtt.base + '/notify/notify';
+      mqtt.publish(topic, msg);
+    }
   }
 
   async function show(topic, message) {
