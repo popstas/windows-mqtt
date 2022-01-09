@@ -8,6 +8,8 @@ if (globalConfig.modules.windows.placeWindowOnOpen) {
 
 module.exports = async (mqtt, config, log) => {
 
+  if (config.restoreOnStart) winMan.restoreWindows();
+
   async function autoplace(topic, message) {
     log(`< ${topic}: ${message}`);
     const placed = await winMan.placeWindows();
@@ -31,16 +33,38 @@ module.exports = async (mqtt, config, log) => {
   // win:active,x:0,y:0,width:mon1.thirdWidth,height:mon1.height
   async function place(topic, message) {
     log(`< ${topic}: ${message}`);
-    const rules = {};
-    `${message}`.split(',').forEach(part => {
-      const [name, value] = part.split(':');
-      rules[name] = value;
-    });
-    console.log('rules: ', rules);
-    await winMan.placeWindowByConfig(rules);
+    try {
+      const pos = JSON.parse(`${message}`);
+      await winMan.placeWindowByConfig(pos);
+    }
+    catch(e) {
+      log('Failed to parse place position json');
+      log(e);
+    }
   }
 
-  return {
+  async function store(topic, message) {
+    log(`< ${topic}: ${message}`);
+    winMan.storeWindows();
+  }
+
+  async function restore(topic, message) {
+    log(`< ${topic}: ${message}`);
+    await winMan.restoreWindows();
+  }
+
+  async function clear(topic, message) {
+    log(`< ${topic}: ${message}`);
+    winMan.clearWindows();
+  }
+
+  async function open(topic, message) {
+    log(`< ${topic}: ${message}`);
+    const store = JSON.parse(`${message}`);
+    winMan.openWindows(store);
+  }
+
+  const obj = {
     subscriptions: [
       {
         topics: [ config.base + '/autoplace' ],
@@ -54,6 +78,64 @@ module.exports = async (mqtt, config, log) => {
         topics: [ config.base + '/place' ],
         handler: place
       },
+      {
+        topics: [ config.base + '/store' ],
+        handler: store
+      },
+      {
+        topics: [ config.base + '/restore' ],
+        handler: restore
+      },
+      {
+        topics: [ config.base + '/clear' ],
+        handler: clear
+      },
+      {
+        topics: [ config.base + '/open' ],
+        handler: open
+      },
+    ],
+    menuItems: [
+      {
+        title: 'Store windows',
+        click() {
+          winMan.storeWindows();
+        }
+      },
+      {
+        title: 'Restore windows',
+        async click() {
+          await winMan.restoreWindows();
+        },
+      },
+      {
+        title: 'Clear stored windows',
+        click() {
+          winMan.clearWindows();
+        },
+      },
+      {
+        title: 'Restart with windows restore',
+        click() {
+          store();
+          setTimeout(() => {
+            exec('shutdown -t 0 -r -f');
+          }, 1000);
+        }
+      },
     ]
+  };
+
+  // open default apps
+  const stored = config?.store?.default;
+  if (stored) {
+    obj.menuItems.push({
+      title: 'Open default apps',
+      click() {
+        winMan.openWindows(stored);
+      }
+    })
   }
+
+  return obj;
 }

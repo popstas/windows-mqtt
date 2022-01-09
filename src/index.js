@@ -166,16 +166,8 @@ function getSysTrayMenu(modules = []) {
   }
 
   const items = [];
-  if (isWindows) {
-    items.push(...[itemShowConsole, itemHideConsole]);
-  }
-  items.push(...[
-    itemReconnect,
-    itemExit
-  ]);
 
   // modules switches
-  items.push(SysTray.separator);
   items.push({
     title: 'Modules:',
     enabled: false,
@@ -201,6 +193,22 @@ function getSysTrayMenu(modules = []) {
     };
     items.push(item);
   }
+
+  if (isWindows) {
+    items.push(SysTray.separator);
+    items.push(...[itemShowConsole, itemHideConsole]);
+  }
+
+  // modules menu items
+  for (let mod of modules.filter(m => !!m.menuItems)) {
+    items.push(SysTray.separator, ...mod.menuItems);
+  }
+
+  items.push(...[
+    SysTray.separator,
+    itemReconnect,
+    itemExit
+  ]);
 
 
   const menu = {
