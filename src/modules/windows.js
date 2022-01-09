@@ -11,6 +11,21 @@ module.exports = async (mqtt, config, log) => {
 
   if (config.restoreOnStart) winMan.restoreWindows();
 
+  if (config.publishStats) {
+    publishStats();
+    setInterval(publishStats, 60000);
+  }
+
+  function publishStats() {
+    const topicBase = config.publishStatsTopic || `${config.base}/stats`;
+    const stats = winMan.getStats();
+    for (let name in stats) {
+      const topic = `${topicBase}/${name}`;
+      const msg = `${stats[name]}`;
+      mqtt.publish(topic, msg);
+    }
+  }
+
   async function autoplace(topic, message) {
     log(`< ${topic}: ${message}`);
     const placed = await winMan.placeWindows();

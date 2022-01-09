@@ -82,6 +82,17 @@ module.exports = {
       enabled: false, // module windows-manager not published yet, sorry
       placeWindowOnOpen: true,
       notifyPlaced: true,
+      restoreOnStart: true,
+      publishStats: true,
+      store: {
+        default: {
+          windows: [
+            { path: "C:\\Program Files\\Microsoft VS Code\\Code.exe" },
+            { path: "C:\\Program Files\\Mozilla Thunderbird\\thunderbird.exe" },
+          ],
+          paths: [ "C:\\" ],
+        }
+      }
     },
   },
 };
