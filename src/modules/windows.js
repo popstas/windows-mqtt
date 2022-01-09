@@ -1,6 +1,7 @@
 // module windows-manager not published yet, sorry
 const winMan = require('windows-manager');
 const globalConfig = require('../config.js');
+const {exec} = require('child_process');
 
 if (globalConfig.modules.windows.placeWindowOnOpen) {
   winMan.placeWindowOnOpen({ keepalive: false });
@@ -117,7 +118,7 @@ module.exports = async (mqtt, config, log) => {
       {
         title: 'Restart with windows restore',
         click() {
-          store();
+          winMan.storeWindows();
           setTimeout(() => {
             exec('shutdown -t 0 -r -f');
           }, 1000);
