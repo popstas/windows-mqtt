@@ -4,7 +4,7 @@ const globalConfig = require('../config.js');
 const {exec} = require('child_process');
 
 if (globalConfig.modules.windows.placeWindowOnOpen) {
-  winMan.placeWindowOnOpen({ keepalive: false });
+  winMan.placeWindowOnOpen();
 }
 
 module.exports = async (mqtt, config, log) => {
@@ -19,10 +19,19 @@ module.exports = async (mqtt, config, log) => {
   function publishStats() {
     const topicBase = config.publishStatsTopic || `${config.base}/stats`;
     const stats = winMan.getStats();
-    for (let name in stats) {
-      const topic = `${topicBase}/${name}`;
-      const msg = `${stats[name]}`;
+
+    mqtt.publish(`${topicBase}/total`, `${stats.total}`);
+
+    for (let name in stats.byApp) {
+      const app = stats.byApp[name];
+      const topic = `${topicBase}/apps/${name}`;
+      const msg = `${app.count}`;
       mqtt.publish(topic, msg);
+    }
+
+    if (stats.active) {
+      mqtt.publish(`${topicBase}/active/app`, stats.active.app);
+      mqtt.publish(`${topicBase}/active/title`, stats.active.title);
     }
   }
 
@@ -30,7 +39,11 @@ module.exports = async (mqtt, config, log) => {
     log(`< ${topic}: ${message}`);
     const placed = await winMan.placeWindows();
 
-    const msg = `Placed ${placed.length} windows`;
+    const apps = placed.map(w => {
+      const parts = w.path.split('\\');
+      return parts[parts.length - 1].replace(/\.exe$/, '');
+    });
+    const msg = `Placed ${placed.length} windows: ${apps.join(', ')}`;
     log(msg);
 
     // notify
@@ -38,12 +51,6 @@ module.exports = async (mqtt, config, log) => {
       const topic = globalConfig.mqtt.base + '/notify/notify';
       mqtt.publish(topic, msg);
     }
-  }
-
-  async function show(topic, message) {
-    const title = `${message}`;
-    log(`< ${topic}: ${title}`);
-    await winMan.showWindow(title);
   }
 
   // win:active,x:0,y:0,width:mon1.thirdWidth,height:mon1.height
@@ -77,7 +84,13 @@ module.exports = async (mqtt, config, log) => {
   async function open(topic, message) {
     log(`< ${topic}: ${message}`);
     const store = JSON.parse(`${message}`);
-    winMan.openWindows(store);
+    winMan.openStore(store);
+  }
+
+  async function focus(topic, message) {
+    log(`< ${topic}: ${message}`);
+    const rules = JSON.parse(`${message}`);
+    winMan.focusWindow(rules);
   }
 
   const obj = {
@@ -85,10 +98,6 @@ module.exports = async (mqtt, config, log) => {
       {
         topics: [ config.base + '/autoplace' ],
         handler: autoplace
-      },
-      {
-        topics: [ config.base + '/show' ],
-        handler: show
       },
       {
         topics: [ config.base + '/place' ],
@@ -109,6 +118,10 @@ module.exports = async (mqtt, config, log) => {
       {
         topics: [ config.base + '/open' ],
         handler: open
+      },
+      {
+        topics: [ config.base + '/focus' ],
+        handler: focus
       },
     ],
     menuItems: [
@@ -139,16 +152,26 @@ module.exports = async (mqtt, config, log) => {
           }, 1000);
         }
       },
+      {
+        title: 'Restart',
+        click() {
+          setTimeout(() => {
+            exec('shutdown -t 0 -r -f');
+          }, 1000);
+        }
+      },
     ]
   };
 
   // open default apps
   const stored = config?.store?.default;
+  if (stored.apps) stored.windows = stored.apps.map(path => { return { path }});
+
   if (stored) {
     obj.menuItems.push({
       title: 'Open default apps',
       click() {
-        winMan.openWindows(stored);
+        winMan.openStore(stored);
       }
     })
   }

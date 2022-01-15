@@ -93,9 +93,9 @@ module.exports = {
       publishStats: true,
       store: {
         default: {
-          windows: [
-            { path: "C:\\Program Files\\Microsoft VS Code\\Code.exe" },
-            { path: "C:\\Program Files\\Mozilla Thunderbird\\thunderbird.exe" },
+          apps: [
+            "C:\\Program Files\\Microsoft VS Code\\Code.exe",
+            "C:\\Program Files\\Mozilla Thunderbird\\thunderbird.exe",
           ],
           paths: [ "C:\\" ],
         }
