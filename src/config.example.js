@@ -36,6 +36,8 @@ module.exports = {
     midi: {
       portName: 'WORLDE easy control',
       // portNum: 1,
+      hotReload: true,
+      // ignoreLines: [248, 254],
       hotkeys: [
         // send keys
         {

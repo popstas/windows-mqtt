@@ -5,6 +5,14 @@ const debounce = require('lodash.debounce');
 const watchdogTimeout = 600 * 1000;
 const maxRangeDelay = 1000; // for ranges should be at least 2 events per maxRangeDelay
 
+// loads config without cache
+function getConfig() {
+  const configPath = '../config.js';
+  delete(require.cache[require.resolve(configPath)]);
+  const config = require(configPath);
+  return config.modules.midi;
+}
+
 module.exports = async (mqtt, config, log) => {
   const input = new midi.Input();
   let lastMessage = { date: 0, message: {}}; // for detect midi disconnect, watchdogTimeout
@@ -20,16 +28,17 @@ module.exports = async (mqtt, config, log) => {
 
     if (modulePaused) return;
 
-    let keys = '';
-    let sendMqtt = '';
+    // на yamaha pss-a50 дргебезжат эти каналы
+    if (config.ignoreLines && config.ignoreLines.includes(parseInt(m))) {
+      return;
+    }
 
     addHistory(m); // for lastMidi
 
-    // на yamaha pss-a50 дргебезжат эти каналы
-    // TODO: to config
-    if (m == 248 || m == 254) {
-      return;
-    }
+    let keys = '';
+    let sendMqtt = '';
+
+    if (config.hotReload) config = getConfig(); // TODO: remove from onMidiMessage
 
     // находим, что нажато из конфига
     for (let hk of config.hotkeys.filter(hk => hk.type !== 'range')) {
