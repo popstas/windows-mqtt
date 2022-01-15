@@ -2,6 +2,9 @@ const os = require('os');
 
 module.exports = {
   systray: true,
+  log: {
+    path: 'data/windows-mqtt.log',
+  },
   mqtt: {
     host: 'host',
     port: 1883,
@@ -69,6 +72,10 @@ module.exports = {
       },
       clearNotificationWebhook: 'https://trigger.macrodroid.com/123123123/notification-clear',
       markAsReadText: 'Mark as readed',
+    },
+    // https://github.com/popstas/chrome-tabs-exporter
+    tabs: {
+      port: 5555,
     },
     tts: {
       // enabled: false,

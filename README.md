@@ -37,6 +37,8 @@ Examples:
 
 - `(win)x up up right down` - suspend for Windows 10
 
+### midi
+Binds midi signals to exec or mqtt actions.
 
 ### mouse
 - `home/room/pc/mouse/click` - click button, `left|right|middle`
@@ -46,9 +48,22 @@ Examples:
 - `home/room/pc/notify/notify '{"title": "title", "msg": "msg", "app": "Planfix", "icon": "/path/to/planfix.png", "actions": ["OK"]}'` - full notify
 - `home/room/pc/notify/clear 'msg text'` - clear notify on Android (for MacroDroid), you must define `config.modules.notify.clearNotificationWebhook` for this
 
+### tabs
+Send browser tabs stats to MQTT. Requires browser extension [chrome-tabs-exporter](https://github.com/popstas/chrome-tabs-exporter).
 
 ### tts
 - `tts` - TTS received message
+
+### windows
+- `home/room/pc/windows/autoplace` - autoplace windows with config
+- `home/room/pc/windows/place '{"window":"current","fancyZones":{"monitor":1,"position":6}}'` - place window with rules
+- `home/room/pc/windows/store` - store opened windows
+- `home/room/pc/windows/restore` - restore windows
+- `home/room/pc/windows/clear` - clear store
+- `home/room/pc/windows/open '{ "apps": ["c:\\app1.exe"], "paths": ["d:\\prog"] }'` - open store
+- `home/room/pc/windows/focus '{ "titleMatch": "blog.popstas.ru" }'` - focus window by title
+
+It using module, https://github.com/popstas/windows-manager, but I don't publish it yet.
 
 ## Bugs
 Keyboard and mouse emulation not work while `windows-mqtt` running as Windows service.

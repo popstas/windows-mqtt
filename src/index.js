@@ -2,6 +2,7 @@ const {mqttInit} = require('./mqtt');
 const config = require('./config');
 const SysTray = require('systray2').default;
 const os = require('os');
+const fs = require('fs');
 const isWindows = os.platform() == 'win32';
 let windowsLogger;
 let showConsole, hideConsole;
@@ -26,20 +27,27 @@ start();
 async function start() {
   log('windows-mqtt started');
 
-  mqtt = mqttInit(); // global set
+  try {
+    mqtt = mqttInit(); // global set
 
-  const modulesEnabled = getModulesEnabled();
-
-  modules = await initModules(modulesEnabled);
-
-  if (config.systray) {
-    initSysTray(modules);
-    if (isWindows) hideConsole();
+    const modulesEnabled = getModulesEnabled();
+  
+    modules = await initModules(modulesEnabled);
+  
+    if (config.systray) {
+      initSysTray(modules);
+      if (isWindows) hideConsole();
+    }
+  
+    subscribeToModuleTopics(modules);
+  
+    listenModulesMQTT(modules);
   }
-
-  subscribeToModuleTopics(modules);
-
-  listenModulesMQTT(modules);
+  catch(e) {
+    // console.error(e);
+    log(e.message);
+    log(e.stack);
+  }
 }
 
 
@@ -62,6 +70,10 @@ function log(msg, type = 'info') {
       type: 'update-menu',
       menu: menu,
     });
+  }
+
+  if (config.log && config.log.path) {
+    fs.appendFileSync(config.log.path, `${d} [${type}] ${msg}\n`);
   }
 }
 
