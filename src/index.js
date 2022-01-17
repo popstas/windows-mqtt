@@ -26,6 +26,7 @@ start();
 
 async function start() {
   log('windows-mqtt started');
+  if (isWindows && config.systray) hideConsole();
 
   try {
     mqtt = mqttInit(); // global set
@@ -34,9 +35,9 @@ async function start() {
   
     modules = await initModules(modulesEnabled);
   
+    // should be after initModules
     if (config.systray) {
       initSysTray(modules);
-      if (isWindows) hideConsole();
     }
   
     subscribeToModuleTopics(modules);
@@ -169,7 +170,7 @@ function getSysTrayMenu(modules = []) {
 
   const itemExit = {
     title: 'Exit',
-    tooltip: 'bb',
+    tooltip: '',
     checked: false,
     enabled: true,
     click() {
