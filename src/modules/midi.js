@@ -184,6 +184,10 @@ module.exports = async (mqtt, config, log) => {
   }
 
 
+  function closeMidi() {
+    input.closePort();
+  }
+
   function openMidi() {
     if (input.isPortOpen()) {
       log('Close midi port');
@@ -238,10 +242,12 @@ module.exports = async (mqtt, config, log) => {
 
   function onStop() {
     modulePaused = true;
+    closeMidi();
     log('Stop midi listening');
   }
   function onStart() {
     modulePaused = false;
+    openMidi();
     log('Start midi listening');
   }
 
