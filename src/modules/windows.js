@@ -8,7 +8,7 @@ if (globalConfig.modules.windows.placeWindowOnOpen) {
 }
 
 module.exports = async (mqtt, config, log) => {
-
+  let lastStats = {};
   if (config.restoreOnStart) winMan.restoreWindows();
 
   if (config.publishStats) {
@@ -19,6 +19,15 @@ module.exports = async (mqtt, config, log) => {
   function publishStats() {
     const topicBase = config.publishStatsTopic || `${config.base}/stats`;
     const stats = winMan.getStats();
+
+    // for correct graphs need to send 0 at latest count
+    if (lastStats?.byApp) {
+      for (let app in lastStats.byApp) {
+        if (lastStats.byApp[app].count == 0) continue;
+        if (!stats.byApp[app]) stats.byApp[app] = { count: 0, wins: []}
+      }
+    }
+    lastStats = stats;
 
     mqtt.publish(`${topicBase}/total`, `${stats.total}`);
 
