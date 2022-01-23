@@ -7,7 +7,14 @@ module.exports = async (mqtt, config, log) => {
     return;
   }
 
-  const wss = new WebSocket.Server({ port: config.port });
+  let wss;
+  try {
+    wss = new WebSocket.Server({ port: config.port });
+  } catch(e) {
+    console.log(`Failed to open WebSocket server for module 'tabs'`);
+    console.log(e.message);
+  }
+
   wss.on("connection", ws => {
     ws.on("message", message => {
       const data = JSON.parse(message);
