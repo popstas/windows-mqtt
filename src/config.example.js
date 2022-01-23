@@ -88,8 +88,9 @@ module.exports = {
       gapNoLinux: 0,
     },
     windows: {
-      enabled: false, // module windows-manager not published yet, sorry
-      placeWindowOnOpen: true,
+      enabled: false,
+      placeWindowOnOpen: true, // on each window open
+      placeWindowOnStart: true, // when windows-mqtt starts
       notifyPlaced: true,
       restoreOnStart: true,
       publishStats: true,
@@ -101,7 +102,7 @@ module.exports = {
           ],
           paths: [ "C:\\" ],
         }
-      }
+      },
     },
   },
 };

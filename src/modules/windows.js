@@ -1,17 +1,20 @@
-// module windows-manager not published yet, sorry
-const winMan = require('windows-manager');
+const winMan = require('windows11-manager');
 const globalConfig = require('../config.js');
 const {exec} = require('child_process');
-
-if (globalConfig.modules.windows.placeWindowOnOpen) {
-  winMan.placeWindowOnOpen();
-}
 
 module.exports = async (mqtt, config, log) => {
   let lastStats = {};
   if (config.restoreOnStart) winMan.restoreWindows();
 
-  if (config.publishStats) {
+    if (config.placeWindowOnOpen) {
+      winMan.placeWindowOnOpen();
+    }
+  
+    if (config.placeWindowOnStart) {
+      winMan.placeWindows();
+    }
+  
+    if (config.publishStats) {
     publishStats();
     setInterval(publishStats, 60000);
   }
@@ -102,6 +105,24 @@ module.exports = async (mqtt, config, log) => {
     winMan.focusWindow(rules);
   }
 
+  async function restartHandler(topic, message) {
+    log(`< ${topic}: ${message}`);
+    const type = `${message}`;
+    if (type == 'store') {
+      winMan.storeWindows();
+      restart();
+    }
+    else if (type == 'nostore') {
+      restart();
+    }
+  }
+
+  function restart() {
+    setTimeout(() => {
+      exec('shutdown -t 0 -r -f');
+    }, 1000);
+  }
+
   const obj = {
     subscriptions: [
       {
@@ -132,8 +153,18 @@ module.exports = async (mqtt, config, log) => {
         topics: [ config.base + '/focus' ],
         handler: focus
       },
+      {
+        topics: [ config.base + '/restart' ],
+        handler: restartHandler
+      },
     ],
     menuItems: [
+      {
+        title: 'Place windows',
+        async click() {
+          await autoplace('command/autoplace', '1');
+        }
+      },
       {
         title: 'Store windows',
         click() {
@@ -156,18 +187,12 @@ module.exports = async (mqtt, config, log) => {
         title: 'Restart with windows restore',
         click() {
           winMan.storeWindows();
-          setTimeout(() => {
-            exec('shutdown -t 0 -r -f');
-          }, 1000);
+          restart();
         }
       },
       {
         title: 'Restart',
-        click() {
-          setTimeout(() => {
-            exec('shutdown -t 0 -r -f');
-          }, 1000);
-        }
+        click: restart
       },
     ]
   };

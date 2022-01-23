@@ -20,5 +20,9 @@
     "robotjs": "^0.6.0",
     "systray2": "^2.1.4",
     "usb-detection": "^4.13.0"
+  },
+  "optionalDependencies": {
+    "node-hide-console-window": "^2.1.0",
+    "windows11-manager": "^0.1.0"
   }
 }

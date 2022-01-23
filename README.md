@@ -62,11 +62,14 @@ Send browser tabs stats to MQTT. Requires browser extension [chrome-tabs-exporte
 - `home/room/pc/windows/clear` - clear store
 - `home/room/pc/windows/open '{ "apps": ["c:\\app1.exe"], "paths": ["d:\\prog"] }'` - open store
 - `home/room/pc/windows/focus '{ "titleMatch": "blog.popstas.ru" }'` - focus window by title
+- `home/room/pc/windows/restart` - restart PC, `store` for store opened windows or `nostore` for just restart
 
 It using module, https://github.com/popstas/windows-manager, but I don't publish it yet.
 
 ## Bugs
-Keyboard and mouse emulation not work while `windows-mqtt` running as Windows service.
+- Keyboard and mouse emulation not work while `windows-mqtt` running as Windows service.
+- Process not kill when exit
+- Any module can break app
 
 ## Install
 1. Copy [src/config.example.js](src/config.example.js) to `src/config.js`

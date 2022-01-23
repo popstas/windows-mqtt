@@ -28,6 +28,12 @@ async function start() {
   log('windows-mqtt started');
   if (isWindows && config.systray) hideConsole();
 
+  // exit on signal, TODO:
+  /*process.on('SIGINT', function() {
+    log("Caught interrupt signal");
+    process.exit();
+  });*/
+
   try {
     mqtt = mqttInit(); // global set
 
