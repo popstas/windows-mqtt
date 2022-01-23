@@ -51,7 +51,6 @@ async function start() {
     listenModulesMQTT(modules);
   }
   catch(e) {
-    // console.error(e);
     log(e.message);
     log(e.stack);
   }
@@ -110,22 +109,30 @@ function getModulesEnabled() {
 async function initModules(modulesEnabled) {
   const modules = [];
   for (let name of modulesEnabled) {
+    log('load module: ' + name);
+
     const opts = config.modules[name] || {};
-    const mod = require('./modules/' + name);
 
     // default mqtt base
     if (!opts.base)
       opts.base = `${config.mqtt.base}/${name}`;
 
-    log('load module: ' + name);
-    const modInited = {
-      ...{
-        name: name,
-      },
-      ...opts,
-      ...await mod(mqtt, opts, log),
-    };
-    modules.push(modInited);
+    try {
+      const mod = require('./modules/' + name);
+
+      const modInited = {
+        ...{
+          name: name,
+        },
+        ...opts,
+        ...await mod(mqtt, opts, log),
+      };
+      modules.push(modInited);
+    } catch(e) {
+      log(`Failed to load module ${name}`);
+      log(e.message);
+      if (config.debug) log(e.stack);
+    }
   };
   return modules;
 }

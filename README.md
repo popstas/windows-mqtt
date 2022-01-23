@@ -69,7 +69,6 @@ It using module, https://github.com/popstas/windows-manager, but I don't publish
 ## Bugs
 - Keyboard and mouse emulation not work while `windows-mqtt` running as Windows service.
 - Process not kill when exit
-- Any module can break app
 
 ## Install
 1. Copy [src/config.example.js](src/config.example.js) to `src/config.js`
