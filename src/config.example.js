@@ -78,6 +78,9 @@ module.exports = {
     // https://github.com/popstas/chrome-tabs-exporter
     tabs: {
       port: 5555,
+      excludedDomains: [
+        'web.whatsapp.com',
+      ],
     },
     tts: {
       // enabled: false,

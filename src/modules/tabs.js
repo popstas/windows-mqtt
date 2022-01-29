@@ -2,6 +2,7 @@
 const WebSocket = require("ws");
 
 module.exports = async (mqtt, config, log) => {
+  let lastData = {};
   if (!config.port) {
     log('tabs: need to define port in config');
     return;
@@ -24,13 +25,24 @@ module.exports = async (mqtt, config, log) => {
         // tabs
         if (data.tabs) mqtt.publish(`${config.base}/total`, `${data.tabs}`);
 
+        // for correct graphs need to send 0 at latest count
+        if (lastData?.byDomain) {
+          for (let domain in lastData.byDomain) {
+            if (lastData.byDomain[domain] == 0) continue;
+            if (!data.byDomain[domain]) data.byDomain[domain] = 0;
+          }
+        }
+        lastData = data;
+
         // domains
         if (data.byDomain) {
           for (let domain in data.byDomain) {
+            if (config.excludedDomains.includes(domain)) continue;
             const count = data.byDomain[domain];
             mqtt.publish(`${config.base}/domains/${domain}`, `${count}`);
           }
         }
+
       }
     });
   });

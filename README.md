@@ -1,6 +1,6 @@
 # Control PC with MQTT
 
-Tested on Windows 10 and Ubuntu Desktop 20.04
+Tested on Windows 10, Windows 11 and Ubuntu Desktop 20.04
 
 ## Features (modules)
 ### audio
@@ -64,7 +64,7 @@ Send browser tabs stats to MQTT. Requires browser extension [chrome-tabs-exporte
 - `home/room/pc/windows/focus '{ "titleMatch": "blog.popstas.ru" }'` - focus window by title
 - `home/room/pc/windows/restart` - restart PC, `store` for store opened windows or `nostore` for just restart
 
-It using module, https://github.com/popstas/windows-manager, but I don't publish it yet.
+It using module, https://github.com/popstas/windows11-manager, Vitrual desktop manager work only for Windows 11 now, as I am single user.
 
 ## Bugs
 - Keyboard and mouse emulation not work while `windows-mqtt` running as Windows service.
