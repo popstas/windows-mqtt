@@ -22,8 +22,7 @@ module.exports = async (mqtt, config, log) => {
       if (data.type === 'stat') {
         // console.log('tabs data: ', data);
 
-        // tabs
-        if (data.tabs) mqtt.publish(`${config.base}/total`, `${data.tabs}`);
+        let total = 0;
 
         // for correct graphs need to send 0 at latest count
         if (lastData?.byDomain) {
@@ -39,10 +38,12 @@ module.exports = async (mqtt, config, log) => {
           for (let domain in data.byDomain) {
             if (config.excludedDomains.includes(domain)) continue;
             const count = data.byDomain[domain];
+            total += count;
             mqtt.publish(`${config.base}/domains/${domain}`, `${count}`);
           }
         }
 
+        mqtt.publish(`${config.base}/total`, `${total}`);
       }
     });
   });
