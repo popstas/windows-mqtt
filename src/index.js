@@ -254,7 +254,7 @@ function initSysTray(modules) {
 
   systray = new SysTray({ // global set
     menu: menu,
-    debug: false,
+    debug: !!config.debug,
     copyDir: false // copy go tray binary to an outside directory, useful for packing tool like pkg.
   })
   

@@ -14,62 +14,170 @@ function getConfig() {
 }
 
 module.exports = async (mqtt, config, log) => {
-  const input = new midi.Input();
-  let lastMessage = { date: 0, message: {}}; // for detect midi disconnect, watchdogTimeout
+  let inputs = [];
+  const lastMessage = { date: 0, message: {}}; // for detect midi disconnect, watchdogTimeout, TODO: remove?
   let modulePaused = false;
   const lastMidi = {}; // for detect range bounces, maxRangeDelay
 
-  // main handler
-  function onMidiMessage(deltaTime, m) {
-    // The message is an array of numbers corresponding to the MIDI bytes:
-    //   [status, data1, data2]
-    // https://www.cs.cf.ac.uk/Dave/Multimedia/node158.html has some helpful
-    // information interpreting the messages.
+  start();
 
-    if (modulePaused) return;
+  function start() {
+    inputs = [];
+    for (let device of config.devices) {
+      const input = new midi.Input();
+      inputs.push(input);
+      initDevice(device, input);
+    }
+  }
 
-    // на yamaha pss-a50 дргебезжат эти каналы
-    if (config.ignoreLines && config.ignoreLines.includes(parseInt(m))) {
+  function initDevice(device, input) {
+    log(`initDevice: ${device}`);
+    // проверка, что интервал не отваливается после перезагрузки, а таймаут отваливается
+    /* setInterval(() => {
+      // log('Interval');
+      const isNoMidi = lastMessage.date - Date.now() > watchdogTimeout;
+      if (isNoMidi) openMidi();
+    }, watchdogTimeout); */
+
+    const isDeviceConfigured = device?.vid && device?.pid;
+
+    // переподключение, когда найдено midi устройство
+    usbDetect.startMonitoring();
+    if (isDeviceConfigured) {
+      usbDetect.on(`add:${device.vid}:${device.pid}`, function(device) {
+        console.log('add', device);
+        setTimeout(() => openMidi(input, device), 500);
+      });
+      listenKeys(input, device);
+    }
+    else {
+      console.log('Try to reconnect your midi device to see config');
+      // list all devices add
+      usbDetect.on(`add`, function(device) {
+        console.log('add', device);
+        console.log('add to midi: {} section in config:');
+        console.log(`portName: '${device.deviceName}',`);
+        console.log(`device: { vid: ${device.vendorId}, pid: ${device.productId} },`)
+      });
+    }
+  }
+
+  function openMidi(input, device) {
+    if (input.isPortOpen()) {
+      log('Close midi port');
+      input.closePort();
+    }
+
+    // Count the available input ports.
+    const portCount = input.getPortCount();
+    const ports = [];
+    const portsStr = [];
+    log('Total midi ports: ' + portCount);
+
+    for (let p = 0; p < portCount; p++) {
+      const portName = input.getPortName(p);
+      ports.push(portName);
+      portsStr.push(`${p}: ${portName}`);
+    }
+
+    // get portNum
+    let portNum = ports.findIndex(p => p == device.portName);
+    if (portNum === -1) portNum = device.portNum;
+    log(`MIDI ports: ${portsStr.join(', ')}.`);
+
+    if (portNum === undefined){
+      log(`Cannot find MIDI device "${device.portName}"`);
       return;
     }
+    else log(`Try to using port ${portNum}`);
 
-    addHistory(m); // for lastMidi
-
-    let keys = '';
-    let sendMqtt = '';
-
-    if (config.hotReload) config = getConfig(); // TODO: remove from onMidiMessage
-
-    // находим, что нажато из конфига
-    for (let hk of config.hotkeys.filter(hk => hk.type !== 'range')) {
-      if(m[0] == hk.midi[0] && m[1] == hk.midi[1] && m[2] == hk.midi[2]) {
-        if (hk.keys) keys = hk.keys;
-        if (hk.mqtt) sendMqtt = hk.mqtt;
-        break;
-      }
-    }
-
-    // находим ranges
-    for (let hk of config.hotkeys.filter(hk => hk.type === 'range')) {
-      if(m[0] == hk.midi[0] && m[1] == hk.midi[1]) {
-        debouncedMidiHandlerRange({
-          val: m[2],
-          m,
-          hk,
-        });
-        break;
-      }
-    }
-
-    doActions({keys, sendMqtt});
-    log(`m: ${m} d: ${deltaTime}`);
-
-    lastMessage.date = Date.now();
-    lastMessage.message = m;
+    input.openPort(portNum);
   }
+
+  function listenKeys(input, device) {
+    log('midi listen start');
+
+    // Configure a callback.
+    input.on('message', onMidiMessage);
+
+    // Sysex, timing, and active sensing messages are ignored
+    // by default. To enable these message types, pass false for
+    // the appropriate type in the function below.
+    // Order: (Sysex, Timing, Active Sensing)
+    // For example if you want to receive only MIDI Clock beats
+    // you should use
+    // input.ignoreTypes(true, false, true)
+    input.ignoreTypes(false, false, false);
+
+    mqtt.on('connect', () => openMidi(input, device));
+
+    openMidi(input, device);
+
+    // main handler
+    function onMidiMessage(deltaTime, m) {
+      // The message is an array of numbers corresponding to the MIDI bytes:
+      //   [status, data1, data2]
+      // https://www.cs.cf.ac.uk/Dave/Multimedia/node158.html has some helpful
+      // information interpreting the messages.
+
+      if (modulePaused) return;
+
+      if (config.hotReload) device = getConfig().devices.find(d => d.portName === device.portName); // TODO: remove from onMidiMessage
+
+      // на yamaha pss-a50 дргебезжат эти каналы
+      if (device.ignoreLines && device.ignoreLines.includes(parseInt(m))) {
+        return;
+      }
+
+      addHistory(m); // for lastMidi
+
+      let keys = '';
+      let sendMqtt = '';
+
+      // находим, что нажато из конфига
+      for (let hk of device.hotkeys.filter(hk => hk.type !== 'range')) {
+        if(m[0] == hk.midi[0] && m[1] == hk.midi[1] && 
+          (m[2] == hk.midi[2] || hk.midi[2] == '>0' && m[2] > 0)
+        ) {
+          if (hk.keys) keys = hk.keys;
+          if (hk.mqtt) sendMqtt = hk.mqtt;
+          break;
+        }
+      }
+
+      // находим ranges
+      for (let hk of device.hotkeys.filter(hk => hk.type === 'range')) {
+        if(m[0] == hk.midi[0] && m[1] == hk.midi[1]) {
+          debouncedMidiHandlerRange({
+            val: m[2],
+            m,
+            hk,
+          });
+          break;
+        }
+      }
+
+      doActions({keys, sendMqtt});
+      log(`m: ${m} d: ${deltaTime}`);
+
+      lastMessage.date = Date.now();
+      lastMessage.message = m;
+    }
+
+  }
+
+
+
+
+
+
+
+
+
 
   // lastMidi - for detect random range events
   const getMidiKey = m => `${m[0]}-${m[1]}`;
+
   function addHistory(m) {
     const key = getMidiKey(m);
 
@@ -152,92 +260,9 @@ module.exports = async (mqtt, config, log) => {
   }
   
 
-  // проверка, что интервал не отваливается после перезагрузки, а таймаут отваливается
-  setInterval(() => {
-    // log('Interval');
-    const isNoMidi = lastMessage.date - Date.now() > watchdogTimeout;
-    if (isNoMidi) openMidi();
-  }, watchdogTimeout);
-
-
-
-  const isDeviceConfigured = config.device?.vid && config.device?.pid;
-
-  // переподключение, когда найдено midi устройство
-  usbDetect.startMonitoring();
-  if (isDeviceConfigured) {
-    usbDetect.on(`add:${config.device.vid}:${config.device.pid}`, function(device) {
-      console.log('add', device);
-      setTimeout(openMidi, 500);
-    });
-    listenKeys();
-  }
-  else {
-    console.log('Try to reconnect your midi device to see config');
-    // list all devices add
-    usbDetect.on(`add`, function(device) {
-      console.log('add', device);
-      console.log('add to midi: {} section in config:');
-      console.log(`portName: '${device.deviceName}',`);
-      console.log(`device: { vid: ${device.vendorId}, pid: ${device.productId} },`)
-    });
-  }
-
 
   function closeMidi() {
-    input.closePort();
-  }
-
-  function openMidi() {
-    if (input.isPortOpen()) {
-      log('Close midi port');
-      input.closePort();
-    }
-
-    // Count the available input ports.
-    const portCount = input.getPortCount();
-    const ports = [];
-    const portsStr = [];
-    log('Total midi ports: ' + portCount);
-
-    for (let p = 0; p < portCount; p++) {
-      const portName = input.getPortName(p);
-      ports.push(portName);
-      portsStr.push(`${p}: ${portName}`);
-    }
-
-    // get portNum
-    let portNum = ports.findIndex(p => p == config.portName);
-    if (portNum === -1) portNum = config.portNum;
-    log(`MIDI ports: ${portsStr.join(', ')}.`);
-
-    if (portNum === undefined){
-      log(`Cannot find MIDI device "${config.portName}"`);
-      return;
-    }
-    else log(`Try to using port ${portNum}`);
-
-    input.openPort(portNum);
-  }
-
-  function listenKeys() {
-    log('midi listen start');
-
-    // Configure a callback.
-    input.on('message', onMidiMessage);
-
-    // Sysex, timing, and active sensing messages are ignored
-    // by default. To enable these message types, pass false for
-    // the appropriate type in the function below.
-    // Order: (Sysex, Timing, Active Sensing)
-    // For example if you want to receive only MIDI Clock beats
-    // you should use
-    // input.ignoreTypes(true, false, true)
-    input.ignoreTypes(false, false, false);
-
-    mqtt.on('connect', openMidi);
-
-    openMidi();
+    inputs.forEach(input => input.closePort());
   }
 
   function onStop() {
@@ -247,7 +272,7 @@ module.exports = async (mqtt, config, log) => {
   }
   function onStart() {
     modulePaused = false;
-    openMidi();
+    start();
     log('Start midi listening');
   }
 
