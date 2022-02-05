@@ -16,6 +16,11 @@ module.exports = async (mqtt, config, log) => {
     console.log(e.message);
   }
 
+  wss.on("error", e => {
+    log('Tabs error: ' + e);
+    if (config.debug) log(e.stack);
+  });
+
   wss.on("connection", ws => {
     ws.on("message", message => {
       const data = JSON.parse(message);
