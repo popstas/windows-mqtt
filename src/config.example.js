@@ -34,32 +34,36 @@ module.exports = {
       // base: 'home/room/pc/keys',
     },
     midi: {
-      portName: 'WORLDE easy control',
-      // portNum: 1,
-      hotReload: true,
-      // ignoreLines: [248, 254],
-      hotkeys: [
-        // send keys
+      devices: [
         {
-          midi: [176, 2, 127],
-          keys: 'alt+control+shift j',
+          portName: 'WORLDE easy control',
+          // portNum: 1,
+          hotReload: true,
+          // ignoreLines: [248, 254],
+          hotkeys: [
+            // send keys
+            {
+              midi: [176, 2, 127],
+              keys: 'alt+control+shift j',
+            },
+            // send mqtt
+            {
+              midi: [176, 67, 127],
+              mqtt: ['home/room/pc/windows/autoplace', '1'],
+            },
+            // range controller
+            {
+              midi: [176,9],
+              type: 'range',
+              mqtt: ['home/hall/station/volume', '{{payload}}'],
+              // min: 0,
+              // max: 127,
+              // to_min: 0,
+              // to_max: 10,
+            },
+          ]
         },
-        // send mqtt
-        {
-          midi: [176, 67, 127],
-          mqtt: ['home/room/pc/windows/autoplace', '1'],
-        },
-        // range controller
-        {
-          midi: [176,9],
-          type: 'range',
-          mqtt: ['home/hall/station/volume', '{{payload}}'],
-          // min: 0,
-          // max: 127,
-          // to_min: 0,
-          // to_max: 10,
-        },
-      ]
+      ],
     },
     mouse: {
       // base: 'home/room/pc/mouse',
@@ -104,6 +108,12 @@ module.exports = {
             "C:\\Program Files\\Mozilla Thunderbird\\thunderbird.exe",
           ],
           paths: [ "C:\\" ],
+        },
+        custom: { // restore always
+          apps: [
+            "C:\\Users\\popstas\\AppData\\Local\\Yandex\\YandexBrowser\\Application\\browser_proxy.exe --profile-directory=Default --app-id=hnpfjngllnobngcgfapefoaidbinmjnm"
+          ],
+          paths: [],
         }
       },
     },

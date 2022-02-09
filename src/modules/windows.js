@@ -4,7 +4,7 @@ const {exec} = require('child_process');
 
 module.exports = async (mqtt, config, log) => {
   let lastStats = {};
-  if (config.restoreOnStart) winMan.restoreWindows();
+  if (config.restoreOnStart) await restoreWindows();
 
     if (config.placeWindowOnOpen) {
       winMan.placeWindowOnOpen();
@@ -17,6 +17,14 @@ module.exports = async (mqtt, config, log) => {
     if (config.publishStats) {
     publishStats();
     setInterval(publishStats, 60000);
+  }
+
+  async function restoreWindows() {
+    await winMan.restoreWindows();
+
+    const stored = config?.store?.custom;
+    if (stored.apps) stored.windows = stored.apps.map(path => { return { path }});
+    await winMan.openStore(stored);
   }
 
   function publishStats() {
@@ -85,7 +93,7 @@ module.exports = async (mqtt, config, log) => {
 
   async function restore(topic, message) {
     log(`< ${topic}: ${message}`);
-    await winMan.restoreWindows();
+    await restoreWindows();
   }
 
   async function clear(topic, message) {
