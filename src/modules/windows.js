@@ -4,17 +4,20 @@ const {exec} = require('child_process');
 
 module.exports = async (mqtt, config, log) => {
   let lastStats = {};
-  if (config.restoreOnStart) await restoreWindows();
+  if (config.restoreOnStart) {
+    await restoreWindows();
+    setTimeout(winMan.placeWindows, 15000);
+  }
 
-    if (config.placeWindowOnOpen) {
-      winMan.placeWindowOnOpen();
-    }
-  
-    if (config.placeWindowOnStart) {
-      winMan.placeWindows();
-    }
-  
-    if (config.publishStats) {
+  if (config.placeWindowOnOpen) {
+    winMan.placeWindowOnOpen();
+  }
+
+  if (config.placeWindowOnStart) {
+    winMan.placeWindows();
+  }
+
+  if (config.publishStats) {
     publishStats();
     setInterval(publishStats, 60000);
   }
