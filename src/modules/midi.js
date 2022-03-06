@@ -1,6 +1,7 @@
 const midi = require('midi');
 const usbDetect = require('usb-detection');
 const debounce = require('lodash.debounce');
+const robot = require('robotjs');
 
 const watchdogTimeout = 600 * 1000;
 const maxRangeDelay = 1000; // for ranges should be at least 2 events per maxRangeDelay
@@ -44,8 +45,8 @@ module.exports = async (mqtt, config, log) => {
     // переподключение, когда найдено midi устройство
     usbDetect.startMonitoring();
     if (isDeviceConfigured) {
-      usbDetect.on(`add:${device.vid}:${device.pid}`, function(device) {
-        console.log('add', device);
+      usbDetect.on(`add:${device.vid}:${device.pid}`, function(usbDevice) {
+        console.log('add', usbDevice);
         setTimeout(() => openMidi(input, device), 500);
       });
       listenKeys(input, device);
@@ -92,6 +93,13 @@ module.exports = async (mqtt, config, log) => {
     else log(`Try to using port ${portNum}`);
 
     input.openPort(portNum);
+
+    /* const output = new midi.Output();
+    output.openPort(portNum);
+    output.sendMessage([144,52,127]);
+    setTimeout(() => {
+      output.sendMessage([144,52,0]);
+    }, 500); */
   }
 
   function listenKeys(input, device) {
