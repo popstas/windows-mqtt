@@ -92,7 +92,13 @@ module.exports = async (mqtt, config, log) => {
     }
     else log(`Try to using port ${portNum}`);
 
-    input.openPort(portNum);
+    try {
+      input.openPort(portNum);
+    }
+    catch (e) {
+      log('Failed to open ' + portNum);
+      log(e.message);
+    }
 
     /* const output = new midi.Output();
     output.openPort(portNum);
