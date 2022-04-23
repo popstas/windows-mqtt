@@ -187,7 +187,13 @@ function getSysTrayMenu(modules = []) {
     checked: false,
     enabled: true,
     click() {
-      systray.kill(true)
+      if (config.mqtt.self_kill_cmd) {
+        mqtt.publish(`${config.mqtt.base}/exec/cmd`, config.mqtt.self_kill_cmd);
+        setTimeout(() => {systray.kill(true)}, 1000);
+      }
+      else {
+        systray.kill(true);
+      }
     }
   }
 

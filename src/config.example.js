@@ -11,6 +11,7 @@ module.exports = {
     user: 'user',
     password: 'password',
     base: 'home/room/pc',
+    //self_kill_cmd: 'D:/prog/SysinternalsSuite/pskill.exe node-windows-mqtt.exe',
   },
   modules: {
     audio: {
