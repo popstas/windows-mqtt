@@ -6,7 +6,9 @@ module.exports = async (mqtt, config, log) => {
   let lastStats = {};
   if (config.restoreOnStart) {
     await restoreWindows();
-    setTimeout(winMan.placeWindows, 15000);
+    setTimeout(() => {
+      if (config.placeWindowOnStart) winMan.placeWindows();
+    }, 15000);
   }
 
   if (config.placeWindowOnOpen) {
