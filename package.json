@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node src/index.js",
     "install-windows": "node scripts/service-install.js",
+    "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0",
     "uninstall-windows": "node scripts/service-uninstall.js"
   },
   "author": "",

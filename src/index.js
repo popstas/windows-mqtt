@@ -35,7 +35,7 @@ async function start() {
   });*/
 
   try {
-    mqtt = mqttInit(); // global set
+    mqtt = mqttInit({}); // global set
 
     const modulesEnabled = getModulesEnabled();
   
@@ -51,13 +51,16 @@ async function start() {
     listenModulesMQTT(modules);
   }
   catch(e) {
-    log(e.message);
-    log(e.stack);
+    log(e.message, 'error');
+    log(e.stack, 'error');
   }
 }
 
 
-
+process.on('uncaughtException', function (err) {
+  log('An uncaught error occurred!', 'error');
+  log(err.stack, 'error');
+});
 
 function log(msg, type = 'info') {
   const tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
