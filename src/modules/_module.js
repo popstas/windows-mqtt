@@ -10,7 +10,7 @@ module.exports = async (mqtt, config) => {
     mqtt.publish(topic, value);
   }
 
-  async function onStatus(topic, message) {
+  async function onStatus(topic) {
     if (modulePaused) return;
     const status = 'ok';
     mqtt.publish(topic, status);

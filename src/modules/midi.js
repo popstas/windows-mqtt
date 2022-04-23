@@ -3,7 +3,6 @@ const usbDetect = require('usb-detection');
 const debounce = require('lodash.debounce');
 const robot = require('robotjs');
 
-const watchdogTimeout = 600 * 1000;
 const maxRangeDelay = 1000; // for ranges should be at least 2 events per maxRangeDelay
 
 // loads config without cache
@@ -33,12 +32,6 @@ module.exports = async (mqtt, config, log) => {
 
   function initDevice(device, input) {
     log(`initDevice: ${device}`);
-    // проверка, что интервал не отваливается после перезагрузки, а таймаут отваливается
-    /* setInterval(() => {
-      // log('Interval');
-      const isNoMidi = lastMessage.date - Date.now() > watchdogTimeout;
-      if (isNoMidi) openMidi();
-    }, watchdogTimeout); */
 
     const isDeviceConfigured = device?.vid && device?.pid;
 

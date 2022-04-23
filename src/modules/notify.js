@@ -44,20 +44,20 @@ module.exports = async (mqtt, config, log) => {
         data.tb = true;
       }
 
-      notifyCallback = async (err, clickedButton, something) => {
+      notifyCallback = async (err, clickedButton) => {
         if (err) {
           console.log('err: ', err);
           return;
         }
     
-        console.log('clickedButton: ', clickedButton);
+        // console.log('clickedButton: ', clickedButton);
     
-        if (clickedButton == 'activate') {} // клик по уведомлению
-        if (clickedButton == 'dismissed') {} // закрытие уведомления
-        if (clickedButton == 'timeout') {} // закрылось само
+        if (clickedButton === 'activate') {} // клик по уведомлению
+        if (clickedButton === 'dismissed') {} // закрытие уведомления
+        if (clickedButton === 'timeout') {} // закрылось само
 
         // mark as readed in Android
-        if (clickedButton == config.markAsReadText.toLowerCase()) {
+        if (clickedButton === config.markAsReadText.toLowerCase()) {
           console.log('mark as read');
           await notifyClear(topic, obj.msg);
         }
@@ -77,7 +77,7 @@ module.exports = async (mqtt, config, log) => {
     // msg = msg.substring(0, 64);
 
     try {
-      const res = await axios.get(config.clearNotificationWebhook, {
+      await axios.get(config.clearNotificationWebhook, {
         params: { msg }
       });
     }

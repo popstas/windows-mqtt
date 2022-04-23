@@ -24,4 +24,4 @@ svc.on('install', function () {
 // svc.logOnAs.account = 'popstas';
 // svc.logOnAs.password = '';
 
-svc.install();
+svc.install({});

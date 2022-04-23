@@ -3,7 +3,7 @@ const config = require('./config');
 const SysTray = require('systray2').default;
 const os = require('os');
 const fs = require('fs');
-const isWindows = os.platform() == 'win32';
+const isWindows = os.platform() === 'win32';
 let windowsLogger;
 let showConsole, hideConsole;
 if (isWindows) {
@@ -22,7 +22,8 @@ let modules; // global object
 start();
 
 
-
+const p = os.platform();
+console.log('p: ', p);
 
 async function start() {
   log('windows-mqtt started');
@@ -70,7 +71,7 @@ function log(msg, type = 'info') {
     replace(/\..+/, '')     // delete the dot and everything after
 
   console[type](`${d} ${msg}`);
-  if (isWindows && process.env.NODE_ENV == 'production') windowsLogger[type](msg);
+  if (isWindows && process.env.NODE_ENV === 'production') windowsLogger[type](msg);
   if (isWindows && systray && systray._process) {
     const menu = getSysTrayMenu(modules);
     menu.tooltip = `${d} ${msg}`;
@@ -136,7 +137,7 @@ async function initModules(modulesEnabled) {
       log(e.message);
       if (config.debug) log(e.stack);
     }
-  };
+  }
   return modules;
 }
 
@@ -164,7 +165,7 @@ function getSysTrayMenu(modules = []) {
     title: 'Reconnect MQTT',
     enabled: true,
     click() {
-      mqtt = mqttInit();
+      mqtt = mqttInit({});
     }
   }
 
@@ -246,7 +247,7 @@ function getSysTrayMenu(modules = []) {
   ]);
 
 
-  const menu = {
+  return {
     // you should use .png icon on macOS/Linux, and .ico format on Windows
     icon: os.platform() === 'win32' ? './assets/trayicon.ico' : './assets/trayicon.png',
     // a template icon is a transparency mask that will appear to be dark in light mode and light in dark mode
@@ -255,7 +256,6 @@ function getSysTrayMenu(modules = []) {
     tooltip: 'windows-mqtt',
     items
   };
-  return menu;
 }
 
 function initSysTray(modules) {

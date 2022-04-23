@@ -8,7 +8,7 @@ async function publishMqtt() {
   const volume = await loudness.getVolume();
   const mute = await loudness.getMuted() ? '1' : '0';
 
-  if (!isNaN(volume) && volume != lastVolume) {
+  if (!isNaN(volume) && volume !== lastVolume) {
     lastVolume = volume;
     console.log(`> ${volumeStatTopic}: ${volume}`);
     mqtt.publish(volumeStatTopic, `${volume}`);
@@ -30,7 +30,7 @@ async function onVolumeSet(topic, message) {
 }
 
 async function onMuteSet(topic, message) {
-  const mute = `${message}` == '1';
+  const mute = `${message}` === '1';
   await loudness.setMuted(mute);
   console.log(`< mute/set: ${message}`);
   mqtt.publish(muteStatTopic, `${mute}`);

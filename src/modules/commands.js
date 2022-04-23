@@ -13,8 +13,7 @@ module.exports = async (mqtt, config, log) => {
   }
 
   function cmdToMqttMessage(cmd, in_message) {
-    const payload = cmd.payload || JSON.stringify(in_message);
-    let out_message = payload;
+    let out_message = cmd.payload || JSON.stringify(in_message);
     if (typeof cmd.payload == 'object') out_message = JSON.stringify(cmd.payload);
     return out_message;
   }

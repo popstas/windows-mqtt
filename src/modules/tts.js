@@ -43,7 +43,7 @@ const ttsSay = (msg, tryNum = 1) => {
 
     // play mp3
     let mp3Output;
-    const gap = os.platform == 'linux' ? config.gapLinux : config.gapNoLinux; // подобрано методом тыка, разница между Windows и Ubuntu
+    const gap = os.platform() === 'linux' ? config.gapLinux : config.gapNoLinux; // подобрано методом тыка, разница между Windows и Ubuntu
     const delay = sendTime ? sendTime + ttsDelay - Date.now() + gap : 0;
     // console.log('sent:     ', new Date(sendTime));
     // console.log('current:  ', new Date());

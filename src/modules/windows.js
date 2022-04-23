@@ -12,11 +12,11 @@ module.exports = async (mqtt, config, log) => {
   }
 
   if (config.placeWindowOnOpen) {
-    winMan.placeWindowOnOpen();
+    await winMan.placeWindowOnOpen();
   }
 
   if (config.placeWindowOnStart) {
-    winMan.placeWindows();
+    await winMan.placeWindows();
   }
 
   if (config.publishStats) {
@@ -115,17 +115,17 @@ module.exports = async (mqtt, config, log) => {
   async function focus(topic, message) {
     log(`< ${topic}: ${message}`);
     const rules = JSON.parse(`${message}`);
-    winMan.focusWindow(rules);
+    await winMan.focusWindow(rules);
   }
 
   async function restartHandler(topic, message) {
     log(`< ${topic}: ${message}`);
     const type = `${message}`;
-    if (type == 'store') {
+    if (type === 'store') {
       winMan.storeWindows();
       restart();
     }
-    else if (type == 'nostore') {
+    else if (type === 'nostore') {
       restart();
     }
   }

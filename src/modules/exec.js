@@ -32,10 +32,10 @@ module.exports = async (mqtt, config, log) => {
       }
 
       const isLong = Date.now() - start > config.long_time_sec * 1000;
-      if (!isLong && data.success_tts == config.success_tts) data.success_tts = '';
+      if (!isLong && data.success_tts === config.success_tts) data.success_tts = '';
 
       if (ttsTopic && data.success_tts) {
-        if (data.success_tts == 'stdout') data.success_tts = stdout;
+        if (data.success_tts === 'stdout') data.success_tts = stdout;
         mqtt.publish(ttsTopic, data.success_tts);
       }
 
