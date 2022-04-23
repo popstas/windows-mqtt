@@ -2,3 +2,4 @@ data/
 daemon/
 node_modules/
 config.js
+commands.yml

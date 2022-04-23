@@ -1,0 +1,113 @@
+const fs = require('fs');
+const path = require('path');
+const globalConfig = require('../config.js');
+
+module.exports = async (mqtt, config, log) => {
+  const subscriptions = [];
+
+  function cmdsHandler(cmds) {
+    return function (topic, message) {
+      log(`< ${topic}: ${message} (commands.yml)`);
+      runCmds(cmds, message);
+    }
+  }
+
+  function cmdToMqttMessage(cmd, in_message) {
+    const payload = cmd.payload || JSON.stringify(in_message);
+    let out_message = payload;
+    if (typeof cmd.payload == 'object') out_message = JSON.stringify(cmd.payload);
+    return out_message;
+  }
+
+function runCmds(cmds, in_message) {
+    function runCmd(cmd) {
+      if (typeof cmd !== 'object') return;
+
+      if (cmd.mqtt) {
+        const topic = cmd.mqtt;
+        const message = cmdToMqttMessage(cmd, in_message);
+        log(`> ${topic}: ${message}`);
+        mqtt.publish(topic, message);
+      }
+
+      if (cmd.exec !== undefined) {
+        const topic = `${globalConfig.mqtt.base}/exec/cmd`;
+        const args = [];
+
+        if (cmd.exec) args.push(cmd.exec);
+
+        if (cmd.shell) {
+          const shellPath = config.shells[cmd.shell];
+          if (shellPath) args.push(shellPath);
+        }
+
+        if (cmd.script) {
+          const filePath = path.resolve(`data/windows-mqtt-script-${Date.now()}-${Math.random() * 1000}`);
+          fs.writeFileSync(filePath, cmd.script);
+          args.push(filePath);
+          setTimeout(() => {fs.unlinkSync(filePath)}, 5000);
+        }
+
+        const message = JSON.stringify({
+          cmd: args.join(' '),
+          success_tts: cmd.success_tts,
+          error_tts: cmd.error_tts,
+        });
+        mqtt.publish(topic, message);
+      }
+    }
+
+    for(let cmd of cmds) {
+      runCmd(cmd);
+    }
+  }
+
+  function addSubscription({topic, handler}) {
+    const sub = {
+      topics: [ topic ],
+      handler: handler,
+    }
+    subscriptions.push(sub);
+  }
+
+  function addCommand(cmd) {
+    if (cmd.mqtt_topic) {
+      addSubscription({
+        topic: cmd.mqtt_topic,
+        handler: cmdsHandler(cmd.cmds),
+      })
+    }
+    
+    // cmd.dialogs yandex dialogs private handler
+    if (cmd.dialogs) {
+      function addDialogCommand (cmds) {
+        // TODO: impl
+      }
+      addDialogCommand(cmd.cmds);
+    }
+  }
+
+  function loadYamlCommands() {
+    const yaml = require('js-yaml');
+    const fs = require('fs');
+    let commands;
+
+    try {
+      commands = yaml.load(fs.readFileSync(__dirname + '/../../commands.yml', 'utf8'));
+      // console.log(commands);
+    } catch (e) {
+      commands = [];
+      console.log('commands.yml not found', e.message);
+    }
+    
+    return commands;
+  }
+
+  const commands = loadYamlCommands();
+  for (let cmd of commands) {
+    addCommand(cmd); // fill subscripttions array
+  }
+
+  console.log('subscriptions: ', subscriptions);
+  return { subscriptions };
+}

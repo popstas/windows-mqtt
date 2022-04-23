@@ -12,6 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "axios": "^0.21.1",
+    "js-yaml": "^4.1.0",
     "lodash.debounce": "^4.0.8",
     "loudness": "^0.4.1",
     "midi": "^2.0.0",
@@ -23,7 +24,7 @@
     "usb-detection": "^4.13.0"
   },
   "optionalDependencies": {
-    "node-hide-console-window": "^2.1.0",
+    "node-hide-console-window": "^2.1.1",
     "windows11-manager": "^0.1.0"
   }
 }

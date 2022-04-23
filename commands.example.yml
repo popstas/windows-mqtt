@@ -1,0 +1,25 @@
+- name: MQTT series
+  mqtt_topic: popstas/notify/all
+  cmds:
+    - mqtt: topic/1
+    - mqtt: topic-2
+
+- name: Deploy chords MQTT command
+  mqtt_topic: actions/chords-deploy
+  cmds:
+    - mqtt: home/room/pc/exec/cmd
+      payload:
+        cmd: '"c:/Program Files/Git/bin/bash.exe" d:/profiles/bin/chords-deploy.sh'
+        success_tts: Deploy finished
+
+- name: Execute script
+  mqtt_topic: actions/script
+  cmds:
+    - exec:
+      shell: bash
+      script: |
+        echo start
+        sleep 1
+        echo finish
+      success_tts: Script success
+      error_tts: Script failed

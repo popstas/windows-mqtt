@@ -26,6 +26,11 @@ module.exports = {
         stat: '/mute',
       },
     },
+    commands: {
+      shells: {
+        bash: '"c:/Program Files/Git/bin/bash.exe"',
+      },
+    },
     exec: {
       success_tts: 'Command success', // 'stdout' for answer with command output
       error_tts: 'Command error',
