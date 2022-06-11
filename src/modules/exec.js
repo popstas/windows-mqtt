@@ -4,8 +4,15 @@ const globalConfig = require('../config.js');
 module.exports = async (mqtt, config, log) => {
 
   async function cmd(topic, message) {
-    const cmd = `${message}`;
+    let cmd = `${message}`;
     log(`< ${topic}: ${cmd}`);
+
+    // self-kill command
+    // console.log('globalConfig: ', globalConfig);
+    if (cmd === 'self-kill' && globalConfig.mqtt.self_kill_cmd) {
+      cmd = globalConfig.mqtt.self_kill_cmd;
+    }
+
     const data = {
       cmd,
       success_tts: config.success_tts,
