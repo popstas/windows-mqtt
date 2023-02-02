@@ -3,3 +3,4 @@ daemon/
 node_modules/
 config.js
 commands.yml
+TEMP/

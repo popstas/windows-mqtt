@@ -30,6 +30,8 @@ module.exports = {
       shells: {
         bash: '"c:/Program Files/Git/bin/bash.exe"',
       },
+      custom_commands_path: 'data/commands_custom.yml',
+      cache_path: 'h:/projects/js/yandex-dialogs-private/data/windows-mqtt-commands-pc.yml',
     },
     exec: {
       success_tts: 'Command success', // 'stdout' for answer with command output
@@ -86,6 +88,7 @@ module.exports = {
       markAsReadText: 'Mark as readed',
     },
     // https://github.com/popstas/chrome-tabs-exporter
+    sysinfo: {},
     tabs: {
       port: 5555,
       excludedDomains: [

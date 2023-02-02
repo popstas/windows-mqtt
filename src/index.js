@@ -22,9 +22,6 @@ let modules; // global object
 start();
 
 
-const p = os.platform();
-console.log('p: ', p);
-
 async function start() {
   log('windows-mqtt started');
   if (isWindows && config.systray) hideConsole();

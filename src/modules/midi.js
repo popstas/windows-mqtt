@@ -31,7 +31,7 @@ module.exports = async (mqtt, config, log) => {
   }
 
   function initDevice(device, input) {
-    log(`initDevice: ${device}`);
+    log(`initDevice: ${JSON.stringify(device)}`);
 
     const isDeviceConfigured = device?.vid && device?.pid;
 

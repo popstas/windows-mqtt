@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const globalConfig = require('../config.js');
+const yaml = require('js-yaml');
 
 module.exports = async (mqtt, config, log) => {
   const subscriptions = [];
@@ -12,13 +13,56 @@ module.exports = async (mqtt, config, log) => {
     }
   }
 
+  function getCustomCommands() {
+    try {
+      console.log('config.custom_commands_path: ', config.custom_commands_path);
+      return yaml.load(fs.readFileSync(config.custom_commands_path, 'utf8'));
+    } catch(e) {
+      console.log('e.message: ', e.message);
+      return [];
+    }
+  }
+
+  function addCustomCommand(topic, message) {
+    log(`< ${topic}: ${message} (commands.yml)`);
+    const msg = `${message}`;
+
+    // load commands
+    const commands = [];
+    commands.push(...getCustomCommands());
+
+    // add new command
+    const cmd = {
+      name: msg,
+      dialogs: true,
+      type: 'mqtt',
+      mqtt_topic: 'actions/custom/' + Math.round(Math.random() * 10000),
+      cmds: [
+        {
+          mqtt: 'tts',
+          payload: 'Осталось немного дописать действия на эту фразу'
+        }
+      ]
+    }
+    if (res = msg.match(/сайт (.*)/g)) {
+      cmd.cmds = [ { mqtt: 'home/room/pc/site', payload: `https://www.google.com/search?btnI=1&q=${res[1]}`} ];
+    }
+    commands.push(cmd);
+
+    // save new list
+    fs.writeFileSync(config.custom_commands_path, yaml.dump(commands));
+
+    // refresh runtime cache
+    loadYamlCommands();
+  }
+
   function cmdToMqttMessage(cmd, in_message) {
     let out_message = cmd.payload || JSON.stringify(in_message);
     if (typeof cmd.payload == 'object') out_message = JSON.stringify(cmd.payload);
     return out_message;
   }
 
-function runCmds(cmds, in_message) {
+  function runCmds(cmds, in_message) {
     function runCmd(cmd) {
       if (typeof cmd !== 'object') return;
 
@@ -89,16 +133,22 @@ function runCmds(cmds, in_message) {
   function loadYamlCommands() {
     const yaml = require('js-yaml');
     const fs = require('fs');
-    let commands;
+    let commands = [];
 
     try {
       commands = yaml.load(fs.readFileSync(__dirname + '/../../commands.yml', 'utf8'));
       // console.log(commands);
     } catch (e) {
-      commands = [];
       console.log('commands.yml not found', e.message);
     }
     
+    commands.push(...getCustomCommands());
+
+    // save runtime cache compiled yml
+    if (config.cache_path) {
+      fs.writeFileSync(config.cache_path, yaml.dump(commands));
+    }
+
     return commands;
   }
 
@@ -107,6 +157,13 @@ function runCmds(cmds, in_message) {
     addCommand(cmd); // fill subscripttions array
   }
 
-  console.log('subscriptions: ', subscriptions);
+  // запомни команду
+  if (config.custom_commands_path) {
+    addSubscription({
+      topic: config.base + '/add',
+      handler: addCustomCommand,
+    });
+  }
+
   return { subscriptions };
 }
