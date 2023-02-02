@@ -130,9 +130,24 @@ module.exports = async (mqtt, config, log) => {
     }
   }
 
+  async function shutdownHandler(topic, message) {
+    log(`< ${topic}: ${message}`);
+    const type = `${message}`;
+    if (type === 'store') {
+      winMan.storeWindows();
+    }
+    shutdown();
+  }
+
   function restart() {
     setTimeout(() => {
       exec('shutdown -t 0 -r -f');
+    }, 1000);
+  }
+
+  function shutdown() {
+    setTimeout(() => {
+      exec('shutdown -t 0 -s -f');
     }, 1000);
   }
 
@@ -170,6 +185,10 @@ module.exports = async (mqtt, config, log) => {
         topics: [ config.base + '/restart' ],
         handler: restartHandler
       },
+      {
+        topics: [ config.base + '/shutdown' ],
+        handler: shutdownHandler
+      },
     ],
     menuItems: [
       {
@@ -206,6 +225,10 @@ module.exports = async (mqtt, config, log) => {
       {
         title: 'Restart',
         click: restart
+      },
+      {
+        title: 'Shutdown',
+        click: shutdown
       },
     ]
   };
