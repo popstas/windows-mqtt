@@ -26,6 +26,7 @@ module.exports = {
         stat: '/mute',
       },
     },
+    clipboard: {},
     commands: {
       shells: {
         bash: '"c:/Program Files/Git/bin/bash.exe"',

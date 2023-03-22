@@ -12,12 +12,22 @@ Publish to:
 - `home/room/pc/audio/volume`
 - `home/room/pc/audio/mute`
 
+### clipboard
+- `home/room/pc/clipboard/set` - copy text to system clipboard
+
 ### commands
 Read file commands.yml (see commands.example.yml), subscribe to topics, execute commands via exec module.
 
 ### exec
 - `home/room/pc/exec/cmd 'shell cmd'` - simple execute command with arguments in system shell
 - `home/room/pc/exec/cmd '{"cmd": "shell cmd", "success_tts": "Success", "error_tts": "Error"}` - execute command with tts feedback. You can define default tts feedback in config. Set `success_tts: 'stdout'` for answer with command output
+
+### gpt
+- `home/room/pc/gpt/ask` - send request to GPT
+
+Publish to:
+
+- `home/room/pc/gpt/answer` - get answer
 
 ### keys
 - `home/room/pc/keys/press` - press a single key, you can pass several keys, space delimeted
