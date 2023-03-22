@@ -38,6 +38,15 @@ module.exports = {
       error_tts: 'Command error',
       long_time_sec: 5,
     },
+    gpt: {
+      openai_api_key: '',
+      completion_params: {
+        temperature: 1,
+      },
+      timeoutMs: 30000,
+      systemMessage: 'You are helpful bot. Think step by step',
+      debug: false,
+    },
     keys: {
       // base: 'home/room/pc/keys',
     },
@@ -88,7 +97,6 @@ module.exports = {
       markAsReadText: 'Mark as readed',
     },
     // https://github.com/popstas/chrome-tabs-exporter
-    sysinfo: {},
     tabs: {
       port: 5555,
       excludedDomains: [

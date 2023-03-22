@@ -1,6 +1,6 @@
 // module example
 
-module.exports = async (mqtt, config) => {
+module.exports = async (mqtt, config, log) => {
 
   let modulePaused = false; // optional
 
