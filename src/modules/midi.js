@@ -31,7 +31,7 @@ module.exports = async (mqtt, config, log) => {
   }
 
   function initDevice(device, input) {
-    log(`initDevice: ${JSON.stringify(device)}`);
+    log(`midi: initDevice: ${JSON.stringify(device.portName)}`);
 
     const isDeviceConfigured = device?.vid && device?.pid;
 
@@ -45,7 +45,7 @@ module.exports = async (mqtt, config, log) => {
       listenKeys(input, device);
     }
     else {
-      console.log('Try to reconnect your midi device to see config');
+      console.log('! To find out vid, pid and portName, reconnect your midi device');
       // list all devices add
       usbDetect.on(`add`, function(device) {
         console.log('add', device);
@@ -131,7 +131,7 @@ module.exports = async (mqtt, config, log) => {
 
       if (config.hotReload) device = getConfig().devices.find(d => d.portName === device.portName); // TODO: remove from onMidiMessage
 
-      // на yamaha pss-a50 дргебезжат эти каналы
+      // на yamaha pss-a50 дребезжат эти каналы
       if (device.ignoreLines && device.ignoreLines.includes(parseInt(m))) {
         return;
       }
