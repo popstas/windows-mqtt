@@ -55,6 +55,7 @@ Binds midi signals to exec or mqtt actions.
 
 ### mouse
 - `home/room/pc/mouse/click` - click button, `left|right|middle`
+- `home/room/pc/mouse/point` - move button to `x`, `y`, optional click, example: `400,200,left`
 
 ### notify
 - `home/room/pc/notify/notify 'message'` - simple notify
