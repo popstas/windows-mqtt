@@ -126,6 +126,9 @@ module.exports = {
     obs: {
       // base: 'home/room/pc/obs',
     },
+    reaper: {
+      // base: 'home/room/pc/reaper',
+    },
     tabs: {
       port: 5555,
       excludedDomains: [

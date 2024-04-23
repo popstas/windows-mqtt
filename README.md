@@ -78,6 +78,15 @@ Commands:
 Events:
 - `home/room/pc/obs/state/rec` - change recording state
 
+### reaper
+- `home/room/pc/reaper/record` - start recording
+- `home/room/pc/reaper/stop` - stop recording
+- `home/room/pc/reaper/play` - start playing
+- `home/room/pc/reaper/stop` - stop playing
+- `home/room/pc/reaper/prev` - go to previous track
+- `home/room/pc/reaper/next` - go to next track
+- `home/room/pc/reaper/loop` - toggle loop
+
 ### tabs
 Send browser tabs stats to MQTT. Requires browser extension [chrome-tabs-exporter](https://github.com/popstas/chrome-tabs-exporter).
 
