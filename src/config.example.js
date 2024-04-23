@@ -2,6 +2,22 @@ const os = require('os');
 
 module.exports = {
   systray: true,
+  dirwatch: {
+    dirs: [
+      {
+        path: 'D:/video/*.mp4',
+        name: 'OBS',
+      },
+      {
+        path: 'D:/rec/*.mp3',
+        name: 'Songs',
+      },
+      {
+        path: 'D:/audiobooks',
+        name: 'Books',
+      },
+    ],
+  },
   log: {
     path: 'data/windows-mqtt.log',
   },
@@ -38,6 +54,15 @@ module.exports = {
       success_tts: 'Command success', // 'stdout' for answer with command output
       error_tts: 'Command error',
       long_time_sec: 5,
+    },
+    filewatch: {
+      files: [
+        {
+          path: 'H:/projects/smarthome/home-assistant/config/conf/openhasp.yaml',
+          mqtt_topic: 'openhasp',
+          mqtt_payload: 'openhasp.yaml',
+        }
+      ],
     },
     gpt: {
       openai_api_key: '',
