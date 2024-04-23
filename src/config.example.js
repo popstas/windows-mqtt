@@ -123,6 +123,9 @@ module.exports = {
       markAsReadText: 'Mark as readed',
     },
     // https://github.com/popstas/chrome-tabs-exporter
+    obs: {
+      // base: 'home/room/pc/obs',
+    },
     tabs: {
       port: 5555,
       excludedDomains: [

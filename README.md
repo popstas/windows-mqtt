@@ -70,6 +70,14 @@ Binds midi signals to exec or mqtt actions.
 - `home/room/pc/notify/notify '{"title": "title", "msg": "msg", "app": "Planfix", "icon": "/path/to/planfix.png", "actions": ["OK"]}'` - full notify
 - `home/room/pc/notify/clear 'msg text'` - clear notify on Android (for MacroDroid), you must define `config.modules.notify.clearNotificationWebhook` for this
 
+### obs
+Commands:
+- `home/room/pc/obs/rec` - start recording
+- `home/room/pc/obs/stop` - stop recording
+
+Events:
+- `home/room/pc/obs/state/rec` - change recording state
+
 ### tabs
 Send browser tabs stats to MQTT. Requires browser extension [chrome-tabs-exporter](https://github.com/popstas/chrome-tabs-exporter).
 
