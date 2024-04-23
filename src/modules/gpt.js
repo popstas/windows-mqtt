@@ -1,3 +1,5 @@
+const globalConfig = require('../config.js');
+const fs = require('fs');
 
 module.exports = async (mqtt, config, log) => {
 
@@ -22,10 +24,56 @@ module.exports = async (mqtt, config, log) => {
     }
   }
 
+  function gptRequest({ text, systemMessage, parentMessageId }) {
+    const request = {
+      timeoutMs: config.timeoutMs || 60000,
+      systemMessage,
+      parentMessageId,
+    }
+    return api.sendMessage(text, request);
+  }
+
+  // fix recognized speech text with gpt, copy to clipboard
+  async function fixAndCopy(topic, message) {
+    const inText = `${message}`;
+    log(`< ${topic}: ${inText}`);
+
+    let outText = '';
+    try {
+      const res = await gptRequest({
+        text: inText,
+        systemMessage: 'исправь ошибки в тексте',
+      });
+  
+      if (config.debug) console.log('res:', res);
+  
+      outText = res?.text || 'бот не ответил';
+    }
+    catch(e) {
+      outText = 'бот не ответил';
+      console.error(e);
+    }
+
+    const notifyTopic = globalConfig.mqtt.base + '/notify/notify';
+    mqtt.publish(notifyTopic, `Текст:\n${outText}`);
+
+    const text = `${inText}\n\n${outText}`;
+
+    const tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
+    const d = new Date(Date.now() - tzoffset).
+      toISOString().
+      replace(/T/, ' ').      // replace T with a space
+      replace(/\..+/, '')     // delete the dot and everything after
+  
+    fs.appendFileSync(config.logPath, `\n\n\n${d}\n${text}`)
+    return mqtt.publish(`${globalConfig.mqtt.base}/clipboard/set`, text);
+  }
+
   // ask to chatgpt, send result to /answer mqtt topic
   async function ask(topic, message) {
     log(`< ${topic}: ${message}`);
     const chatId = 1;
+
     const msg = {
       text: `${message}`,
       chat: {
@@ -37,15 +85,13 @@ module.exports = async (mqtt, config, log) => {
 
     addToThread(msg, {systemMessage});
 
-    const request = {
-      parentMessageId: threads[msg.chat.id].lastAnswer?.id,
-      timeoutMs: config.timeoutMs || 60000,
-      systemMessage,
-    }
-
     try {
       threads[msg.chat.id].partialAnswer = '';
-      const res = await api.sendMessage(msg.text, request);
+      const res = await gptRequest({
+        text: msg.text,
+        systemMessage,
+        parentMessageId: threads[msg.chat.id].lastAnswer?.id
+      });
       threads[msg.chat.id].partialAnswer = '';
       if (config.debug) console.log('res:', res);
       threads[msg.chat.id].lastAnswer = res;
@@ -84,6 +130,10 @@ module.exports = async (mqtt, config, log) => {
       {
         topics: [ config.base + '/ask' ],
         handler: ask
+      },
+      {
+        topics: [ config.base + '/fix-and-copy' ],
+        handler: fixAndCopy
       },
       {
         topics: [ config.base + '/clear' ],
