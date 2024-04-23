@@ -141,7 +141,7 @@ async function initModules(modulesEnabled) {
 function subscribeToModuleTopics(modules) {
   let topics = [];
   for (let mod of modules) {
-    const modTopics = mod.subscriptions.map(sub => Array.isArray(sub.topics) ? sub.topics : [sub.topics]).flat();
+    const modTopics = mod.subscriptions?.map(sub => Array.isArray(sub.topics) ? sub.topics : [sub.topics]).flat() || [];
     topics = [...topics, ...modTopics];
   }
   log(`\nSubscribe to topics:\n- ${topics.flat().join('\n- ')}\n`);
@@ -151,7 +151,7 @@ function subscribeToModuleTopics(modules) {
 function getHandler(topic, modules) {
   let handler;
   for (let mod of modules) {
-    const sub = mod.subscriptions.find(sub => sub.topics.includes(topic))
+    const sub = mod.subscriptions?.find(sub => sub.topics.includes(topic))
     if (sub) handler = sub.handler;
   }
   return handler;
