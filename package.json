@@ -9,12 +9,15 @@
     "uninstall-windows": "node scripts/service-uninstall.js",
     "deploy": "zsh data/deploy.sh"
   },
-  "author": "",
+  "author": "Stanislav Popov",
   "license": "ISC",
   "dependencies": {
+    "@nut-tree/nut-js": "^3.1.1",
     "axios": "^0.21.1",
     "chatgpt": "^5.1.2",
+    "chokidar": "^3.5.3",
     "clipboardy": "^3.0.0",
+    "form-data": "^4.0.0",
     "js-yaml": "^4.1.0",
     "lodash.debounce": "^4.0.8",
     "loudness": "^0.4.1",
@@ -29,6 +32,6 @@
   },
   "optionalDependencies": {
     "node-hide-console-window": "^2.1.1",
-    "windows11-manager": "^0.1.0"
+    "windows11-manager": "file:../windows11-manager"
   }
 }
