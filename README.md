@@ -20,6 +20,8 @@ Read file commands.yml (see commands.example.yml), subscribe to topics, execute 
 
 ### exec
 - `home/room/pc/exec/cmd 'shell cmd'` - simple execute command with arguments in system shell
+- `home/room/pc/exec/cmd/silent 'shell cmd'` - execute command without notifications
+- `home/room/pc/exec/cmd '{"cmd" "shell cmd", "silent": true}'` - execute command without notifications
 - `home/room/pc/exec/cmd '{"cmd": "shell cmd", "success_tts": "Success", "error_tts": "Error"}` - execute command with tts feedback. You can define default tts feedback in config. Set `success_tts: 'stdout'` for answer with command output
 
 ### gpt
