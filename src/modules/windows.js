@@ -92,7 +92,7 @@ module.exports = async (mqtt, config, log) => {
   }
 
   async function store(topic, message) {
-    log(`< ${topic}: ${message}`);
+    // log(`< ${topic}: ${message}`);
     winMan.storeWindows();
   }
 
@@ -121,11 +121,11 @@ module.exports = async (mqtt, config, log) => {
   async function restartHandler(topic, message) {
     log(`< ${topic}: ${message}`);
     const type = `${message}`;
-    if (type === 'store') {
-      winMan.storeWindows();
+    if (type === 'nostore') {
       restart();
     }
-    else if (type === 'nostore') {
+    else {
+      winMan.storeWindows();
       restart();
     }
   }

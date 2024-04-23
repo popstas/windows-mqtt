@@ -92,7 +92,7 @@ Send browser tabs stats to MQTT. Requires browser extension [chrome-tabs-exporte
 - `home/room/pc/windows/clear` - clear store
 - `home/room/pc/windows/open '{ "apps": ["c:\\app1.exe"], "paths": ["d:\\prog"] }'` - open store
 - `home/room/pc/windows/focus '{ "titleMatch": "blog.popstas.ru" }'` - focus window by title
-- `home/room/pc/windows/restart` - restart PC, `store` for store opened windows or `nostore` for just restart
+- `home/room/pc/windows/restart` - restart PC, `nostore` for just restart, other payload for store opened windows
 
 It's using module, https://github.com/popstas/windows11-manager, Vitrual desktop manager work only for Windows 11 now, as I am single user.
 
