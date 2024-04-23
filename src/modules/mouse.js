@@ -11,16 +11,17 @@ module.exports = async (mqtt, config, log) => {
     message = `${message}`;
     log(`< ${topic}: ${message}`);
 
-    const [x, y, button, ret] = message.split(',');
+    let [x, y, button, ret] = message.split(',').map(val => val.trim());
 
+    console.log('x, y, button, ret: ', x, y, button, ret);
     const oldPos = robot.getMousePos();
 
     // move
     robot.moveMouse(parseInt(x), parseInt(y));
 
     // click
-    if (['left', 'middle', 'right'].includes(button.trim())) {
-      robot.mouseClick(button.trim());
+    if (['left', 'middle', 'right'].includes(button)) {
+      robot.mouseClick(button);
     }
 
     // return mouse back

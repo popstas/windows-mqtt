@@ -65,7 +65,7 @@ module.exports = async (mqtt, config, log) => {
     } catch(e){}
 
     log(`< ${topic}: ${msg}`);
-    console.log('data: ', data);
+    // console.log('data: ', data);
     notifier.notify(data, notifyCallback);
   }
 
