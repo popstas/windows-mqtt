@@ -55,7 +55,18 @@ module.exports = async (mqtt, config, log) => {
       }
 
       if (stdout && !data.silent) console.log(`stdout: ${stdout}`);
-      if (stderr) console.error(`stderr: ${stderr}`);
+      if (stderr) console.error(`cmd: ${data.cmd}, stderr: ${stderr}`);
+    });
+  }
+
+  async function ssh(topic, message) {
+    const ssh_app = config.ssh_app || 'wt.exe ssh';
+
+    let cmd = `${ssh_app} ${message}`;
+
+    exec(cmd, (error, stdout, stderr) => {
+      if (stdout && !data.silent) console.log(`stdout: ${stdout}`);
+      if (stderr) console.error(`cmd: ${data.cmd}, stderr: ${stderr}`);
     });
   }
 
@@ -64,9 +75,15 @@ module.exports = async (mqtt, config, log) => {
       {
         topics: [
           config.base + '/cmd',
-          config.base + '/cmd/silent'
+          config.base + '/cmd/silent',
         ],
         handler: cmd
+      },
+      {
+        topics: [
+          config.base + '/ssh',
+        ],
+        handler: ssh
       },
     ]
   }

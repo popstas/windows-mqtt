@@ -54,6 +54,7 @@ module.exports = {
       success_tts: 'Command success', // 'stdout' for answer with command output
       error_tts: 'Command error',
       long_time_sec: 5,
+      ssh_app: 'wt.exe ssh -A',
     },
     filewatch: {
       files: [
