@@ -2,8 +2,10 @@
   "name": "windows-mqtt",
   "version": "0.0.1",
   "description": "Control PC with MQTT, modular",
+  "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
+    "start-electron": "electron src/index.js",
     "install-windows": "node scripts/service-install.js",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0",
     "uninstall-windows": "node scripts/service-uninstall.js",
@@ -34,6 +36,10 @@
   },
   "optionalDependencies": {
     "node-hide-console-window": "^2.1.1",
-    "windows11-manager": "^0.1.4"
+    "windows11-manager": "file:../windows11-manager"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.6.0",
+    "electron": "^32.0.1"
   }
 }

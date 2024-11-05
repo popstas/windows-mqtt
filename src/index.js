@@ -1,7 +1,10 @@
 const {mqttInit} = require('./mqtt');
 const config = require('./config');
 const SysTray = require('systray2').default;
+const electron = require('electron');
+const {app, BrowserWindow, Tray, Menu} = electron;
 const os = require('os');
+const path = require('path');
 const fs = require('fs');
 const isWindows = os.platform() === 'win32';
 let windowsLogger;
@@ -10,21 +13,159 @@ if (isWindows) {
   const EventLogger = require('node-windows').EventLogger;
   windowsLogger = new EventLogger('windows-mqtt');
 
-  const lib = require('node-hide-console-window');
-  showConsole = lib.showConsole;
-  hideConsole = lib.hideConsole;
+  // const lib = require('node-hide-console-window');
+  // showConsole = lib.showConsole;
+  // hideConsole = lib.hideConsole;
 }
 
 let mqtt; // global object
 let systray; // global object
 let modules; // global object
 
-start();
+let mainWindow;
+let tray;
 
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 800,
+    height: 600,
+    show: false, // Start the app hidden
+    webPreferences: {
+      nodeIntegration: true,
+    },
+  });
+
+  mainWindow.loadFile('../index.html');
+
+  mainWindow.on('closed', function () {
+    mainWindow = null;
+  });
+}
+
+function createTray(modules) {
+  const filename = os.platform() === 'win32' ? 'trayicon.ico' : 'trayicon.png';
+  const iconPath = path.join(__dirname, '..', 'assets', filename);
+  tray = new Tray(iconPath); // Path to your tray icon
+  tray.setToolTip('windows-mqtt');
+
+  const itemsMain = [
+    {
+      label: 'Show App',
+      click: function () {
+        mainWindow.show();
+      },
+    },
+    /*{
+      label: 'Modules:',
+      type: 'separator',
+    },*/
+  ];
+  const itemsEnd = [
+    {
+      label: 'Reconnect MQTT',
+      click() {
+        mqtt = mqttInit({});
+      }
+    },
+    {
+      label: 'Quit',
+      click: function () {
+        app.isQuiting = true;
+        app.quit();
+      },
+    },
+  ];
+
+  const itemsModules = [];
+  console.log("modules:", modules);
+  if (modules) {
+    for (let mod of modules) {
+      const isCanStop = typeof mod.onStop === 'function' && typeof mod.onStart === 'function';
+      mod.enabled = mod.enabled !== undefined ? !!mod.enabled : true;
+      const item = {
+        label: mod.name,
+        enabled: isCanStop,
+        checked: mod.enabled,
+        click() {
+          mod.enabled = !mod.enabled;
+          this.checked = mod.enabled;
+
+          if (mod.enabled) {
+            mod.onStart();
+          } else {
+            mod.onStop();
+          }
+        }
+      };
+      itemsModules.push(item);
+    }
+
+    // modules menu items
+    for (let mod of modules.filter(m => !!m.menuItems)) {
+      itemsModules.push({type: 'separator'}, ...mod.menuItems);
+    }
+  }
+
+  const contextMenu = Menu.buildFromTemplate([
+    ...itemsMain,
+    ...itemsModules,
+    ...itemsEnd,
+  ]);
+  console.log("contextMenu:", contextMenu);
+  tray.setContextMenu(contextMenu);
+
+  tray.on('click', function () {
+    if (mainWindow.isVisible()) {
+      mainWindow.hide();
+    } else {
+      mainWindow.show();
+    }
+  });
+}
+
+// start();
+void start();
+
+async function startElectron(modules) {
+  console.log("startElectron:");
+  app.on('ready', () => {
+    createTray(modules);
+    createWindow();
+
+    mainWindow.on('minimize', (event) => {
+      event.preventDefault();
+      mainWindow.hide();
+    });
+
+    mainWindow.on('close', (event) => {
+      if (!app.isQuiting) {
+        event.preventDefault();
+        mainWindow.hide();
+      }
+
+      return false;
+    });
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
+
+  app.on('activate', () => {
+    if (mainWindow === null) {
+      createWindow();
+    } else {
+      mainWindow.show();
+    }
+  });
+
+}
 
 async function start() {
   log('windows-mqtt started');
-  if (isWindows && config.systray) hideConsole();
+  if (isWindows && config.systray && hideConsole) hideConsole();
 
   // exit on signal, TODO:
   /*process.on('SIGINT', function() {
@@ -36,19 +177,20 @@ async function start() {
     mqtt = mqttInit({}); // global set
 
     const modulesEnabled = getModulesEnabled();
-  
-    modules = await initModules(modulesEnabled);
-  
+
+    modules = await initModules(modulesEnabled); // TODO: uncomment
+
     // should be after initModules
     if (config.systray) {
-      initSysTray(modules);
+      // if (config.electron) await startElectron(modulesEnabled.map((el) => ({name: el})));
+      if (config.electron) await startElectron(modules);
+      else initSysTray(modules);
     }
-  
+
     subscribeToModuleTopics(modules);
-  
+
     listenModulesMQTT(modules);
-  }
-  catch(e) {
+  } catch (e) {
     log(e.message, 'error');
     log(e.stack, 'error');
   }
@@ -62,9 +204,7 @@ process.on('uncaughtException', function (err) {
 
 function log(msg, type = 'info') {
   const tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
-  const d = new Date(Date.now() - tzoffset).
-    toISOString().
-    replace(/T/, ' ').      // replace T with a space
+  const d = new Date(Date.now() - tzoffset).toISOString().replace(/T/, ' ').      // replace T with a space
     replace(/\..+/, '')     // delete the dot and everything after
 
   console[type](`${d} ${msg}`);
@@ -129,7 +269,7 @@ async function initModules(modulesEnabled) {
         ...await mod(mqtt, opts, log),
       };
       modules.push(modInited);
-    } catch(e) {
+    } catch (e) {
       log(`Failed to load module ${name}`);
       log(e.message);
       if (config.debug) log(e.stack);
@@ -140,7 +280,7 @@ async function initModules(modulesEnabled) {
 
 function subscribeToModuleTopics(modules) {
   let topics = [];
-  for (let mod of modules) {
+  if (modules) for (let mod of modules) {
     const modTopics = mod.subscriptions?.map(sub => Array.isArray(sub.topics) ? sub.topics : [sub.topics]).flat() || [];
     topics = [...topics, ...modTopics];
   }
@@ -170,7 +310,7 @@ function getSysTrayMenu(modules = []) {
     title: 'Show console',
     enabled: true,
     click() {
-      showConsole();
+      if (showConsole) showConsole();
     }
   }
 
@@ -190,9 +330,10 @@ function getSysTrayMenu(modules = []) {
     click() {
       if (config.mqtt.self_kill_cmd) {
         mqtt.publish(`${config.mqtt.base}/exec/cmd`, config.mqtt.self_kill_cmd);
-        setTimeout(() => {systray.kill(true)}, 1000);
-      }
-      else {
+        setTimeout(() => {
+          systray.kill(true)
+        }, 1000);
+      } else {
         systray.kill(true);
       }
     }
@@ -263,7 +404,7 @@ function initSysTray(modules) {
     debug: false, //!!config.debug,
     copyDir: false // copy go tray binary to an outside directory, useful for packing tool like pkg.
   })
-  
+
   systray.onClick(action => {
     if (action.item.click != null) {
       action.item.click();
@@ -275,7 +416,7 @@ function initSysTray(modules) {
       });
     }
   })
-  
+
   // Systray.ready is a promise which resolves when the tray is ready.
   systray.ready().then(() => {
     console.log('systray started')

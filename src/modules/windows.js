@@ -192,42 +192,42 @@ module.exports = async (mqtt, config, log) => {
     ],
     menuItems: [
       {
-        title: 'Place windows',
+        label: 'Place windows',
         async click() {
           await autoplace('command/autoplace', '1');
         }
       },
       {
-        title: 'Store windows',
+        label: 'Store windows',
         click() {
           winMan.storeWindows();
         }
       },
       {
-        title: 'Restore windows',
+        label: 'Restore windows',
         async click() {
           await winMan.restoreWindows();
         },
       },
       {
-        title: 'Clear stored windows',
+        label: 'Clear stored windows',
         click() {
           winMan.clearWindows();
         },
       },
       {
-        title: 'Restart with windows restore',
+        label: 'Restart with windows restore',
         click() {
           winMan.storeWindows();
           restart();
         }
       },
       {
-        title: 'Restart',
+        label: 'Restart',
         click: restart
       },
       {
-        title: 'Shutdown',
+        label: 'Shutdown',
         click: shutdown
       },
     ]
@@ -239,7 +239,7 @@ module.exports = async (mqtt, config, log) => {
 
   if (stored) {
     obj.menuItems.push({
-      title: 'Open default apps',
+      label: 'Open default apps',
       click() {
         winMan.openStore(stored);
       }
