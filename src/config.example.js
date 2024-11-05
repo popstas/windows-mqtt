@@ -100,6 +100,7 @@ module.exports = {
               midi: [176,9],
               type: 'range',
               mqtt: ['home/hall/station/volume', '{{payload}}'],
+              // fastDebounce: true,
               // min: 0,
               // max: 127,
               // to_min: 0,

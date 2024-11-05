@@ -3,7 +3,8 @@ const usbDetect = require('usb-detection');
 const debounce = require('lodash.debounce');
 const robot = require('robotjs');
 
-const maxRangeDelay = 1000; // for ranges should be at least 2 events per maxRangeDelay
+const maxRangeDelay = 200; // for ranges should be at least 2 events per maxRangeDelay
+const minChanges = 3; // for avoid false positives
 
 // loads config without cache
 function getConfig() {
@@ -155,7 +156,8 @@ module.exports = async (mqtt, config, log) => {
       // находим ranges
       for (let hk of device.hotkeys.filter(hk => hk.type === 'range')) {
         if(m[0] == hk.midi[0] && m[1] == hk.midi[1]) {
-          debouncedMidiHandlerRange({
+          const funс = hk.fastDebounce ? fastDebouncedMidiHandlerRange : debouncedMidiHandlerRange;
+          funс({
             val: m[2],
             m,
             hk,
@@ -172,7 +174,6 @@ module.exports = async (mqtt, config, log) => {
     }
 
   }
-
 
 
 
@@ -252,7 +253,8 @@ module.exports = async (mqtt, config, log) => {
 
     doActions({keys, sendMqtt});
   }
-  const debouncedMidiHandlerRange = debounce(midiHandlerRange, 500);
+  const debouncedMidiHandlerRange = debounce(midiHandlerRange, 1000);
+  const fastDebouncedMidiHandlerRange = debounce(midiHandlerRange, 100);
   
   function getValFromMidi({ val, hk }) {
     const min = hk.min || 0;
