@@ -145,6 +145,15 @@ module.exports = {
       gapLinux: 200,
       gapNoLinux: 0,
     },
+    vad: {
+      // download model to data/silero_vad.onnx - https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx
+      // threshold: 0.5,
+      // minSpeechDuration: 0.25,
+      // minSilenceDuration: 0.5,
+      // windowSize: 512,
+      // sampleRate: 16000,
+      // numThreads: 1,
+    },
     windows: {
       enabled: false,
       placeWindowOnOpen: true, // on each window open

@@ -94,6 +94,12 @@ Send browser tabs stats to MQTT. Requires browser extension [chrome-tabs-exporte
 ### tts
 - `tts` - TTS received message
 
+### vad
+Voice activity detection (VAD) using silero-vad.
+- `home/room/pc/vad/speech` - 0/1, speech detected
+- `home/room/pc/vad/start` - start
+- `home/room/pc/vad/stop` - stop
+
 ### windows
 - `home/room/pc/windows/autoplace` - autoplace windows with config
 - `home/room/pc/windows/place '{"window":"current","fancyZones":{"monitor":1,"position":6}}'` - place window with rules
