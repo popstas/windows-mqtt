@@ -26,16 +26,17 @@ function log(msg, logLevel = 'info') {
   const messageLogLevel = logLevels.indexOf(logLevel);
 
   if (messageLogLevel >= currentLogLevel) {
-    if (isWindows && process.env.NODE_ENV === 'production') {
-      windowsLogger[logLevel](msg);
+    if (electronLog) {
+      electronLog[logLevel](msg);
     }
     else {
       console[logLevel](`${d} ${msg}`);
     }
   }
 
-
-  // if (electronLog) electronLog[logLevel](msg);
+  if (isWindows && process.env.NODE_ENV === 'production') {
+    windowsLogger[logLevel](msg);
+  }
 
   /* if (config.log && config.log.path) {
     fs.appendFileSync(config.log.path, `${d} [${logLevel}] ${msg}\n`);
