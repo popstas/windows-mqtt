@@ -17,7 +17,11 @@
     "win": {
       "target": "portable",
       "icon": "assets/trayicon.png"
-    }
+    },
+    "extraFiles": [
+      "data/",
+      "config.yml"
+    ]
   },
   "files": [
     "**/*",
