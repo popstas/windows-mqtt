@@ -2,6 +2,6 @@ data/
 dist/
 daemon/
 node_modules/
-config.js
+config.yml
 commands.yml
 TEMP/
