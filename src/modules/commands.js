@@ -15,7 +15,7 @@ module.exports = async (mqtt, config, log) => {
 
   function getCustomCommands() {
     try {
-      console.log('config.custom_commands_path: ', config.custom_commands_path);
+      // console.log('config.custom_commands_path: ', config.custom_commands_path);
       return yaml.load(fs.readFileSync(config.custom_commands_path, 'utf8'));
     } catch(e) {
       console.log('e.message: ', e.message);

@@ -16,6 +16,7 @@ function getConfig() {
 
 module.exports = async (mqtt, config, log) => {
   let inputs = [];
+  let portsDisplayed = false;
   const lastMessage = { date: 0, message: {}}; // for detect midi disconnect, watchdogTimeout, TODO: remove?
   let modulePaused = false;
   const lastMidi = {}; // for detect range bounces, maxRangeDelay
@@ -32,7 +33,7 @@ module.exports = async (mqtt, config, log) => {
   }
 
   function initDevice(device, input) {
-    log(`midi: initDevice: ${JSON.stringify(device.portName)}`);
+    log(`midi: initDevice: ${JSON.stringify(device.portName)}`, 'debug');
 
     const isDeviceConfigured = device?.vid && device?.pid;
 
@@ -40,7 +41,7 @@ module.exports = async (mqtt, config, log) => {
     usbDetect.startMonitoring();
     if (isDeviceConfigured) {
       usbDetect.on(`add:${device.vid}:${device.pid}`, function(usbDevice) {
-        console.log('add', usbDevice);
+        console.log('midi: add', usbDevice);
         setTimeout(() => openMidi(input, device), 500);
       });
       listenKeys(input, device);
@@ -59,7 +60,7 @@ module.exports = async (mqtt, config, log) => {
 
   function openMidi(input, device) {
     if (input.isPortOpen()) {
-      log('Close midi port');
+      log('midi: Close midi port', 'debug');
       input.closePort();
     }
 
@@ -67,7 +68,7 @@ module.exports = async (mqtt, config, log) => {
     const portCount = input.getPortCount();
     const ports = [];
     const portsStr = [];
-    log('Total midi ports: ' + portCount);
+    // log('Total midi ports: ' + portCount);
 
     for (let p = 0; p < portCount; p++) {
       const portName = input.getPortName(p);
@@ -78,19 +79,23 @@ module.exports = async (mqtt, config, log) => {
     // get portNum
     let portNum = ports.findIndex(p => p == device.portName);
     if (portNum === -1) portNum = device.portNum;
-    log(`MIDI ports: ${portsStr.join(', ')}.`);
+    if (!portsDisplayed) {
+      portsDisplayed = true;
+      log(`midi ports: ${portsStr.join(', ')}.`, 'debug');
+    }
 
     if (portNum === undefined){
-      log(`Cannot find MIDI device "${device.portName}"`);
+      log(`midi: Cannot find MIDI device "${device.portName}"`, 'debug');
       return;
     }
-    else log(`Try to using port ${portNum}`);
+    // else log(`Try to using port ${portNum}`, 'debug');
 
     try {
       input.openPort(portNum);
+      log(`midi: ${input.getPortName(portNum)} inited`);
     }
     catch (e) {
-      log('Failed to open ' + portNum);
+      log('midi: Failed to open ' + portNum);
       log(e.message);
     }
 
@@ -103,7 +108,7 @@ module.exports = async (mqtt, config, log) => {
   }
 
   function listenKeys(input, device) {
-    log('midi listen start');
+    // log('midi listen start');
 
     // Configure a callback.
     input.on('message', onMidiMessage);
@@ -167,7 +172,7 @@ module.exports = async (mqtt, config, log) => {
       }
 
       doActions({keys, sendMqtt});
-      log(`m: ${m} d: ${deltaTime}`);
+      log(`midi: ${m} d: ${deltaTime}`);
 
       lastMessage.date = Date.now();
       lastMessage.message = m;

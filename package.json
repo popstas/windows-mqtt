@@ -1,14 +1,28 @@
 {
   "name": "windows-mqtt",
   "version": "0.0.1",
-  "description": "Control PC with MQTT, modular",
+  "description": "Windows MQTT",
   "scripts": {
     "start": "node src/index.js",
+    "start-electron": "electron src/index-electron.js",
+    "build": "electron-builder",
     "install-windows": "node scripts/service-install.js",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0",
     "uninstall-windows": "node scripts/service-uninstall.js",
     "deploy": "zsh data/deploy.sh"
   },
+  "main": "src/index-electron.js",
+  "build": {
+    "appId": "pro.popstas.windows-mqtt",
+    "win": {
+      "target": "portable",
+      "icon": "assets/trayicon.png"
+    }
+  },
+  "files": [
+    "**/*",
+    "!*.log"
+  ],
   "author": "Stanislav Popov",
   "license": "ISC",
   "dependencies": {
@@ -17,6 +31,7 @@
     "chatgpt": "^5.1.2",
     "chokidar": "^3.5.3",
     "clipboardy": "^3.0.0",
+    "electron-log": "^5.2.2",
     "form-data": "^4.0.0",
     "js-yaml": "^4.1.0",
     "lodash.debounce": "^4.0.8",
@@ -33,7 +48,10 @@
     "usb-detection": "^4.13.0"
   },
   "optionalDependencies": {
-    "node-hide-console-window": "^2.1.1",
-    "windows11-manager": "^0.1.4"
+    "windows11-manager": "file:../windows11-manager"
+  },
+  "devDependencies": {
+    "electron": "^26.6.10",
+    "electron-builder": "^25.1.8"
   }
 }

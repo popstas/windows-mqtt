@@ -68,7 +68,7 @@ module.exports = async (mqtt, config, log) => {
       const parts = w.path.split('\\');
       return parts[parts.length - 1].replace(/\.exe$/, '');
     });
-    const msg = `Placed ${placed.length} windows: ${apps.join(', ')}`;
+    const msg = `Placed windows: ${placed.length}`;
     log(msg);
 
     // notify
@@ -139,6 +139,12 @@ module.exports = async (mqtt, config, log) => {
     shutdown();
   }
 
+  function sleep() {
+    setTimeout(() => {
+      exec('D:/prog/SysinternalsSuite/psshutdown.exe -d -t 0');
+    }, 1000);
+  }
+
   function restart() {
     setTimeout(() => {
       exec('shutdown -t 0 -r -f');
@@ -182,6 +188,10 @@ module.exports = async (mqtt, config, log) => {
         handler: focus
       },
       {
+        topics: [ config.base + '/sleep' ],
+        handler: sleep
+      },
+      {
         topics: [ config.base + '/restart' ],
         handler: restartHandler
       },
@@ -192,42 +202,46 @@ module.exports = async (mqtt, config, log) => {
     ],
     menuItems: [
       {
-        title: 'Place windows',
+        label: 'Place windows',
         async click() {
           await autoplace('command/autoplace', '1');
         }
       },
       {
-        title: 'Store windows',
+        label: 'Store windows',
         click() {
           winMan.storeWindows();
         }
       },
       {
-        title: 'Restore windows',
+        label: 'Restore windows',
         async click() {
           await winMan.restoreWindows();
         },
       },
       {
-        title: 'Clear stored windows',
+        label: 'Clear stored windows',
         click() {
           winMan.clearWindows();
         },
       },
       {
-        title: 'Restart with windows restore',
+        label: 'Restart with windows restore',
         click() {
           winMan.storeWindows();
           restart();
         }
       },
       {
-        title: 'Restart',
+        label: 'Sleep',
+        click: sleep
+      },
+      {
+        label: 'Restart',
         click: restart
       },
       {
-        title: 'Shutdown',
+        label: 'Shutdown',
         click: shutdown
       },
     ]
@@ -239,7 +253,7 @@ module.exports = async (mqtt, config, log) => {
 
   if (stored) {
     obj.menuItems.push({
-      title: 'Open default apps',
+      label: 'Open default apps',
       click() {
         winMan.openStore(stored);
       }

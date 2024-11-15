@@ -149,3 +149,6 @@ return {
   ]
 }
 ```
+
+## Known bugs
+- electron > 26 fails to `npx electron-rebuild`

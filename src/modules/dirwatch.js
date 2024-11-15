@@ -4,8 +4,9 @@ const path = require('node:path');
 const addChangeGap = 1000; // avoid publish change file just after add
 
 module.exports = async (mqtt, config, log) => {
+  log(`dirwatch: ${config.dirs.length}`);
   for (const dir of config.dirs) {
-    log('dirwatch: watching ' + dir.path);
+    log('dirwatch: ' + dir.path, 'debug');
     const watchOpts = {
       ignoreInitial: true,
       depth: dir.depth || 1,
@@ -50,6 +51,9 @@ module.exports = async (mqtt, config, log) => {
       mqtt.publish(`${mqtt_base}/dir/path`, fileDir);
       mqtt.publish(`${mqtt_base}/dir/name`, dir.name);
       // mqtt.publish(config.base + '/' + dir.mqtt_topic, dir.mqtt_payload);
+    })
+    .on('error', (error) => {
+      log(`dirwatch error: ${error.message}`, 'error');
     });
   }
 

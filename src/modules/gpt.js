@@ -4,6 +4,7 @@ const fs = require('fs');
 module.exports = async (mqtt, config, log) => {
 
   // const ChatGPTAPI = require('chatgpt');
+  // return;
   const { ChatGPTAPI } = await import('chatgpt');
   const api = new ChatGPTAPI({
     apiKey: config.openai_api_key,

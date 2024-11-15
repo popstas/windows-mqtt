@@ -4,23 +4,6 @@ let mqtt;
 let volumeSetTopic, volumeStatTopic, muteSetTopic, muteStatTopic;
 let lastVolume, lastMute;
 
-async function publishMqtt() {
-  const volume = await loudness.getVolume();
-  const mute = await loudness.getMuted() ? '1' : '0';
-
-  if (!isNaN(volume) && volume !== lastVolume) {
-    lastVolume = volume;
-    console.log(`> ${volumeStatTopic}: ${volume}`);
-    mqtt.publish(volumeStatTopic, `${volume}`);
-  }
-
-  if (mute !== lastMute) {
-    lastMute = mute;
-    console.log(`> ${muteStatTopic}: ${mute}`);
-    mqtt.publish(muteStatTopic, mute);
-  }
-}
-
 async function onVolumeSet(topic, message) {
   console.log(`< volume/set: ${message}`);
   const volume = parseInt(message);
@@ -36,7 +19,24 @@ async function onMuteSet(topic, message) {
   mqtt.publish(muteStatTopic, `${mute}`);
 }
 
-module.exports = async (mqttClient, config) => {
+module.exports = async (mqttClient, config, log) => {
+  async function publishMqtt() {
+    const volume = await loudness.getVolume();
+    const mute = await loudness.getMuted() ? '1' : '0';
+  
+    if (!isNaN(volume) && volume !== lastVolume) {
+      log(`> ${volumeStatTopic}: ${volume}`, lastVolume === undefined ? 'debug' : 'info');
+      lastVolume = volume;
+      mqtt.publish(volumeStatTopic, `${volume}`);
+    }
+  
+    if (mute !== lastMute) {
+      log(`> ${muteStatTopic}: ${mute}`, lastMute === undefined ? 'debug' : 'info');
+      lastMute = mute;
+      mqtt.publish(muteStatTopic, mute);
+    }
+  }
+  
   mqtt = mqttClient;
 
   // onStart
