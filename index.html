@@ -4,9 +4,34 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Windows-mqtt</title>
+
+    <script>
+      function log(message) {
+        console.log(message);
+        window.electronAPI.log(message);
+      }
+
+      async function start() {
+        // Отправка сообщения основному процессу
+        window.electronAPI.sendMessage('Привет, основной процесс!');
+
+        // Прослушивание ответа от основного процесса
+        window.electronAPI.onMessage((message) => {
+          log('Сообщение от основного процесса:', message);
+        });
+
+        const enabledModules = await window.electronAPI.getEnabledModules();
+
+        log(`Включенные модули: ${JSON.stringify(enabledModules)}`);
+        document.getElementById('body').innerHTML = `Enabled modules: <br><ul><li>${enabledModules.join('</li><li>')}</li></ul>`;
+      }
+
+      start();
+    </script>
 </head>
 <body>
-<h1>Hello, Electron!</h1>
-<p>This app starts minimized to the tray.</p>
+    <div id="body">
+
+    </div>
 </body>
 </html>

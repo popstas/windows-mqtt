@@ -116,6 +116,7 @@ function initElectronSysTrayMenu(tray, mainWindow, modules) {
       mod.enabled = mod.enabled !== undefined ? !!mod.enabled : true;
       const item = {
         label: mod.name,
+        type: 'checkbox',
         enabled: isCanStop,
         checked: mod.enabled,
         click() {

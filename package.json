@@ -19,7 +19,7 @@
     "appId": "pro.popstas.windows-mqtt",
     "asar": false,
     "win": {
-      "target": "dir",
+      "target": "portable",
       "icon": "assets/trayicon.png"
     },
     "extraFiles": [

@@ -1,7 +1,8 @@
-const { app, Tray, Menu, BrowserWindow } = require('electron');
-const { start } = require('./server');
+const {app, Tray, ipcMain, BrowserWindow} = require('electron');
+const {start} = require('./server');
 const path = require('path');
-const os = require('os');
+const packageJson = require('../package.json');
+const {log, getModulesEnabled} = require("./helpers");
 
 function createWindow() {
   let mainWindow = new BrowserWindow({
@@ -9,11 +10,15 @@ function createWindow() {
     height: 600,
     show: false, // Start the app hidden
     webPreferences: {
-      nodeIntegration: true,
+      preload: path.join(__dirname, 'preload.js'),
+      // nodeIntegration: true,
+      nodeIntegration: false,
+      // contextIsolation: false,
+      contextIsolation: true,
     },
   });
 
-  mainWindow.loadFile('../index.html');
+  void mainWindow.loadFile('../index.html');
 
   mainWindow.on('closed', function () {
     mainWindow = null;
@@ -33,14 +38,32 @@ function createWindow() {
     return false;
   });
 
+  // Основной процесс слушает сообщение
+  ipcMain.on('message-from-renderer', (event, arg) => {
+    event.reply('message-from-main', 'Привет, это основной процесс!');
+    return handleRendererMessage(arg);
+  });
+  ipcMain.on('log', (event, arg) => {
+    log(`frontend: ${arg}`);
+  });
+
   return mainWindow;
 }
 
+function handleRendererMessage(message) {
+  if (typeof message !== 'object' || !message.type) {
+    return;
+  }
+  if (message.type === 'getEnabledModules') {
+    return getModulesEnabled();
+  }
+  log(`frontend message: ${message}`);
+}
+
 function createTray(mainWindow) {
-  const filename = os.platform() === 'win32' ? 'trayicon.ico' : 'trayicon.png';
-  const iconPath = path.join(__dirname, '..', 'assets', filename);
-  const tray = new Tray(iconPath); // Path to your tray icon
-  tray.setToolTip('windows-mqtt');
+  const iconPath = path.join(__dirname, '..', 'assets', 'trayicon.png');
+  const tray = new Tray(iconPath);
+  tray.setToolTip(`windows-mqtt ${packageJson.version}`);
 
   tray.on('click', function () {
     if (mainWindow.isVisible()) {
