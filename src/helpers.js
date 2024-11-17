@@ -10,17 +10,12 @@ if (isWindows) {
   windowsLogger = new EventLogger('windows-mqtt');
 }
 
-/* if (config.log && config.log.path) {
+if (config.log && config.log.path) {
   electronLog.transports.file.resolvePathFn = () => config.log.path;
-} */
+  electronLog.transports.console.format = '{y}-{m}-{d} {h}:{i}:{s} {text}';
+}
 
 function log(msg, logLevel = 'info') {
-  const tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
-  const d = new Date(Date.now() - tzoffset).
-  toISOString().
-  replace(/T/, ' ').      // replace T with a space
-    replace(/\..+/, '')     // delete the dot and everything after
-
   const logLevels = ['debug',  'info', 'warn', 'error'];
   const currentLogLevel = logLevels.indexOf(config.debug ? 'debug' : (config.logLevel || 'info'));
   const messageLogLevel = logLevels.indexOf(logLevel);
@@ -30,6 +25,11 @@ function log(msg, logLevel = 'info') {
       electronLog[logLevel](msg);
     }
     else {
+      const tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
+      const d = new Date(Date.now() - tzoffset).
+      toISOString().
+      replace(/T/, ' ').      // replace T with a space
+        replace(/\..+/, '')     // delete the dot and everything after
       console[logLevel](`${d} ${msg}`);
     }
   }
