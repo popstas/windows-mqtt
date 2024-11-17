@@ -1,8 +1,8 @@
 const config = require("./config");
-const fs = require("fs");
 const os = require("os");
 const isWindows = os.platform() === 'win32';
 const electronLog = require('electron-log');
+const {ipcMain} = require('electron');
 
 let windowsLogger;
 if (isWindows) {
@@ -21,16 +21,21 @@ function log(msg, logLevel = 'info') {
   const messageLogLevel = logLevels.indexOf(logLevel);
 
   if (messageLogLevel >= currentLogLevel) {
+    const tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
+    const d = new Date(Date.now() - tzoffset).
+    toISOString().
+    replace(/T/, ' ').      // replace T with a space
+      replace(/\..+/, '')     // delete the dot and everything after
+
     if (electronLog) {
       electronLog[logLevel](msg);
     }
     else {
-      const tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
-      const d = new Date(Date.now() - tzoffset).
-      toISOString().
-      replace(/T/, ' ').      // replace T with a space
-        replace(/\..+/, '')     // delete the dot and everything after
       console[logLevel](`${d} ${msg}`);
+    }
+
+    if (ipcMain) {
+      ipcMain.emit('log-to-frontend', `${d} ${msg}`, logLevel);
     }
   }
 

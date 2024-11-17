@@ -4,34 +4,92 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Windows-mqtt</title>
-
     <script>
+      const lines = [];
+
       function log(message) {
         console.log(message);
         window.electronAPI.log(message);
       }
 
       async function start() {
-        // Отправка сообщения основному процессу
-        window.electronAPI.sendMessage('Привет, основной процесс!');
+        window.electronAPI.sendMessage({type: 'getEnabledModules'});
 
-        // Прослушивание ответа от основного процесса
-        window.electronAPI.onMessage((message) => {
-          log('Сообщение от основного процесса:', message);
+        window.electronAPI.onLine((message, logLevel) => {
+          // lines.push(`[${logLevel}] ${message}`);
+          lines.push(message);
+          lines.slice(0, 500);
+          console.log('log to lines');
+          const logDiv = document.getElementById('log');
+          logDiv.innerHTML = lines.map(line => `<div>${line}</div>`).join('\n');
         });
 
-        const enabledModules = await window.electronAPI.getEnabledModules();
+        window.electronAPI.onMessage((message, logLevel) => {
+          // log(`Main process message: ${JSON.stringify(message)}`);
 
-        log(`Включенные модули: ${JSON.stringify(enabledModules)}`);
-        document.getElementById('body').innerHTML = `Enabled modules: <br><ul><li>${enabledModules.join('</li><li>')}</li></ul>`;
+          // getEnabledModulesResponse
+          if (message.type === 'getEnabledModulesResponse') {
+            const enabledModules = message.data;
+            const modulesList = document.getElementById('enabled-modules');
+            modulesList.innerHTML = enabledModules.map(mod => `<span class="module">${mod}</span>`).join(', ');
+          }
+
+          //
+          /*ipcMain.on('log', (event, arg) => {
+            log(`frontend: ${arg}`);
+            mainWindow.webContents.send('log-message', arg); // Pe3d6
+          });*/
+        });
       }
 
       start();
     </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        #body {
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        li {
+            padding: 5px 0;
+        }
+
+        #log {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            background-color: #f9f9f9;
+            white-space: nowrap;
+            max-height: 80vh;
+            overflow-y: auto;
+            font-family: monospace;
+        }
+    </style>
 </head>
 <body>
-    <div id="body">
+<div id="body">
+    <div>
+        <b>Enabled Modules:</b>
+        <span id="enabled-modules"></span>
+    </div>
+    <div id="log">
 
     </div>
+</div>
 </body>
 </html>

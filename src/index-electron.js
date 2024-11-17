@@ -41,13 +41,20 @@ function createWindow() {
     return false;
   });
 
-  // Основной процесс слушает сообщение
-  ipcMain.on('message-from-renderer', (event, arg) => {
-    event.reply('message-from-main', 'Привет, это основной процесс!');
-    return handleRendererMessage(arg);
+  ipcMain.on('message-from-renderer', (event, message) => {
+    if (message.type === 'getEnabledModules') {
+      const enabledModules = getModulesEnabled();
+      event.reply('message-from-main', { type: 'getEnabledModulesResponse', data: enabledModules });
+      return;
+    }
+    // log(`frontend message: ${JSON.stringify(message)}`);
   });
   ipcMain.on('log', (event, arg) => {
     log(`frontend: ${arg}`);
+  });
+  ipcMain.on('log-to-frontend', (message, logLevel) => {
+    // log(`log-to-frontend: [${logLevel}] ${message}`);
+    mainWindow.webContents.send('log-to-frontend', message, logLevel);
   });
 
   return mainWindow;

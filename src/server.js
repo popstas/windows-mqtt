@@ -60,7 +60,9 @@ function subscribeToModuleTopics(modules) {
     const modTopics = mod.subscriptions?.map(sub => Array.isArray(sub.topics) ? sub.topics : [sub.topics]).flat() || [];
     topics = [...topics, ...modTopics];
   }
-  log(`\nSubscribe to topics:\n- ${topics.flat().join('\n- ')}\n`);
+  const allTopics = topics.flat();
+  log(`Subscribe to ${allTopics.length} topics`)
+  log(`${allTopics.map(t => `- ${t}`).join('\n')}`, 'debug');
   mqtt.subscribe(topics.flat());
 }
 
