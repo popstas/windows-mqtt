@@ -28,7 +28,9 @@ module.exports = async (mqtt, config, log) => {
     await winMan.restoreWindows();
 
     const stored = config?.store?.custom;
-    if (stored.apps) stored.windows = stored.apps.map(path => { return { path }});
+    if (stored.apps) stored.windows = stored.apps.map(path => {
+      return {path}
+    });
     await winMan.openStore(stored);
   }
 
@@ -39,8 +41,8 @@ module.exports = async (mqtt, config, log) => {
     // for correct graphs need to send 0 at latest count
     if (lastStats?.byApp) {
       for (let app in lastStats.byApp) {
-        if (lastStats.byApp[app].count == 0) continue;
-        if (!stats.byApp[app]) stats.byApp[app] = { count: 0, wins: []}
+        if (lastStats.byApp[app].count === 0) continue;
+        if (!stats.byApp[app]) stats.byApp[app] = {count: 0, wins: []}
       }
     }
     lastStats = stats;
@@ -84,8 +86,7 @@ module.exports = async (mqtt, config, log) => {
     try {
       const pos = JSON.parse(`${message}`);
       await winMan.placeWindowByConfig(pos);
-    }
-    catch(e) {
+    } catch (e) {
       log('Failed to parse place position json');
       log(e);
     }
@@ -123,8 +124,7 @@ module.exports = async (mqtt, config, log) => {
     const type = `${message}`;
     if (type === 'nostore') {
       restart();
-    }
-    else {
+    } else {
       winMan.storeWindows();
       restart();
     }
@@ -157,102 +157,41 @@ module.exports = async (mqtt, config, log) => {
     }, 1000);
   }
 
-  const obj = {
-    subscriptions: [
-      {
-        topics: [ config.base + '/autoplace' ],
-        handler: autoplace
+  const menuItems = [];
+  menuItems.push(...[
+    {
+      label: 'Place windows',
+      async click() {
+        await autoplace('command/autoplace', '1');
+      }
+    },
+    {
+      label: 'Store windows',
+      click() {
+        winMan.storeWindows();
+      }
+    },
+    {
+      label: 'Restore windows',
+      async click() {
+        await winMan.restoreWindows();
       },
-      {
-        topics: [ config.base + '/place' ],
-        handler: place
+    },
+    {
+      label: 'Clear stored windows',
+      click() {
+        winMan.clearWindows();
       },
-      {
-        topics: [ config.base + '/store' ],
-        handler: store
-      },
-      {
-        topics: [ config.base + '/restore' ],
-        handler: restore
-      },
-      {
-        topics: [ config.base + '/clear' ],
-        handler: clear
-      },
-      {
-        topics: [ config.base + '/open' ],
-        handler: open
-      },
-      {
-        topics: [ config.base + '/focus' ],
-        handler: focus
-      },
-      {
-        topics: [ config.base + '/sleep' ],
-        handler: sleep
-      },
-      {
-        topics: [ config.base + '/restart' ],
-        handler: restartHandler
-      },
-      {
-        topics: [ config.base + '/shutdown' ],
-        handler: shutdownHandler
-      },
-    ],
-    menuItems: [
-      {
-        label: 'Place windows',
-        async click() {
-          await autoplace('command/autoplace', '1');
-        }
-      },
-      {
-        label: 'Store windows',
-        click() {
-          winMan.storeWindows();
-        }
-      },
-      {
-        label: 'Restore windows',
-        async click() {
-          await winMan.restoreWindows();
-        },
-      },
-      {
-        label: 'Clear stored windows',
-        click() {
-          winMan.clearWindows();
-        },
-      },
-      {
-        label: 'Restart with windows restore',
-        click() {
-          winMan.storeWindows();
-          restart();
-        }
-      },
-      {
-        label: 'Sleep',
-        click: sleep
-      },
-      {
-        label: 'Restart',
-        click: restart
-      },
-      {
-        label: 'Shutdown',
-        click: shutdown
-      },
-    ]
-  };
+    },
+  ]);
 
   // open default apps
   const stored = config?.store?.default;
-  if (stored.apps) stored.windows = stored.apps.map(path => { return { path }});
-
+  if (stored.apps) stored.windows = stored.apps.map(path => {
+    return {path}
+  });
   if (stored) {
-    obj.menuItems.push({
+    menuItems.push({
       label: 'Open default apps',
       click() {
         winMan.openStore(stored);
@@ -260,5 +199,77 @@ module.exports = async (mqtt, config, log) => {
     })
   }
 
-  return obj;
+  menuItems.push(...[
+    {
+      type: 'separator',
+    },
+    {
+      label: 'Restart with windows restore',
+      click() {
+        winMan.storeWindows();
+        restart();
+      }
+    },
+    {
+      label: 'Sleep',
+      click: sleep
+    },
+    {
+      label: 'Restart',
+      click: restart
+    },
+    {
+      label: 'Shutdown',
+      click: shutdown
+    },
+    {
+      type: 'separator',
+    },
+  ]);
+
+  return {
+    subscriptions: [
+      {
+        topics: [config.base + '/autoplace'],
+        handler: autoplace
+      },
+      {
+        topics: [config.base + '/place'],
+        handler: place
+      },
+      {
+        topics: [config.base + '/store'],
+        handler: store
+      },
+      {
+        topics: [config.base + '/restore'],
+        handler: restore
+      },
+      {
+        topics: [config.base + '/clear'],
+        handler: clear
+      },
+      {
+        topics: [config.base + '/open'],
+        handler: open
+      },
+      {
+        topics: [config.base + '/focus'],
+        handler: focus
+      },
+      {
+        topics: [config.base + '/sleep'],
+        handler: sleep
+      },
+      {
+        topics: [config.base + '/restart'],
+        handler: restartHandler
+      },
+      {
+        topics: [config.base + '/shutdown'],
+        handler: shutdownHandler
+      },
+    ],
+    menuItems,
+  };
 }
