@@ -5,10 +5,13 @@ const packageJson = require('../package.json');
 const {log, getModulesEnabled} = require("./helpers");
 
 function createWindow() {
+  const icon = path.join(__dirname, '..', 'assets', 'trayicon.png');
   let mainWindow = new BrowserWindow({
+    icon,
     width: 800,
     height: 600,
     show: false, // Start the app hidden
+    autoHideMenuBar: true, // Hide the window menu
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       // nodeIntegration: true,
