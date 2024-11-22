@@ -119,6 +119,11 @@ module.exports = async (mqtt, config, log) => {
     await winMan.focusWindow(rules);
   }
 
+  async function reload() {
+    await winMan.reloadConfigs();
+    await mqtt.publish(`${config.base}/reload`, '1');
+  }
+
   async function restartHandler(topic, message) {
     log(`< ${topic}: ${message}`);
     const type = `${message}`;
@@ -224,6 +229,10 @@ module.exports = async (mqtt, config, log) => {
     },
     {
       type: 'separator',
+    },
+    {
+      label: 'Reload configs',
+      click: reload
     },
   ]);
 
