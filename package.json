@@ -35,7 +35,7 @@
   "license": "ISC",
   "dependencies": {
     "@nut-tree/nut-js": "^3.1.1",
-    "axios": "^0.21.1",
+    "axios": "^1.7.8",
     "chatgpt": "^5.1.2",
     "chokidar": "^3.5.3",
     "clipboardy": "^3.0.0",
@@ -52,8 +52,8 @@
     "obs-websocket-js": "^5.0.5",
     "robotjs": "^0.6.0",
     "sherpa-onnx-node": "^1.10.30",
-    "systray2": "^2.1.4",
-    "usb-detection": "^4.13.0"
+    "usb-detection": "^4.13.0",
+    "ws": "^8.18.0"
   },
   "optionalDependencies": {
     "windows11-manager": "file:../windows11-manager"
