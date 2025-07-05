@@ -1,4 +1,5 @@
 const config = require("./config");
+const modulesRegistry = require('./modules');
 const os = require("os");
 const isWindows = os.platform() === 'win32';
 const electronLog = require('electron-log');
@@ -71,7 +72,10 @@ async function initModules(modulesEnabled, mqtt) {
       opts.base = `${config.mqtt.base}/${name}`;
 
     try {
-      const mod = require('./modules/' + name);
+      const mod = modulesRegistry[name];
+      if (!mod) {
+        throw new Error(`Unknown module: ${name}`);
+      }
 
       const modInited = {
         ...{
