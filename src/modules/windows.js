@@ -66,8 +66,8 @@ module.exports = async (mqtt, config, log) => {
     log(`< ${topic}: ${message}`);
     const placed = await winMan.placeWindows();
 
-    const apps = placed.map(w => {
-      const parts = w.path.split('\\');
+    const apps = placed.map(item => {
+      const parts = item.w.path.split('\\');
       return parts[parts.length - 1].replace(/\.exe$/, '');
     });
     const msg = `Placed windows: ${placed.length}`;
