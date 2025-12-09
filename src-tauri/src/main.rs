@@ -4,7 +4,7 @@ use serde::Serialize;
 use std::{path::PathBuf, sync::Arc};
 use tauri::api::process::{Command, CommandChild, CommandEvent};
 use tauri::{
-    async_runtime::Mutex, CustomMenuItem, Manager, State, SystemTray, SystemTrayEvent,
+    async_runtime::Mutex, CustomMenuItem, Icon, Manager, State, SystemTray, SystemTrayEvent,
     SystemTrayMenu, SystemTrayMenuItem,
 };
 
@@ -133,21 +133,27 @@ fn resolve_resource_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 fn build_tray() -> SystemTray {
+    let icon = Icon::Raw(include_bytes!("../assets/trayicon.png").to_vec());
     let quit = CustomMenuItem::new("quit", "Quit");
     let show = CustomMenuItem::new("show", "Show App");
     let menu = SystemTrayMenu::new()
         .add_item(show)
         .add_native_item(SystemTrayMenuItem::Separator)
         .add_item(quit);
-    SystemTray::new().with_menu(menu)
+    SystemTray::new().with_icon(icon).with_menu(menu)
 }
 
 fn handle_tray_event(app: &tauri::AppHandle, event: SystemTrayEvent) {
     match event {
         SystemTrayEvent::LeftClick { .. } => {
             if let Some(window) = app.get_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
+                let is_visible = window.is_visible().unwrap_or(false);
+                if is_visible {
+                    let _ = window.hide();
+                } else {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
             }
         }
         SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
