@@ -1,7 +1,16 @@
 const { mqttInit } = require('./mqtt');
 const config = require('./config');
-const { app, Tray, Menu } = require('electron');
 const {log, getModulesEnabled, initModules} = require("./helpers");
+
+let app, Tray, Menu;
+
+try {
+  ({ app, Tray, Menu } = require('electron'));
+} catch (error) {
+  app = null;
+  Tray = null;
+  Menu = null;
+}
 
 let mqtt; // global object
 let modules; // global object

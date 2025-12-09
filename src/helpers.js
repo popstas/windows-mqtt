@@ -2,8 +2,17 @@ const config = require("./config");
 const modulesRegistry = require('./modules');
 const os = require("os");
 const isWindows = os.platform() === 'win32';
-const electronLog = require('electron-log');
-const {ipcMain} = require('electron');
+
+let electronLog;
+let ipcMain;
+
+try {
+  electronLog = require('electron-log');
+  ({ ipcMain } = require('electron'));
+} catch (error) {
+  electronLog = null;
+  ipcMain = null;
+}
 
 let windowsLogger;
 if (isWindows) {

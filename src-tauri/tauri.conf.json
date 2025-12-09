@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schema.tauri.app/config/1",
+  "package": {
+    "productName": "windows-mqtt",
+    "version": "0.0.1"
+  },
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devPath": "../",
+    "distDir": "../"
+  },
+  "tauri": {
+    "bundle": {
+      "active": true,
+      "identifier": "pro.popstas.windows-mqtt",
+      "mainBinaryName": "pro.popstas.windows-mqtt",
+      "icon": [
+        "../assets/trayicon.png"
+      ],
+      "resources": [
+        "../data/**",
+        "../config.yml",
+        "../config.example.yml",
+        "../commands.example.yml",
+        "../src/**"
+      ],
+      "windows": {
+        "wix": {
+          "enable_elevated_update_task": false
+        }
+      }
+    },
+    "allowlist": {
+      "shell": {
+        "all": false,
+        "execute": true,
+        "open": false,
+        "sidecar": true
+      }
+    },
+    "systemTray": {
+      "iconPath": "../assets/trayicon.png",
+      "id": "windows-mqtt-tray"
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "windows-mqtt",
+        "width": 800,
+        "height": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "visible": false
+      }
+    ]
+  }
+}

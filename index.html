@@ -6,45 +6,56 @@
     <title>Windows-mqtt</title>
     <script>
       const lines = [];
+      const isTauri = !!window.__TAURI__;
+      const isElectron = !!window.electronAPI;
 
-      function log(message) {
-        console.log(message);
-        window.electronAPI.log(message);
+      function renderLogs() {
+        const logTextarea = document.getElementById('log');
+        logTextarea.value = lines.join('\n');
+        logTextarea.scrollTop = logTextarea.scrollHeight;
+      }
+
+      function appendLog(message) {
+        lines.push(message);
+        lines.slice(0, 500);
+        renderLogs();
+      }
+
+      function renderEnabledModules(enabledModules) {
+        const modulesList = document.getElementById('enabled-modules');
+        modulesList.innerHTML = enabledModules.map(mod => `<span class="module">${mod}</span>`).join(', ');
       }
 
       async function start() {
-        window.electronAPI.sendMessage({type: 'getEnabledModules'});
+        if (isElectron) {
+          window.electronAPI.sendMessage({type: 'getEnabledModules'});
+          window.electronAPI.onLine((message) => {
+            appendLog(message);
+          });
+          window.electronAPI.onMessage((message) => {
+            if (message.type === 'getEnabledModulesResponse') {
+              renderEnabledModules(message.data);
+            }
+          });
+          return;
+        }
 
-        window.electronAPI.onLine((message, logLevel) => {
-          // lines.push(`[${logLevel}] ${message}`);
-          lines.push(message);
-          lines.slice(0, 500);
-          console.log('log to lines');
-          const logTextarea = document.getElementById('log');
-          logTextarea.value = lines.join('\n');
-          // Auto-scroll to bottom
-          logTextarea.scrollTop = logTextarea.scrollHeight;
-        });
+        if (isTauri) {
+          await window.__TAURI__.invoke('start_mqtt_server');
+          const unlisten = await window.__TAURI__.event.listen('server-log', (event) => {
+            const payload = event.payload || {};
+            const prefix = payload.level ? `[${payload.level}] ` : '';
+            appendLog(`${prefix}${payload.message || ''}`.trim());
+          });
+          const enabledModules = await window.__TAURI__.invoke('get_enabled_modules');
+          renderEnabledModules(enabledModules);
+          return () => unlisten();
+        }
 
-        window.electronAPI.onMessage((message, logLevel) => {
-          // log(`Main process message: ${JSON.stringify(message)}`);
-
-          // getEnabledModulesResponse
-          if (message.type === 'getEnabledModulesResponse') {
-            const enabledModules = message.data;
-            const modulesList = document.getElementById('enabled-modules');
-            modulesList.innerHTML = enabledModules.map(mod => `<span class="module">${mod}</span>`).join(', ');
-          }
-
-          //
-          /*ipcMain.on('log', (event, arg) => {
-            log(`frontend: ${arg}`);
-            mainWindow.webContents.send('log-message', arg); // Pe3d6
-          });*/
-        });
+        appendLog('No backend detected.');
       }
 
-      start();
+      void start();
     </script>
     <style>
         body {
