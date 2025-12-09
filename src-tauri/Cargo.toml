@@ -1,0 +1,29 @@
+[package]
+name = "pro-popstas-windows-mqtt"
+version = "0.0.1"
+authors = ["Stanislav Popov"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "1", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+tauri = { version = "1", features = [
+  "dialog-all",
+  "os-all",
+  "path-all",
+  "process-command-api",
+  "shell-open",
+  "system-tray",
+  "window-start-dragging"
+] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
