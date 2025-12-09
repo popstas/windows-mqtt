@@ -5,9 +5,11 @@
   "scripts": {
     "start": "node src/index.js",
     "start-electron": "electron src/index-electron.js",
+    "start-tauri": "tauri dev",
     "build": "npm run build:dir",
     "build:dir": "electron-builder --dir",
     "build:dist": "electron-builder",
+    "build:tauri": "tauri build",
     "install-windows": "node scripts/service-install.js",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0",
     "uninstall-windows": "node scripts/service-uninstall.js",
@@ -59,6 +61,7 @@
     "windows11-manager": "file:../windows11-manager"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^1.6.0",
     "electron": "^26.6.10",
     "electron-builder": "^25.1.8"
   }
