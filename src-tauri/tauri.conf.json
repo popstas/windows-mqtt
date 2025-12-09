@@ -14,7 +14,6 @@
     "bundle": {
       "active": true,
       "identifier": "pro.popstas.windows-mqtt",
-      "mainBinaryName": "pro.popstas.windows-mqtt",
       "icon": [
         "../assets/trayicon.png"
       ],
@@ -27,7 +26,7 @@
       ],
       "windows": {
         "wix": {
-          "enable_elevated_update_task": false
+          "enableElevatedUpdateTask": false
         }
       }
     },
@@ -40,8 +39,7 @@
       }
     },
     "systemTray": {
-      "iconPath": "../assets/trayicon.png",
-      "id": "windows-mqtt-tray"
+      "iconPath": "../assets/trayicon.png"
     },
     "windows": [
       {
