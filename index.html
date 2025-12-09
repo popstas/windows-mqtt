@@ -20,8 +20,10 @@
           lines.push(message);
           lines.slice(0, 500);
           console.log('log to lines');
-          const logDiv = document.getElementById('log');
-          logDiv.innerHTML = lines.map(line => `<div>${line}</div>`).join('\n');
+          const logTextarea = document.getElementById('log');
+          logTextarea.value = lines.join('\n');
+          // Auto-scroll to bottom
+          logTextarea.scrollTop = logTextarea.scrollHeight;
         });
 
         window.electronAPI.onMessage((message, logLevel) => {
@@ -74,10 +76,14 @@
             padding: 10px;
             border: 1px solid #ccc;
             background-color: #f9f9f9;
-            white-space: nowrap;
-            max-height: 80vh;
-            overflow-y: auto;
+            width: 100%;
+            height: 400px;
+            resize: vertical;
             font-family: monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            border-radius: 4px;
+            box-sizing: border-box;
         }
     </style>
 </head>
@@ -87,9 +93,7 @@
         <b>Enabled Modules:</b>
         <span id="enabled-modules"></span>
     </div>
-    <div id="log">
-
-    </div>
+    <textarea id="log" readonly></textarea>
 </div>
 </body>
 </html>

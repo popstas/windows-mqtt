@@ -1,0 +1,209 @@
+debug: true
+#logLevel: 'info'
+logLevel: debug
+log:
+  path: 'data/windows-mqtt.log'
+mqtt:
+  host: 'mqtt.example.com'
+  port: 1883
+  user: 'your_username'
+  password: 'your_password'
+  base: 'home/room/pc'
+  self_kill_cmd: 'C:/path/to/pskill.exe node-windows-mqtt.exe'
+
+modules:
+  audio:
+    interval: 5
+    volume:
+      set: '/volume/set'
+      stat: '/volume'
+    mute:
+      set: '/mute/set'
+      stat: '/mute'
+  clipboard:
+    screenshotPath: 'data/screenshot.png'
+    imageSearchPath: 'data/images/search'
+  commands:
+    # default_payload: '1',
+    # config_path: '../commands.yml',
+    shells:
+      bash: '"c:/Program Files/Git/bin/bash.exe"'
+    custom_commands_path: 'data/commands_custom.yml'
+    cache_path: 'data/windows-mqtt-commands.yml'
+  dirwatch:
+    dirs:
+      - path: 'D:/video/_obs/*.mp4'
+        name: 'OBS'
+      - path: 'C:/Users/username/Downloads'
+        name: 'Downl'
+      # - path: 'M:/video'
+      #   name: 'Torrent'
+      # - path: 'D:/rec/2025/*.mp3'
+      #   name: 'Песни'
+      # - path: 'D:/audiobooks'
+      #   name: 'Книги'
+  exec:
+    success_tts: 'Готово' # 'stdout' for answer with command output
+    error_tts: 'Ошибка выполнения команды'
+    long_time_sec: 5
+    ssh_app: 'wt.exe -p your_profile ssh -A'
+  filewatch:
+    files: []
+      # - path: 'C:/path/to/config/openhasp.yaml'
+      #   mqtt_topic: 'openhasp'
+      #   mqtt_payload: 'openhasp.yaml'
+      # - path: 'C:/path/to/config/openhasp_lines.yaml'
+      #   mqtt_topic: 'openhasp'
+      #   mqtt_payload: 'openhasp_lines.yaml'
+      # - path: 'C:/path/to/config/openhasp_buttons.yaml'
+      #   mqtt_topic: 'openhasp/update/buttons'
+      #   mqtt_payload: 'openhasp_buttons.yaml'
+  gpt:
+    enabled: false
+    openai_api_key: 'your_openai_api_key_here'
+    completion_params:
+      temperature: 1
+    timeoutMs: 30000
+    systemMessage: 'Напиши ответ на сообщение.\n\nТекст сообщения:\n\n'
+    debug: true
+    logPath: 'data/stt.log'
+  keys: {}
+  midi:
+    devices:
+      - portName: 'USB-Midi'
+        vid: '17235'
+        pid: '19277'
+        hotReload: true
+        hotkeys:
+          # next right: 7350,620
+          # replay left: 5000,820
+
+          # play
+          - midi: [144, 94, '>0']
+            mqtt: ['home/room/pc/keys/press', 'space']
+          # prev
+          - midi: [144, 91, '>0']
+            mqtt: ['home/room/pc/keys/press', 'up']
+          # next
+          - midi: [144, 92, '>0']
+            mqtt: ['home/room/pc/keys/press', 'down']
+          # pause (replay)
+          - midi: [144, 93, '>0']
+            mqtt: ['home/room/pc/mouse/point', '5750,350,left']
+          # next right
+          - midi: [144, 47, '>0']
+            mqtt: ['home/room/pc/mouse/point', '6500,350,left']
+          # exit lesson
+          - midi: [144, 96, '>0']
+            mqtt: ['home/room/pc/mouse/point', '6700,350,left']
+      - portName: 'SMK25Mini'
+        vid: '17235'
+        pid: '19277'
+        hotReload: true
+        hotkeys:
+          # крутилка - запоминает цифру
+          - midi: [176, 7]
+            type: 'range'
+            to_max: 127
+            fastDebounce: true
+            mqtt: ['home/room/pc/set-num', '{{payload}}']
+          # разместить окна
+          - midi: [144, 48, '>0']
+            mqtt: ['home/room/pc/windows/autoplace', '1']
+          # свет комнаты
+          - midi: [144, 49, '>0']
+            mqtt: ['home/room/switch', '1']
+          # помидор
+          - midi: [144, 51, '>0']
+            mqtt: ['actions/pomodoro', '1']
+          # яркость света
+          - midi: [144, 53, '>0']
+            mqtt: ['state/light/set', 'moonlight']
+          - midi: [144, 54, '>0']
+            mqtt: ['state/light/set', 'night']
+          - midi: [144, 56, '>0']
+            mqtt: ['state/light/set', 'day']
+          - midi: [144, 58, '>0']
+            mqtt: ['state/light/set', 'max']
+          # самая правая клавиша - мьют
+          - midi: [144, 72, '>0']
+            mqtt: ['actions/mute', '1']
+  mouse: {}
+  notify:
+    title: 'Дом'
+    appIcons:
+      'Сообщения': 'sms.webp'
+      'Messages': 'sms.webp'
+      'СберБанк': 'sber.webp'
+      'Заметки Google Keep': 'keep.webp'
+      'Тинькофф': 'tinkoff.webp'
+      'Tinkoff': 'tinkoff.webp'
+      'Planfix': 'planfix.png'
+      'Castbox': 'castbox.webp'
+      'ГдеПосылка': 'gdeposylka.webp'
+      'PackageRadar': 'gdeposylka.webp'
+      'POLARIS': 'polaris.webp'
+      'Gmail': 'gmail.webp'
+    appSounds: {}
+      # 'Сообщения': false, # работает
+      # 'СберБанк': 'Blow', # не работает
+      # 'Заметки Google Keep': 'Bottle'
+      # 'Тинькофф': 'Frog'
+    # clearNotificationWebhook: 'https://trigger.macrodroid.com/your-webhook-id/notification-clear'
+    clearNotificationWebhook: 'https://example.com/webhook/notification-clear'
+    markAsReadText: 'Прочитано'
+  obs:
+    enabled: false
+    # base: 'home/room/pc/obs'
+    # host: 'localhost'
+    # port: 4455
+    password: 'your_obs_password'
+  reaper: {}
+    # base: 'home/room/pc/reaper'
+    # host: 'localhost'
+    # port: 8080
+    # password: 'your_reaper_password'
+  tabs:
+    port: 5555
+    base: 'state/pc/tabs'
+    excludedDomains:
+      - 'web.whatsapp.com'
+  tts:
+    enabled: false
+    ttsTopic: 'tts'
+    playCommand: 'mpg123 -q' # linux: mpg321 -q
+    lang: 'ru'
+    gapLinux: 200
+    gapNoLinux: 0
+  vad:
+    enabled: false
+    # download model to data/silero_vad.onnx - https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx
+    # threshold: 0.5
+    # minSpeechDuration: 0.25
+    # minSilenceDuration: 0.5
+    # windowSize: 512
+    # sampleRate: 16000
+    # numThreads: 1
+  windows:
+    # enabled: false
+    placeWindowOnOpen: true
+    placeWindowOnStart: false
+    notifyPlaced: true
+    restoreOnStart: true
+    publishStats: true
+    publishStatsTopic: 'state/pc/windows'
+    store:
+      default:
+        apps:
+          # - "C:\\Program Files\\Microsoft VS Code\\Code.exe"
+          - "C:\\Program Files\\Mozilla Thunderbird\\thunderbird.exe"
+          - "C:\\Users\\username\\AppData\\Local\\Yandex\\YandexBrowser\\Application\\browser.exe"
+          - "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+          # - "C:\\Program Files\\WindowsApps\\...\\WhatsApp.exe"
+          - "C:\\Users\\username\\AppData\\Roaming\\Telegram Desktop\\Telegram.exe"
+        paths: []
+      custom:
+        apps: []
+          # "C:\\Users\\username\\AppData\\Local\\Yandex\\YandexBrowser\\Application\\browser_proxy.exe --profile-directory=Default --app-id=..."
+        paths: []
+
