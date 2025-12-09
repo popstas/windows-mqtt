@@ -2,6 +2,16 @@
 
 This repo contains a Node/Electron project for controlling a PC via MQTT.
 
+# Pull request naming
+Create name using angular commit message format.
+`feat:` and `fix:` are using in CHANGELOG.md. It's a release notes for developers. Name your PRs in a way that it's easy to understand what was changed. Forbidden to use `feat:` and `fix:` prefixes for chore tasks that don't add new features or fix bugs.
+Include module name in (module-name) if it's a module-related change.
+
+Name examples:
+- feat: Add 480p small preset option
+- fix(compare-source): Switch to static-ffmpeg for bundled ffprobe
+Look at the commit history to get more examples.
+
 ## Overview of the Code
 - `src/server.js` starts the MQTT client, loads modules and subscribes to topics.
 - `src/index.js` launches the server headless. `src/index-electron.js` wraps the server in an Electron tray app.
