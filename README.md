@@ -118,7 +118,7 @@ It's using module, https://github.com/popstas/windows11-manager, Vitrual desktop
 - Process not kill when exit
 
 ## Install
-1. Copy [src/config.example.js](src/config.example.js) to `src/config.js`
+1. Copy [config.example.yml](config.example.yml) to `config.yml` and update MQTT credentials and module settings for your environment.
 
 2. This script will install Windows service "windows-mqtt":
 ``` sh
@@ -129,6 +129,8 @@ npm run install-windows
 ```
 
 3. For TTS setup you should install `gTTS` (Python) and `mpg123`, see [popstas/mqtt2tts](https://github.com/popstas/mqtt2tts#requirements).
+
+4. When building desktop apps, make sure `config.yml` is present in the project root. Both Electron and Tauri builds package this file so the tray apps read the same configuration as the headless server.
 
 ## Extend
 1. Copy [src/modules/_module.js](src/modules/_module.js) to `src/modules/yourModuleName.js`
@@ -151,5 +153,17 @@ return {
 }
 ```
 
-## Known bugs
-- electron > 26 fails to `npx electron-rebuild`
+## Desktop tray apps
+The project includes both Electron and Tauri tray launchers. Both keep the main window hidden while exposing a tray icon for quick access to controls, but they differ in runtime requirements and packaging outputs.
+
+### Electron
+- Start the Electron tray app with `npm run start-electron` once dependencies are installed.
+- Portable builds are produced with `npm run build:dist` (Electron Builder), which places artifacts under `dist/` (for example, a portable `.exe` when building on Windows).
+- Electron uses the HTML UI from `index.html` for its tray popover and ships assets from the `assets/` folder via electron-builder configuration.
+
+### Tauri
+- Install the Rust toolchain (for example, `curl https://sh.rustup.rs -sSf | sh` on Unix-like systems or the Rust installer on Windows) and install the Tauri CLI (`npm install -g @tauri-apps/cli` or use the local dependency via `npm run start-tauri`).
+- Run the Tauri development tray with `npm run start-tauri` to launch the native system tray while keeping the window hidden unless explicitly shown.
+- Build release bundles with `npm run build:tauri`; Tauri outputs installers and executables under `src-tauri/target/release/bundle/` (for example, `.msi` and `.exe` files on Windows).
+- Extra files are bundled from `src-tauri/tauri.conf.json` under `tauri.bundle.resources`. The current configuration includes `config.yml`, `config.example.yml`, `commands.example.yml`, `data/**`, and `src/**`. Add new paths there to ship additional assets with the Tauri build.
+- Tauri uses the native system tray instead of the custom HTML popover used by Electron, so tray menus and balloon behaviors follow the host OS conventions.
