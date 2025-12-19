@@ -10,15 +10,9 @@ tauri-build = { version = "1", features = [] }
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
-tauri = { version = "1", features = [
-  "dialog-all",
-  "os-all",
-  "path-all",
+tauri = { version = "1", features = [ "shell-sidecar", "shell-execute",
   "process-command-api",
-  "shell-open",
-  "system-tray",
-  "window-start-dragging"
-] }
+  "system-tray"] }
 
 [profile.release]
 lto = true

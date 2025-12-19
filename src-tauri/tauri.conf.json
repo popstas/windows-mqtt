@@ -15,6 +15,7 @@
       "active": true,
       "identifier": "pro.popstas.windows-mqtt",
       "icon": [
+        "icons/icon.ico",
         "../assets/trayicon.png"
       ],
       "resources": [
@@ -39,7 +40,7 @@
       }
     },
     "systemTray": {
-      "iconPath": "../assets/trayicon.png"
+      "iconPath": "icons/icon.ico"
     },
     "windows": [
       {

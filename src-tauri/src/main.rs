@@ -4,7 +4,7 @@ use serde::Serialize;
 use std::{path::PathBuf, sync::Arc};
 use tauri::api::process::{Command, CommandChild, CommandEvent};
 use tauri::{
-    async_runtime::Mutex, CustomMenuItem, Icon, Manager, State, SystemTray, SystemTrayEvent,
+    async_runtime::Mutex, CustomMenuItem, Manager, State, SystemTray, SystemTrayEvent,
     SystemTrayMenu, SystemTrayMenuItem,
 };
 
@@ -37,11 +37,11 @@ async fn start_mqtt_server(
         ));
     }
 
-    let mut command = Command::new("node");
-    command.args([server_path.to_string_lossy().to_string()]);
-    command.current_dir(resource_dir.clone());
-
-    let (mut rx, child) = command.spawn().map_err(|error| error.to_string())?;
+    let (mut rx, child) = Command::new("node")
+        .args([server_path.to_string_lossy().to_string()])
+        .current_dir(resource_dir.clone())
+        .spawn()
+        .map_err(|error| error.to_string())?;
     let app_handle = app.clone();
     let server_state = state.0.clone();
 
@@ -127,20 +127,20 @@ async fn get_enabled_modules(app: tauri::AppHandle) -> Result<Vec<String>, Strin
 fn resolve_resource_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path_resolver()
         .resource_dir()
-        .or_else(|| app.path_resolver().app_dir())
+        .or_else(|| app.path_resolver().app_data_dir())
         .or_else(|| std::env::current_dir().ok())
         .ok_or_else(|| "Unable to resolve resource directory".to_string())
 }
 
 fn build_tray() -> SystemTray {
-    let icon = Icon::Raw(include_bytes!("../assets/trayicon.png").to_vec());
     let quit = CustomMenuItem::new("quit", "Quit");
     let show = CustomMenuItem::new("show", "Show App");
     let menu = SystemTrayMenu::new()
         .add_item(show)
         .add_native_item(SystemTrayMenuItem::Separator)
         .add_item(quit);
-    SystemTray::new().with_icon(icon).with_menu(menu)
+    // Icon is loaded from tauri.conf.json systemTray.iconPath
+    SystemTray::new().with_menu(menu)
 }
 
 fn handle_tray_event(app: &tauri::AppHandle, event: SystemTrayEvent) {
