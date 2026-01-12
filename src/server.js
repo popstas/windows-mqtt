@@ -14,15 +14,68 @@ try {
 
 let mqtt; // global object
 let modules; // global object
+let messageHandler = null;
+
+async function cleanup() {
+  log('Cleaning up resources...');
+  
+  // Stop all modules
+  if (modules) {
+    for (const mod of modules) {
+      if (typeof mod.onStop === 'function') {
+        try {
+          mod.onStop();
+        } catch (e) {
+          log(`Error stopping module ${mod.name}: ${e.message}`, 'error');
+        }
+      }
+    }
+  }
+  
+  // Close MQTT connection
+  if (mqtt) {
+    if (messageHandler) {
+      mqtt.removeListener('message', messageHandler);
+      messageHandler = null;
+    }
+    try {
+      mqtt.end(true); // Force close
+    } catch (e) {
+      // Ignore errors if already closed
+    }
+    mqtt = null;
+  }
+  
+  log('Cleanup complete');
+}
 
 async function start({ tray, mainWindow } = {}) {
   log('windows-mqtt started' + (tray ? ', with electron based tray' : ''));
 
-  // exit on signal, TODO:
-  /*process.on('SIGINT', function() {
+  // Setup exit handlers for cleanup
+  process.on('SIGINT', async () => {
     log("Caught interrupt signal");
-    process.exit();
-  });*/
+    await cleanup();
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', async () => {
+    log("Caught termination signal");
+    await cleanup();
+    process.exit(0);
+  });
+
+  // Handle uncaught exceptions
+  process.on('uncaughtException', function (err) {
+    log('An uncaught error occurred!', 'error');
+    log(err.stack, 'error');
+  });
+
+  // Handle unhandled promise rejections
+  process.on('unhandledRejection', function (reason, promise) {
+    log('Unhandled Rejection at:', 'error');
+    log(reason, 'error');
+  });
 
   try {
     mqtt = mqttInit({}); // global set
@@ -46,13 +99,14 @@ async function start({ tray, mainWindow } = {}) {
   }
 }
 
-process.on('uncaughtException', function (err) {
-  log('An uncaught error occurred!', 'error');
-  log(err.stack, 'error');
-});
-
 function listenModulesMQTT(modules) {
-  mqtt.on('message', async (topic, message) => {
+  // Remove existing message handler if any
+  if (messageHandler) {
+    mqtt.removeListener('message', messageHandler);
+  }
+  
+  // Create new message handler
+  messageHandler = async (topic, message) => {
     const handler = getHandler(topic, modules);
     if (!handler) {
       log(`Cannot find handler for topic ${topic}`, 'warn');
@@ -60,7 +114,9 @@ function listenModulesMQTT(modules) {
     }
     // log(`< ${topic}: ${message}`);
     handler(topic, message);
-  });
+  };
+  
+  mqtt.on('message', messageHandler);
 }
 
 function subscribeToModuleTopics(modules) {
@@ -101,7 +157,19 @@ function initElectronSysTrayMenu(tray, mainWindow, modules) {
     {
       label: 'Reconnect MQTT',
       click() {
+        // Close old MQTT client
+        if (mqtt) {
+          if (messageHandler) {
+            mqtt.removeListener('message', messageHandler);
+            messageHandler = null;
+          }
+          mqtt.end(true); // Force close
+        }
+        // Create new MQTT client
         mqtt = mqttInit({});
+        // Re-subscribe and re-listen
+        subscribeToModuleTopics(modules);
+        listenModulesMQTT(modules);
       }
     },
     {
@@ -165,4 +233,4 @@ function initElectronSysTrayMenu(tray, mainWindow, modules) {
   tray.setContextMenu(contextMenu);
 }
 
-module.exports = { start };
+module.exports = { start, cleanup };

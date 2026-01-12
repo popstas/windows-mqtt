@@ -5,13 +5,16 @@ const obs = new OBSWebSocket();
 module.exports = async (mqtt, config, log) => {
   let connected = false;
   let tries = 0;
+  let reconnectIntervalId = null;
+  let recordStateChangedHandler = null;
+
   async function onRec(topic, message) {
     message = `${message}`;
     log(`< ${topic}: ${message}`);
     await obs.call('StartRecord');
   }
 
-  async function onStop(topic, message) {
+  async function onStopRecord(topic, message) {
     message = `${message}`;
     log(`< ${topic}: ${message}`);
     await obs.call('StopRecord');
@@ -36,21 +39,62 @@ module.exports = async (mqtt, config, log) => {
     }
   }
 
+  function setupRecordStateListener() {
+    if (recordStateChangedHandler) {
+      obs.off('RecordStateChanged', recordStateChangedHandler);
+    }
+    recordStateChangedHandler = ({outputActive, outputState, outputPath}) => {
+      // console.log('outputActive: ', outputActive);
+      // console.log('outputState: ', outputState);
+      // console.log('outputPath: ', outputPath);
+      const payload = outputActive ? '1' : '0';
+      mqtt.publish(config.base + '/state/rec', payload);
+      log(`> ${config.base}/state/rec: ${payload}`);
+    };
+    obs.on('RecordStateChanged', recordStateChangedHandler);
+  }
+
+  function onStop() {
+    if (reconnectIntervalId !== null) {
+      clearInterval(reconnectIntervalId);
+      reconnectIntervalId = null;
+    }
+    if (recordStateChangedHandler) {
+      obs.off('RecordStateChanged', recordStateChangedHandler);
+      recordStateChangedHandler = null;
+    }
+    if (connected) {
+      try {
+        obs.disconnect();
+        connected = false;
+      } catch (e) {
+        // Ignore disconnect errors
+      }
+    }
+  }
+
+  function onStart() {
+    if (reconnectIntervalId === null) {
+      reconnectIntervalId = setInterval(() => {
+        if (!connected) {
+          connect();
+        }
+      }, 5000);
+    }
+    if (!connected) {
+      connect();
+    }
+    setupRecordStateListener();
+  }
+
   connect();
-  setInterval(() => {
+  reconnectIntervalId = setInterval(() => {
     if (!connected) {
       connect();
     }
   }, 5000);
 
-  obs.on('RecordStateChanged', ({outputActive, outputState, outputPath}) => {
-    // console.log('outputActive: ', outputActive);
-    // console.log('outputState: ', outputState);
-    // console.log('outputPath: ', outputPath);
-    const payload = outputActive ? '1' : '0';
-    mqtt.publish(config.base + '/state/rec', payload);
-    log(`> ${config.base}/state/rec: ${payload}`);
-  });
+  setupRecordStateListener();
 
   return {
     subscriptions: [
@@ -60,8 +104,10 @@ module.exports = async (mqtt, config, log) => {
       },
       {
         topics: [config.base + '/stop'],
-        handler: onStop,
+        handler: onStopRecord,
       },
-    ]
+    ],
+    onStop,
+    onStart,
   }
 }

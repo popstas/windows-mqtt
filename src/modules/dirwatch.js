@@ -4,8 +4,10 @@ const path = require('node:path');
 const addChangeGap = 1000; // avoid publish change file just after add
 
 module.exports = async (mqtt, config, log) => {
-  log(`dirwatch: ${config.dirs.length}`);
-  for (const dir of config.dirs) {
+  const watchers = [];
+  const watcherState = new Map(); // Store state per watcher
+
+  function createWatcher(dir) {
     log('dirwatch: ' + dir.path, 'debug');
     const watchOpts = {
       ignoreInitial: true,
@@ -13,10 +15,14 @@ module.exports = async (mqtt, config, log) => {
       ignored: '*.part',
       // ignored: /[\\\/]/,
     }
-    let lastFilePath = '';
-    let lastEvent = '';
-    let lastTime = 0;
-    chokidar.watch(dir.path, watchOpts).on('all', (event, filePath) => {
+    
+    const state = {
+      lastFilePath: '',
+      lastEvent: '',
+      lastTime: 0,
+    };
+    
+    const watcher = chokidar.watch(dir.path, watchOpts).on('all', (event, filePath) => {
       console.log(`${event}: ${filePath}`);
       const fileDir = path.dirname(filePath);
       const mqtt_base = `${config.base}/last`;
@@ -30,18 +36,18 @@ module.exports = async (mqtt, config, log) => {
         mqtt.publish(`${mqtt_base}/dir/name`, dir.name);
         return; // ignore deletes
       }
-      const isJustCreated = lastEvent === 'add' && lastFilePath === filePath;
+      const isJustCreated = state.lastEvent === 'add' && state.lastFilePath === filePath;
 
-      const isLastEventSoon = Date.now() - lastTime < addChangeGap;
-      lastTime = Date.now(); // update lastTime even when no event change
+      const isLastEventSoon = Date.now() - state.lastTime < addChangeGap;
+      state.lastTime = Date.now(); // update lastTime even when no event change
 
       if (isLastEventSoon) return; // avoid publish frequently events
 
       // const isUpdateLastEvent = isJustCreated && isLastEventSoon ? false : true;
       // if (isUpdateLastEvent) {
 
-      lastFilePath = filePath;
-      lastEvent = event;
+      state.lastFilePath = filePath;
+      state.lastEvent = event;
 
       // if (isJustCreated) return; // ignore change just after add
 
@@ -55,7 +61,38 @@ module.exports = async (mqtt, config, log) => {
     .on('error', (error) => {
       log(`dirwatch error: ${error.message}`, 'error');
     });
+    
+    watcherState.set(watcher, state);
+    return watcher;
   }
 
-  return {};
+  log(`dirwatch: ${config.dirs.length}`);
+  for (const dir of config.dirs) {
+    const watcher = createWatcher(dir);
+    watchers.push(watcher);
+  }
+
+  function onStop() {
+    for (const watcher of watchers) {
+      watcher.close().catch(err => {
+        log(`dirwatch close error: ${err.message}`, 'error');
+      });
+    }
+    watchers.length = 0;
+    watcherState.clear();
+  }
+
+  function onStart() {
+    if (watchers.length === 0) {
+      for (const dir of config.dirs) {
+        const watcher = createWatcher(dir);
+        watchers.push(watcher);
+      }
+    }
+  }
+
+  return {
+    onStop,
+    onStart,
+  };
 }

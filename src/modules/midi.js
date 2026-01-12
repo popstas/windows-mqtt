@@ -20,6 +20,9 @@ module.exports = async (mqtt, config, log) => {
   const lastMessage = { date: 0, message: {}}; // for detect midi disconnect, watchdogTimeout, TODO: remove?
   let modulePaused = false;
   const lastMidi = {}; // for detect range bounces, maxRangeDelay
+  const usbListeners = []; // Store USB detection listeners
+  const mqttConnectListeners = []; // Store MQTT connect listeners
+  const midiMessageHandlers = new Map(); // Store MIDI message handlers per input
 
   start();
 
@@ -40,21 +43,25 @@ module.exports = async (mqtt, config, log) => {
     // переподключение, когда найдено midi устройство
     usbDetect.startMonitoring();
     if (isDeviceConfigured) {
-      usbDetect.on(`add:${device.vid}:${device.pid}`, function(usbDevice) {
+      const usbListener = function(usbDevice) {
         console.log('midi: add', usbDevice);
         setTimeout(() => openMidi(input, device), 500);
-      });
+      };
+      usbDetect.on(`add:${device.vid}:${device.pid}`, usbListener);
+      usbListeners.push({ event: `add:${device.vid}:${device.pid}`, handler: usbListener });
       listenKeys(input, device);
     }
     else {
       console.log('! To find out vid, pid and portName, reconnect your midi device');
       // list all devices add
-      usbDetect.on(`add`, function(device) {
+      const usbListener = function(device) {
         console.log('add', device);
         console.log('add to midi: {} section in config:');
         console.log(`portName: '${device.deviceName}',`);
         console.log(`device: { vid: ${device.vendorId}, pid: ${device.productId} },`)
-      });
+      };
+      usbDetect.on(`add`, usbListener);
+      usbListeners.push({ event: 'add', handler: usbListener });
     }
   }
 
@@ -110,22 +117,6 @@ module.exports = async (mqtt, config, log) => {
   function listenKeys(input, device) {
     // log('midi listen start');
 
-    // Configure a callback.
-    input.on('message', onMidiMessage);
-
-    // Sysex, timing, and active sensing messages are ignored
-    // by default. To enable these message types, pass false for
-    // the appropriate type in the function below.
-    // Order: (Sysex, Timing, Active Sensing)
-    // For example if you want to receive only MIDI Clock beats
-    // you should use
-    // input.ignoreTypes(true, false, true)
-    input.ignoreTypes(false, false, false);
-
-    mqtt.on('connect', () => openMidi(input, device));
-
-    openMidi(input, device);
-
     // main handler
     function onMidiMessage(deltaTime, m) {
       // The message is an array of numbers corresponding to the MIDI bytes:
@@ -178,7 +169,26 @@ module.exports = async (mqtt, config, log) => {
       lastMessage.message = m;
     }
 
+    // Configure a callback.
+    input.on('message', onMidiMessage);
+    midiMessageHandlers.set(input, onMidiMessage);
+
+    // Sysex, timing, and active sensing messages are ignored
+    // by default. To enable these message types, pass false for
+    // the appropriate type in the function below.
+    // Order: (Sysex, Timing, Active Sensing)
+    // For example if you want to receive only MIDI Clock beats
+    // you should use
+    // input.ignoreTypes(true, false, true)
+    input.ignoreTypes(false, false, false);
+
+    const mqttConnectListener = () => openMidi(input, device);
+    mqtt.on('connect', mqttConnectListener);
+    mqttConnectListeners.push(mqttConnectListener);
+
+    openMidi(input, device);
   }
+
 
 
 
@@ -276,7 +286,31 @@ module.exports = async (mqtt, config, log) => {
 
 
   function closeMidi() {
-    inputs.forEach(input => input.closePort());
+    // Remove MIDI message handlers
+    for (const [input, handler] of midiMessageHandlers.entries()) {
+      input.removeListener('message', handler);
+      input.closePort();
+    }
+    midiMessageHandlers.clear();
+    
+    // Remove USB detection listeners
+    for (const listener of usbListeners) {
+      usbDetect.removeListener(listener.event, listener.handler);
+    }
+    usbListeners.length = 0;
+    
+    // Stop USB monitoring if no more listeners
+    try {
+      usbDetect.stopMonitoring();
+    } catch (e) {
+      // Ignore errors if monitoring wasn't started
+    }
+    
+    // Remove MQTT connect listeners
+    for (const listener of mqttConnectListeners) {
+      mqtt.removeListener('connect', listener);
+    }
+    mqttConnectListeners.length = 0;
   }
 
   function onStop() {

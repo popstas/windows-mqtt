@@ -1,5 +1,5 @@
 const {app, Tray, ipcMain, BrowserWindow} = require('electron');
-const {start} = require('./server');
+const {start, cleanup} = require('./server');
 const path = require('path');
 const packageJson = require('../package.json');
 const {log, getModulesEnabled} = require("./helpers");
@@ -23,7 +23,37 @@ function createWindow() {
 
   void mainWindow.loadFile('../index.html');
 
+  // IPC handler functions
+  function handleMessageFromRenderer(event, message) {
+    if (message.type === 'getEnabledModules') {
+      const enabledModules = getModulesEnabled();
+      event.reply('message-from-main', { type: 'getEnabledModulesResponse', data: enabledModules });
+      return;
+    }
+    // log(`frontend message: ${JSON.stringify(message)}`);
+  }
+
+  function handleLog(event, arg) {
+    log(`frontend: ${arg}`);
+  }
+
+  function handleLogToFrontend(message, logLevel) {
+    // log(`log-to-frontend: [${logLevel}] ${message}`);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('log-to-frontend', message, logLevel);
+    }
+  }
+
+  // Register IPC handlers
+  ipcMain.on('message-from-renderer', handleMessageFromRenderer);
+  ipcMain.on('log', handleLog);
+  ipcMain.on('log-to-frontend', handleLogToFrontend);
+
   mainWindow.on('closed', function () {
+    // Remove IPC handlers when window is closed
+    ipcMain.removeListener('message-from-renderer', handleMessageFromRenderer);
+    ipcMain.removeListener('log', handleLog);
+    ipcMain.removeListener('log-to-frontend', handleLogToFrontend);
     mainWindow = null;
   });
 
@@ -39,22 +69,6 @@ function createWindow() {
     }
 
     return false;
-  });
-
-  ipcMain.on('message-from-renderer', (event, message) => {
-    if (message.type === 'getEnabledModules') {
-      const enabledModules = getModulesEnabled();
-      event.reply('message-from-main', { type: 'getEnabledModulesResponse', data: enabledModules });
-      return;
-    }
-    // log(`frontend message: ${JSON.stringify(message)}`);
-  });
-  ipcMain.on('log', (event, arg) => {
-    log(`frontend: ${arg}`);
-  });
-  ipcMain.on('log-to-frontend', (message, logLevel) => {
-    // log(`log-to-frontend: [${logLevel}] ${message}`);
-    mainWindow.webContents.send('log-to-frontend', message, logLevel);
   });
 
   return mainWindow;
@@ -107,5 +121,14 @@ async function startElectron() {
     if (process.platform !== 'darwin') {
       app.quit();
     }
+  });
+
+  app.on('before-quit', async () => {
+    // Clean up IPC handlers before quitting
+    ipcMain.removeAllListeners('message-from-renderer');
+    ipcMain.removeAllListeners('log');
+    ipcMain.removeAllListeners('log-to-frontend');
+    // Clean up server resources
+    await cleanup();
   });
 }

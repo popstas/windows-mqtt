@@ -4,10 +4,14 @@ const {exec} = require('child_process');
 
 module.exports = async (mqtt, config, log) => {
   let lastStats = {};
+  let statsIntervalId = null;
+  let restoreTimeoutId = null;
+
   if (config.restoreOnStart) {
     await restoreWindows();
-    setTimeout(() => {
+    restoreTimeoutId = setTimeout(() => {
       if (config.placeWindowOnStart) winMan.placeWindows();
+      restoreTimeoutId = null;
     }, 15000);
   }
 
@@ -21,7 +25,25 @@ module.exports = async (mqtt, config, log) => {
 
   if (config.publishStats) {
     publishStats();
-    setInterval(publishStats, 60000);
+    statsIntervalId = setInterval(publishStats, 60000);
+  }
+
+  function onStop() {
+    if (statsIntervalId !== null) {
+      clearInterval(statsIntervalId);
+      statsIntervalId = null;
+    }
+    if (restoreTimeoutId !== null) {
+      clearTimeout(restoreTimeoutId);
+      restoreTimeoutId = null;
+    }
+  }
+
+  function onStart() {
+    if (config.publishStats && statsIntervalId === null) {
+      publishStats();
+      statsIntervalId = setInterval(publishStats, 60000);
+    }
   }
 
   async function restoreWindows() {
@@ -280,5 +302,7 @@ module.exports = async (mqtt, config, log) => {
       },
     ],
     menuItems,
+    onStop,
+    onStart,
   };
 }

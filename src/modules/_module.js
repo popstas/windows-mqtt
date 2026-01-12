@@ -3,6 +3,7 @@
 module.exports = async (mqtt, config, log) => {
 
   let modulePaused = false; // optional
+  let intervalId = null;
 
   async function publishMqtt() {
     const topic = config.base + '/random';
@@ -18,13 +19,20 @@ module.exports = async (mqtt, config, log) => {
 
   function onStop() {
     modulePaused = true;
+    if (intervalId !== null) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
   }
   function onStart() {
     modulePaused = false;
+    if (intervalId === null) {
+      intervalId = setInterval(publishMqtt, config.interval * 1000);
+    }
   }
 
   await publishMqtt();
-  setInterval(publishMqtt, config.interval * 1000);
+  intervalId = setInterval(publishMqtt, config.interval * 1000);
 
   return {
     subscriptions: [

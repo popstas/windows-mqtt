@@ -52,7 +52,8 @@ module.exports = async (mqtt, config, log) => {
 
     let printed = false;
     let index = 0;
-    ai.on('data', data => {
+    
+    function onData(data) {
       const windowSize = vad.config.sileroVad.windowSize;
       buffer.push(new Float32Array(data.buffer));
       while (buffer.size() > windowSize) {
@@ -85,11 +86,17 @@ module.exports = async (mqtt, config, log) => {
           index += 1;
         }
       }
-    });
+    }
 
-    ai.on('close', () => {
+    function onClose() {
       log('Free resources');
-    });
+    }
+
+    ai.on('data', onData);
+    ai.on('close', onClose);
+    
+    // Store handlers for cleanup
+    ai._vadHandlers = { onData, onClose };
   
     ai.start();
     return ai;
@@ -98,11 +105,26 @@ module.exports = async (mqtt, config, log) => {
 
   function onStop() {
     log('vad: stop mic listening')
-    ai.quit();
+    if (ai) {
+      // Remove event listeners before quitting
+      if (ai._vadHandlers) {
+        ai.removeListener('data', ai._vadHandlers.onData);
+        ai.removeListener('close', ai._vadHandlers.onClose);
+        delete ai._vadHandlers;
+      }
+      try {
+        ai.quit();
+      } catch (e) {
+        // Ignore errors if already closed
+      }
+      ai = null;
+    }
   }
   function onStart() {
     log('vad: start mic listening')
-    ai = createAudioInput();
+    if (!ai) {
+      ai = createAudioInput();
+    }
   }
 
   return {

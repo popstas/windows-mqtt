@@ -20,6 +20,8 @@ async function onMuteSet(topic, message) {
 }
 
 module.exports = async (mqttClient, config, log) => {
+  let intervalId = null;
+
   async function publishMqtt() {
     const volume = await loudness.getVolume();
     const mute = await loudness.getMuted() ? '1' : '0';
@@ -45,8 +47,21 @@ module.exports = async (mqttClient, config, log) => {
   muteSetTopic = config.base + config.mute.set;
   muteStatTopic = config.base + config.mute.stat;
 
+  function onStop() {
+    if (intervalId !== null) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+  }
+
+  function onStart() {
+    if (intervalId === null) {
+      intervalId = setInterval(publishMqtt, config.interval * 1000);
+    }
+  }
+
   await publishMqtt();
-  setInterval(publishMqtt, config.interval * 1000);
+  intervalId = setInterval(publishMqtt, config.interval * 1000);
 
   return {
     subscriptions: [
@@ -58,6 +73,8 @@ module.exports = async (mqttClient, config, log) => {
         topics: [muteSetTopic],
         handler: onMuteSet
       },
-    ]
+    ],
+    onStop,
+    onStart,
   }
 }
