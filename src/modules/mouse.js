@@ -1,9 +1,6 @@
 const robot = require('robotjs');
-const nutjs = require("@nut-tree/nut-js");
 
 module.exports = async (mqtt, config, log) => {
-
-  const { screen, imageResource, Region, getActiveWindow } = nutjs;
 
   async function click(topic, message) {
     message = `${message}`;
