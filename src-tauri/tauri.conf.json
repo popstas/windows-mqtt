@@ -5,7 +5,7 @@
   "identifier": "pro.popstas.windows-mqtt",
   "build": {
     "beforeDevCommand": "",
-    "beforeBuildCommand": "node -e \"var fs=require('fs');fs.mkdirSync('frontend',{recursive:true});fs.copyFileSync('index.html','frontend/index.html')\"",
+    "beforeBuildCommand": "node scripts/prepare-frontend.js",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../frontend"
   },
