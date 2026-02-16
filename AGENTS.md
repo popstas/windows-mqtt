@@ -1,6 +1,27 @@
 # AGENTS Instructions
 
-This repo contains a Node/Electron project for controlling a PC via MQTT.
+This repo contains a Node.js project for controlling a PC via MQTT, wrapped in a **Tauri v2** desktop app.
+
+## Environment
+
+Run `source "$HOME/.cargo/env"` before any cargo/rust commands.
+
+## Tauri Architecture
+
+- **Tauri v2** (not v1, not Electron). Config schema: `https://schema.tauri.app/config/2`
+- Rust backend in `src-tauri/src/main.rs` — spawns a Node.js server as a child process via `tauri-plugin-shell`
+- Permissions defined in `src-tauri/capabilities/default.json` (replaces v1 `allowlist`)
+- Tray icon built inside `.setup()` using `TrayIconBuilder`, with `on_menu_event` and `on_tray_icon_event` closures
+- Shell commands use `app.shell().command()` (from `ShellExt` trait), NOT `tauri::api::process::Command`
+- `CommandEvent::Stdout/Stderr` returns `Vec<u8>`, convert with `String::from_utf8_lossy`
+- Build check: `cd src-tauri && cargo check`
+- Dev run: `cargo tauri dev`
+
+### Tauri v2 Gotchas
+- `devUrl` must be a proper URL (e.g. `http://localhost:1420`), not a relative path
+- Resource globs: use `"../src/*"` + `"../src/**/*"` instead of `"../src/**"` (v2 is stricter)
+- `emit_all()` → `emit()`, `get_window()` → `get_webview_window()`, `path_resolver()` → `path()`
+- `on_window_event` closure signature is `|window, event|` (not `|event|`)
 
 # Pull request naming
 Create name using angular commit message format.
@@ -14,11 +35,11 @@ Look at the commit history to get more examples.
 
 ## Overview of the Code
 - `src/server.js` starts the MQTT client, loads modules and subscribes to topics.
-- `src/index.js` launches the server headless. `src/index-electron.js` wraps the server in an Electron tray app.
+- `src/index.js` launches the server headless. Tauri spawns this as a child process from `src-tauri/src/main.rs`.
 - Modules live in `src/modules`. Each module exports an async function that sets up MQTT topic subscriptions and returns `{subscriptions, ...}`.
 - Configuration is loaded from `config.yml` using `src/config.js`.
 - Scripts in `scripts/` install or remove the project as a Windows service.
-- `index.html` and assets provide the tray UI when running with Electron.
+- `index.html` and assets provide the web UI rendered in the Tauri webview.
 - Example custom commands are in `commands.example.yml`.
 
 ## Getting Started
