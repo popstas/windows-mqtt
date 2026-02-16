@@ -36,6 +36,7 @@
   "author": "Stanislav Popov",
   "license": "ISC",
   "dependencies": {
+    "@tauri-apps/cli-linux-x64-gnu": "^2.10.0",
     "axios": "^1.7.8",
     "chatgpt": "^5.1.2",
     "chokidar": "^3.5.3",

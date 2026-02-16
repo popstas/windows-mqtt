@@ -5,9 +5,9 @@
   "identifier": "pro.popstas.windows-mqtt",
   "build": {
     "beforeDevCommand": "",
-    "beforeBuildCommand": "",
+    "beforeBuildCommand": "mkdir -p dist && cp index.html dist/",
     "devUrl": "http://localhost:1420",
-    "frontendDist": "../"
+    "frontendDist": "../dist"
   },
   "bundle": {
     "active": true,
