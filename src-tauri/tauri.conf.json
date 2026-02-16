@@ -4,9 +4,8 @@
   "version": "0.0.1",
   "identifier": "pro.popstas.windows-mqtt",
   "build": {
-    "beforeDevCommand": "",
+    "beforeDevCommand": "node scripts/prepare-frontend.js",
     "beforeBuildCommand": "node scripts/prepare-frontend.js",
-    "devUrl": "http://localhost:1420",
     "frontendDist": "../frontend"
   },
   "bundle": {
