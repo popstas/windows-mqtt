@@ -45,14 +45,11 @@
     "js-yaml": "^4.1.0",
     "lodash.debounce": "^4.0.8",
     "loudness": "^0.4.1",
-    "midi": "^2.0.0",
     "mqtt": "^4.2.6",
     "node-notifier": "^9.0.1",
     "node-windows": "^1.0.0-beta.5",
     "obs-websocket-js": "^5.0.5",
-    "robotjs": "^0.6.0",
     "sherpa-onnx-node": "^1.10.30",
-    "usb-detection": "^4.13.0",
     "ws": "^8.18.0"
   },
   "optionalDependencies": {
