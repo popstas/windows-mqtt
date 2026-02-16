@@ -61,7 +61,7 @@
     "windows11-manager": "file:../windows11-manager"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^1.6.0",
+    "@tauri-apps/cli": "^2",
     "electron": "^26.6.10",
     "electron-builder": "^25.1.8"
   }
