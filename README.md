@@ -161,9 +161,11 @@ The project includes both Electron and Tauri tray launchers. Both keep the main 
 - Portable builds are produced with `npm run build:dist` (Electron Builder), which places artifacts under `dist/` (for example, a portable `.exe` when building on Windows).
 - Electron uses the HTML UI from `index.html` for its tray popover and ships assets from the `assets/` folder via electron-builder configuration.
 
-### Tauri
+### Tauri (v2)
 - Install the Rust toolchain (for example, `curl https://sh.rustup.rs -sSf | sh` on Unix-like systems or the Rust installer on Windows) and install the Tauri CLI (`npm install -g @tauri-apps/cli` or use the local dependency via `npm run start-tauri`).
-- Run the Tauri development tray with `npm run start-tauri` to launch the native system tray while keeping the window hidden unless explicitly shown.
+- Requires `libwebkit2gtk-4.1-dev` on Linux (Ubuntu 24.04+ ships this; older `4.0` is not supported).
+- Run the Tauri development tray with `npm run start-tauri` (or `cargo tauri dev` from `src-tauri/`) to launch the native system tray while keeping the window hidden unless explicitly shown.
 - Build release bundles with `npm run build:tauri`; Tauri outputs installers and executables under `src-tauri/target/release/bundle/` (for example, `.msi` and `.exe` files on Windows).
-- Extra files are bundled from `src-tauri/tauri.conf.json` under `tauri.bundle.resources`. The current configuration includes `config.yml`, `config.example.yml`, `commands.example.yml`, `data/**`, and `src/**`. Add new paths there to ship additional assets with the Tauri build.
+- Extra files are bundled from `src-tauri/tauri.conf.json` under `bundle.resources`. The current configuration includes `config.yml`, `config.example.yml`, `commands.example.yml`, `data/**`, and `src/**`. Add new paths there to ship additional assets with the Tauri build.
+- Shell permissions (spawning/killing the Node server) are defined in `src-tauri/capabilities/default.json`.
 - Tauri uses the native system tray instead of the custom HTML popover used by Electron, so tray menus and balloon behaviors follow the host OS conventions.
