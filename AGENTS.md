@@ -15,7 +15,7 @@ Run `source "$HOME/.cargo/env"` before any cargo/rust commands.
 - Shell commands use `app.shell().command()` (from `ShellExt` trait), NOT `tauri::api::process::Command`
 - `CommandEvent::Stdout/Stderr` returns `Vec<u8>`, convert with `String::from_utf8_lossy`
 - Build check: `cd src-tauri && cargo check`
-- Dev run: `cargo tauri dev`
+- Dev run: `npm run start-tauri` or `cargo tauri dev`. The npm scripts use `scripts/tauri-wrapper.js` to ensure MSVC linker is available when running from Git Bash (vcvars64.bat is invoked before Tauri). If you see `LNK1181: cannot open input file 'kernel32.lib'`, ensure the "Desktop development with C++" workload includes the Windows 10/11 SDK.
 
 ### Tauri v2 Gotchas
 - `devUrl` must be a proper URL (e.g. `http://localhost:1420`), not a relative path
