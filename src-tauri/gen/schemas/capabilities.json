@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"","local":true,"windows":["main"],"permissions":["core:default","shell:allow-spawn","shell:allow-execute","shell:allow-kill"]}}
+{"default":{"identifier":"default","description":"","local":true,"windows":["main"],"permissions":["core:default","shell:allow-spawn","shell:allow-execute","shell:allow-kill","shell:allow-stdin-write","global-shortcut:allow-register","global-shortcut:allow-unregister"]}}

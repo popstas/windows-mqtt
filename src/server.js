@@ -1,6 +1,7 @@
 const { mqttInit } = require('./mqtt');
 const config = require('./config');
 const {log, getModulesEnabled, initModules} = require("./helpers");
+const stdinHandler = require('./stdin-handler');
 
 let app, Tray, Menu;
 
@@ -83,6 +84,29 @@ async function start({ tray, mainWindow } = {}) {
     const modulesEnabled = getModulesEnabled();
 
     modules = await initModules(modulesEnabled, mqtt);
+
+    // Register stdin actions from modules (for Tauri tray commands)
+    for (const mod of modules) {
+      if (mod.stdinActions) {
+        stdinHandler.register(mod.stdinActions);
+      }
+    }
+    // Register global stdin actions
+    stdinHandler.register({
+      'reconnect': async () => {
+        if (mqtt) {
+          if (messageHandler) {
+            mqtt.removeListener('message', messageHandler);
+            messageHandler = null;
+          }
+          mqtt.end(true);
+        }
+        mqtt = mqttInit({});
+        subscribeToModuleTopics(modules);
+        listenModulesMQTT(modules);
+      }
+    });
+    stdinHandler.init();
 
     // should be after initModules
     if (tray) {

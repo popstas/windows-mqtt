@@ -258,6 +258,25 @@ module.exports = async (mqtt, config, log) => {
     },
   ]);
 
+  const stdinActions = {
+    'windows/autoplace': () => autoplace('stdin/autoplace', '1'),
+    'windows/store': () => winMan.storeWindows(),
+    'windows/restore': () => restoreWindows(),
+    'windows/clear': () => winMan.clearWindows(),
+    'windows/open_default': () => {
+      const s = config?.store?.default;
+      if (s) {
+        if (s.apps) s.windows = s.apps.map(path => ({ path }));
+        winMan.openStore(s);
+      }
+    },
+    'windows/restart_restore': () => { winMan.storeWindows(); restart(); },
+    'windows/sleep': () => sleep(),
+    'windows/restart': () => restart(),
+    'windows/shutdown': () => shutdown(),
+    'windows/reload': () => reload(),
+  };
+
   return {
     subscriptions: [
       {
@@ -301,6 +320,7 @@ module.exports = async (mqtt, config, log) => {
         handler: shutdownHandler
       },
     ],
+    stdinActions,
     menuItems,
     onStop,
     onStart,
