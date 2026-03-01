@@ -1,6 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use serde::Serialize;
+mod mqtt_bridge;
+
+use mqtt_bridge::{MqttBridge, MqttConfig, MqttEvent};
+use rumqttc::QoS;
+use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tauri::{
     async_runtime::Mutex,
@@ -11,8 +15,44 @@ use tauri::{
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_shell::{process::CommandEvent, ShellExt};
 
+// --- IPC protocol types ---
+
+#[derive(Deserialize, Debug)]
+#[serde(tag = "type", rename_all = "camelCase")]
+enum IpcFromJs {
+    Subscribe { topics: Vec<String> },
+    Unsubscribe { topics: Vec<String> },
+    Publish {
+        topic: String,
+        payload: String,
+        #[serde(default)]
+        options: PublishOptions,
+    },
+}
+
+#[derive(Deserialize, Debug, Default)]
+struct PublishOptions {
+    #[serde(default)]
+    retain: bool,
+    #[serde(default)]
+    qos: u8,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(tag = "type", rename_all = "camelCase")]
+enum IpcToJs {
+    Message { topic: String, payload: String },
+    Connected,
+    Disconnected { reason: String },
+    Action { action: String },
+}
+
+// --- App state ---
+
 #[derive(Default)]
 struct ServerState(Arc<Mutex<Option<tauri_plugin_shell::process::CommandChild>>>);
+
+struct BridgeState(Arc<MqttBridge>);
 
 #[derive(Clone, Serialize)]
 struct LogPayload {
@@ -26,12 +66,20 @@ struct HotkeyMenuItems(Vec<CheckMenuItem<tauri::Wry>>);
 struct IntervalMenuItems(Vec<CheckMenuItem<tauri::Wry>>);
 struct CurrentShortcut(Mutex<Option<String>>);
 
+// --- Send command to JS child via IPC ---
+
 async fn send_command(app: &tauri::AppHandle, action: &str) {
     let state = app.state::<ServerState>();
     let mut guard = state.0.lock().await;
     if let Some(ref mut child) = *guard {
-        let cmd = format!("{{\"action\":\"{}\"}}\n", action);
-        if let Err(e) = child.write(cmd.as_bytes()) {
+        let msg = IpcToJs::Action {
+            action: action.to_string(),
+        };
+        let line = match serde_json::to_string(&msg) {
+            Ok(s) => s + "\n",
+            Err(_) => return,
+        };
+        if let Err(e) = child.write(line.as_bytes()) {
             let _ = app.emit(
                 "server-log",
                 LogPayload {
@@ -43,9 +91,59 @@ async fn send_command(app: &tauri::AppHandle, action: &str) {
     }
 }
 
+// --- Read MQTT config from config.yml ---
+
+fn read_mqtt_config(resource_dir: &PathBuf) -> Result<MqttConfig, String> {
+    let config_path = resource_dir.join("config.yml");
+
+    let content = std::fs::read_to_string(&config_path)
+        .or_else(|_| std::fs::read_to_string(resource_dir.join("config.example.yml")))
+        .map_err(|e| format!("Failed to read config: {}", e))?;
+
+    let config: serde_yaml::Value =
+        serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))?;
+
+    let mqtt = config
+        .get("mqtt")
+        .ok_or_else(|| "Config does not define mqtt section".to_string())?;
+
+    let host = mqtt
+        .get("host")
+        .and_then(|v| v.as_str())
+        .unwrap_or("localhost")
+        .to_string();
+    let port = mqtt
+        .get("port")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1883) as u16;
+    let username = mqtt.get("user").and_then(|v| v.as_str()).map(String::from);
+    let password = mqtt
+        .get("password")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    let client_id = format!(
+        "windows-mqtt-{}",
+        std::env::var("COMPUTERNAME")
+            .or_else(|_| std::env::var("HOSTNAME"))
+            .unwrap_or_else(|_| "unknown".into())
+    );
+
+    Ok(MqttConfig {
+        host,
+        port,
+        username,
+        password,
+        client_id,
+    })
+}
+
+// --- Spawn Node.js child with IPC bridge ---
+
 fn spawn_node_server(
     app: &tauri::AppHandle,
     server_state: Arc<Mutex<Option<tauri_plugin_shell::process::CommandChild>>>,
+    bridge: Arc<MqttBridge>,
 ) -> Result<tauri_plugin_shell::process::CommandChild, String> {
     let resource_dir = resolve_resource_dir(app)?;
     let server_path = resource_dir.join("src").join("index.js");
@@ -61,24 +159,59 @@ fn spawn_node_server(
         .shell()
         .command("node")
         .args([server_path.to_string_lossy().to_string()])
+        .env("TAURI_BRIDGE", "1")
         .current_dir(resource_dir)
         .spawn()
         .map_err(|error| error.to_string())?;
 
     let app_handle = app.clone();
 
+    // Task: read stdout from JS, dispatch IPC messages or log
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
             match event {
                 CommandEvent::Stdout(buf) => {
                     let line = String::from_utf8_lossy(&buf).to_string();
-                    let _ = app_handle.emit(
-                        "server-log",
-                        LogPayload {
-                            message: line,
-                            level: "info".into(),
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+
+                    // Try to parse as IPC JSON
+                    match serde_json::from_str::<IpcFromJs>(trimmed) {
+                        Ok(ipc) => match ipc {
+                            IpcFromJs::Subscribe { topics } => {
+                                bridge.subscribe(&topics).await;
+                            }
+                            IpcFromJs::Unsubscribe { topics } => {
+                                bridge.unsubscribe(&topics).await;
+                            }
+                            IpcFromJs::Publish {
+                                topic,
+                                payload,
+                                options,
+                            } => {
+                                let qos = match options.qos {
+                                    1 => QoS::AtLeastOnce,
+                                    2 => QoS::ExactlyOnce,
+                                    _ => QoS::AtMostOnce,
+                                };
+                                bridge
+                                    .publish(&topic, &payload, options.retain, qos)
+                                    .await;
+                            }
                         },
-                    );
+                        Err(_) => {
+                            // Not JSON — treat as log output
+                            let _ = app_handle.emit(
+                                "server-log",
+                                LogPayload {
+                                    message: line,
+                                    level: "info".into(),
+                                },
+                            );
+                        }
+                    }
                 }
                 CommandEvent::Stderr(buf) => {
                     let line = String::from_utf8_lossy(&buf).to_string();
@@ -95,7 +228,7 @@ fn spawn_node_server(
                     let _ = app_handle.emit(
                         "server-log",
                         LogPayload {
-                            message: format!("MQTT server stopped with code {}", exit),
+                            message: format!("Node server stopped with code {}", exit),
                             level: "warn".into(),
                         },
                     );
@@ -111,6 +244,54 @@ fn spawn_node_server(
     Ok(child)
 }
 
+// --- Task: forward MQTT events from Rust bridge to JS child's stdin ---
+
+fn spawn_bridge_to_js_writer(
+    app: tauri::AppHandle,
+    mut event_rx: tokio::sync::mpsc::Receiver<MqttEvent>,
+) {
+    tauri::async_runtime::spawn(async move {
+        while let Some(event) = event_rx.recv().await {
+            let ipc = match event {
+                MqttEvent::Message { topic, payload } => IpcToJs::Message { topic, payload },
+                MqttEvent::Connected => {
+                    let _ = app.emit(
+                        "server-log",
+                        LogPayload {
+                            message: "MQTT connected (Rust bridge)".into(),
+                            level: "info".into(),
+                        },
+                    );
+                    IpcToJs::Connected
+                }
+                MqttEvent::Disconnected(reason) => {
+                    let _ = app.emit(
+                        "server-log",
+                        LogPayload {
+                            message: format!("MQTT disconnected: {}", reason),
+                            level: "warn".into(),
+                        },
+                    );
+                    IpcToJs::Disconnected { reason }
+                }
+            };
+
+            let line = match serde_json::to_string(&ipc) {
+                Ok(s) => s + "\n",
+                Err(_) => continue,
+            };
+
+            let state = app.state::<ServerState>();
+            let mut guard = state.0.lock().await;
+            if let Some(ref mut child) = *guard {
+                let _ = child.write(line.as_bytes());
+            }
+        }
+    });
+}
+
+// --- Tauri commands ---
+
 #[tauri::command]
 async fn start_mqtt_server(
     app: tauri::AppHandle,
@@ -121,7 +302,8 @@ async fn start_mqtt_server(
         return Ok(());
     }
 
-    let child = spawn_node_server(&app, state.0.clone())?;
+    let bridge = app.state::<BridgeState>();
+    let child = spawn_node_server(&app, state.0.clone(), bridge.0.clone())?;
     *child_guard = Some(child);
 
     Ok(())
@@ -175,6 +357,8 @@ fn resolve_resource_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .ok_or_else(|| "Unable to resolve resource directory".to_string())
 }
 
+// --- Tray menu ---
+
 const HOTKEY_OPTIONS: &[(&str, &str)] = &[
     ("Ctrl+Alt+Shift+P", "ctrl+alt+shift+p"),
     ("Ctrl+Shift+P", "ctrl+shift+p"),
@@ -182,7 +366,7 @@ const HOTKEY_OPTIONS: &[(&str, &str)] = &[
     ("None", ""),
 ];
 
-const INTERVAL_OPTIONS: &[(& str, u64)] = &[
+const INTERVAL_OPTIONS: &[(&str, u64)] = &[
     ("Off", 0),
     ("30s", 30),
     ("60s", 60),
@@ -206,47 +390,73 @@ fn build_tray_menu(
     // Show App
     let show = MenuItem::with_id(app, "show", "Show App", true, None::<&str>).map_err(m)?;
     menu.append(&show).map_err(m)?;
-    menu.append(&PredefinedMenuItem::separator(app).map_err(m)?).map_err(m)?;
+    menu.append(&PredefinedMenuItem::separator(app).map_err(m)?)
+        .map_err(m)?;
 
     // Windows actions
-    let autoplace = MenuItem::with_id(app, "win_autoplace", "Place windows", true, Some("Ctrl+Alt+Shift+P")).map_err(m)?;
-    let store = MenuItem::with_id(app, "win_store", "Store windows", true, None::<&str>).map_err(m)?;
-    let restore = MenuItem::with_id(app, "win_restore", "Restore windows", true, None::<&str>).map_err(m)?;
-    let clear = MenuItem::with_id(app, "win_clear", "Clear stored windows", true, None::<&str>).map_err(m)?;
-    let open_default = MenuItem::with_id(app, "win_open_default", "Open default apps", true, None::<&str>).map_err(m)?;
+    let autoplace = MenuItem::with_id(
+        app,
+        "win_autoplace",
+        "Place windows",
+        true,
+        Some("Ctrl+Alt+Shift+P"),
+    )
+    .map_err(m)?;
+    let store =
+        MenuItem::with_id(app, "win_store", "Store windows", true, None::<&str>).map_err(m)?;
+    let restore =
+        MenuItem::with_id(app, "win_restore", "Restore windows", true, None::<&str>).map_err(m)?;
+    let clear = MenuItem::with_id(app, "win_clear", "Clear stored windows", true, None::<&str>)
+        .map_err(m)?;
+    let open_default =
+        MenuItem::with_id(app, "win_open_default", "Open default apps", true, None::<&str>)
+            .map_err(m)?;
 
     menu.append(&autoplace).map_err(m)?;
     menu.append(&store).map_err(m)?;
     menu.append(&restore).map_err(m)?;
     menu.append(&clear).map_err(m)?;
     menu.append(&open_default).map_err(m)?;
-    menu.append(&PredefinedMenuItem::separator(app).map_err(m)?).map_err(m)?;
+    menu.append(&PredefinedMenuItem::separator(app).map_err(m)?)
+        .map_err(m)?;
 
     // System actions
-    let restart_restore = MenuItem::with_id(app, "win_restart_restore", "Restart with restore", true, None::<&str>).map_err(m)?;
+    let restart_restore = MenuItem::with_id(
+        app,
+        "win_restart_restore",
+        "Restart with restore",
+        true,
+        None::<&str>,
+    )
+    .map_err(m)?;
     let sleep = MenuItem::with_id(app, "win_sleep", "Sleep", true, None::<&str>).map_err(m)?;
-    let restart = MenuItem::with_id(app, "win_restart", "Restart", true, None::<&str>).map_err(m)?;
-    let shutdown = MenuItem::with_id(app, "win_shutdown", "Shutdown", true, None::<&str>).map_err(m)?;
+    let restart =
+        MenuItem::with_id(app, "win_restart", "Restart", true, None::<&str>).map_err(m)?;
+    let shutdown =
+        MenuItem::with_id(app, "win_shutdown", "Shutdown", true, None::<&str>).map_err(m)?;
 
     menu.append(&restart_restore).map_err(m)?;
     menu.append(&sleep).map_err(m)?;
     menu.append(&restart).map_err(m)?;
     menu.append(&shutdown).map_err(m)?;
-    menu.append(&PredefinedMenuItem::separator(app).map_err(m)?).map_err(m)?;
+    menu.append(&PredefinedMenuItem::separator(app).map_err(m)?)
+        .map_err(m)?;
 
     // Config actions
-    let reload = MenuItem::with_id(app, "win_reload", "Reload configs", true, None::<&str>).map_err(m)?;
-    let reconnect = MenuItem::with_id(app, "reconnect", "Reconnect MQTT", true, None::<&str>).map_err(m)?;
+    let reload =
+        MenuItem::with_id(app, "win_reload", "Reload configs", true, None::<&str>).map_err(m)?;
+    let reconnect =
+        MenuItem::with_id(app, "reconnect", "Reconnect MQTT", true, None::<&str>).map_err(m)?;
 
     menu.append(&reload).map_err(m)?;
     menu.append(&reconnect).map_err(m)?;
-    menu.append(&PredefinedMenuItem::separator(app).map_err(m)?).map_err(m)?;
+    menu.append(&PredefinedMenuItem::separator(app).map_err(m)?)
+        .map_err(m)?;
 
-    // Settings submenu
-    // Hotkey submenu
+    // Settings submenu — Hotkey
     let mut hotkey_items: Vec<CheckMenuItem<tauri::Wry>> = Vec::new();
     for (i, (label, _shortcut_str)) in HOTKEY_OPTIONS.iter().enumerate() {
-        let checked = i == 0; // first is default
+        let checked = i == 0;
         let item = CheckMenuItem::with_id(
             app,
             format!("hotkey_{}", i),
@@ -254,18 +464,28 @@ fn build_tray_menu(
             true,
             checked,
             None::<&str>,
-        ).map_err(m)?;
+        )
+        .map_err(m)?;
         hotkey_items.push(item);
     }
 
-    let hotkey_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> =
-        hotkey_items.iter().map(|i| i as &dyn tauri::menu::IsMenuItem<tauri::Wry>).collect();
-    let hotkey_submenu = Submenu::with_id_and_items(app, "hotkey_submenu", "Autoplace hotkey", true, &hotkey_refs).map_err(m)?;
+    let hotkey_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = hotkey_items
+        .iter()
+        .map(|i| i as &dyn tauri::menu::IsMenuItem<tauri::Wry>)
+        .collect();
+    let hotkey_submenu = Submenu::with_id_and_items(
+        app,
+        "hotkey_submenu",
+        "Autoplace hotkey",
+        true,
+        &hotkey_refs,
+    )
+    .map_err(m)?;
 
-    // Interval submenu
+    // Settings submenu — Interval
     let mut interval_items: Vec<CheckMenuItem<tauri::Wry>> = Vec::new();
     for (i, (label, _secs)) in INTERVAL_OPTIONS.iter().enumerate() {
-        let checked = i == 0; // "Off" is default
+        let checked = i == 0;
         let item = CheckMenuItem::with_id(
             app,
             format!("interval_{}", i),
@@ -273,13 +493,23 @@ fn build_tray_menu(
             true,
             checked,
             None::<&str>,
-        ).map_err(m)?;
+        )
+        .map_err(m)?;
         interval_items.push(item);
     }
 
-    let interval_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> =
-        interval_items.iter().map(|i| i as &dyn tauri::menu::IsMenuItem<tauri::Wry>).collect();
-    let interval_submenu = Submenu::with_id_and_items(app, "interval_submenu", "Autoplace interval", true, &interval_refs).map_err(m)?;
+    let interval_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = interval_items
+        .iter()
+        .map(|i| i as &dyn tauri::menu::IsMenuItem<tauri::Wry>)
+        .collect();
+    let interval_submenu = Submenu::with_id_and_items(
+        app,
+        "interval_submenu",
+        "Autoplace interval",
+        true,
+        &interval_refs,
+    )
+    .map_err(m)?;
 
     let settings_submenu = Submenu::with_id_and_items(
         app,
@@ -290,10 +520,12 @@ fn build_tray_menu(
             &hotkey_submenu as &dyn tauri::menu::IsMenuItem<tauri::Wry>,
             &interval_submenu as &dyn tauri::menu::IsMenuItem<tauri::Wry>,
         ],
-    ).map_err(m)?;
+    )
+    .map_err(m)?;
 
     menu.append(&settings_submenu).map_err(m)?;
-    menu.append(&PredefinedMenuItem::separator(app).map_err(m)?).map_err(m)?;
+    menu.append(&PredefinedMenuItem::separator(app).map_err(m)?)
+        .map_err(m)?;
 
     // Quit
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>).map_err(m)?;
@@ -324,13 +556,17 @@ fn unregister_shortcut(app: &tauri::AppHandle, shortcut_str: &str) {
     let _ = app.global_shortcut().unregister(shortcut_str);
 }
 
+// --- Main ---
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(ServerState::default())
         .manage(AutoplaceTimer(Mutex::new(None)))
-        .manage(CurrentShortcut(Mutex::new(Some("ctrl+alt+shift+p".to_string()))))
+        .manage(CurrentShortcut(Mutex::new(Some(
+            "ctrl+alt+shift+p".to_string(),
+        ))))
         .invoke_handler(tauri::generate_handler![
             start_mqtt_server,
             get_enabled_modules
@@ -349,6 +585,19 @@ fn main() {
 
             let app_handle = app.handle().clone();
 
+            // Read MQTT config and create bridge
+            let resource_dir = resolve_resource_dir(&app_handle)
+                .expect("failed to resolve resource directory");
+            let mqtt_config =
+                read_mqtt_config(&resource_dir).expect("failed to read MQTT config");
+
+            let (bridge, event_rx) = MqttBridge::new(&mqtt_config);
+            let bridge = Arc::new(bridge);
+            app.manage(BridgeState(bridge.clone()));
+
+            // Forward MQTT events to JS child
+            spawn_bridge_to_js_writer(app_handle.clone(), event_rx);
+
             let (menu, hotkey_items, interval_items) =
                 build_tray_menu(&app_handle).expect("failed to build tray menu");
 
@@ -364,9 +613,11 @@ fn main() {
             let tray = TrayIconBuilder::new()
                 .menu(&menu)
                 .tooltip("windows-mqtt")
-                .icon(app.default_window_icon().cloned().unwrap_or_else(|| {
-                    tauri::image::Image::new(&[], 0, 0)
-                }))
+                .icon(
+                    app.default_window_icon()
+                        .cloned()
+                        .unwrap_or_else(|| tauri::image::Image::new(&[], 0, 0)),
+                )
                 .on_menu_event(move |app, event| {
                     let id = event.id().as_ref().to_string();
 
@@ -403,34 +654,19 @@ fn main() {
                             }
                         }
                         "reconnect" => {
+                            // Reconnect Rust MQTT bridge (no need to restart Node)
                             let app_handle = app.clone();
                             tauri::async_runtime::spawn(async move {
-                                // Kill old server and spawn new one
-                                let state = app_handle.state::<ServerState>();
-                                let mut guard = state.0.lock().await;
-                                if let Some(child) = guard.take() {
-                                    let _ = child.kill();
-                                }
-                                drop(guard);
-
-                                match spawn_node_server(&app_handle, state.0.clone()) {
-                                    Ok(child) => {
-                                        let mut guard = state.0.lock().await;
-                                        *guard = Some(child);
-                                    }
-                                    Err(err) => {
-                                        let _ = app_handle.emit(
-                                            "server-log",
-                                            LogPayload {
-                                                message: format!(
-                                                    "Failed to restart server: {}",
-                                                    err
-                                                ),
-                                                level: "error".into(),
-                                            },
-                                        );
-                                    }
-                                }
+                                let bridge_state = app_handle.state::<BridgeState>();
+                                bridge_state.0.disconnect().await;
+                                let _ = app_handle.emit(
+                                    "server-log",
+                                    LogPayload {
+                                        message: "MQTT reconnecting (Rust bridge)...".into(),
+                                        level: "info".into(),
+                                    },
+                                );
+                                // rumqttc will auto-reconnect after disconnect
                             });
                         }
                         _ => {
@@ -438,11 +674,9 @@ fn main() {
                             if let Some(idx_str) = id.strip_prefix("hotkey_") {
                                 if let Ok(idx) = idx_str.parse::<usize>() {
                                     let hotkey_items = app.state::<HotkeyMenuItems>();
-                                    // Update check marks
                                     for (i, item) in hotkey_items.0.iter().enumerate() {
                                         let _ = item.set_checked(i == idx);
                                     }
-                                    // Unregister old, register new
                                     let app_handle = app.clone();
                                     tauri::async_runtime::spawn(async move {
                                         let current = app_handle.state::<CurrentShortcut>();
@@ -452,11 +686,16 @@ fn main() {
                                         }
                                         let new_shortcut = HOTKEY_OPTIONS[idx].1.to_string();
                                         if !new_shortcut.is_empty() {
-                                            if let Err(e) = register_shortcut(&app_handle, &new_shortcut) {
+                                            if let Err(e) =
+                                                register_shortcut(&app_handle, &new_shortcut)
+                                            {
                                                 let _ = app_handle.emit(
                                                     "server-log",
                                                     LogPayload {
-                                                        message: format!("Failed to register hotkey: {}", e),
+                                                        message: format!(
+                                                            "Failed to register hotkey: {}",
+                                                            e
+                                                        ),
                                                         level: "error".into(),
                                                     },
                                                 );
@@ -471,29 +710,32 @@ fn main() {
                             if let Some(idx_str) = id.strip_prefix("interval_") {
                                 if let Ok(idx) = idx_str.parse::<usize>() {
                                     let interval_items = app.state::<IntervalMenuItems>();
-                                    // Update check marks
                                     for (i, item) in interval_items.0.iter().enumerate() {
                                         let _ = item.set_checked(i == idx);
                                     }
                                     let secs = INTERVAL_OPTIONS[idx].1;
                                     let app_handle = app.clone();
                                     tauri::async_runtime::spawn(async move {
-                                        // Cancel existing timer
-                                        let timer_state = app_handle.state::<AutoplaceTimer>();
+                                        let timer_state =
+                                            app_handle.state::<AutoplaceTimer>();
                                         let mut guard = timer_state.0.lock().await;
                                         if let Some(handle) = guard.take() {
                                             handle.abort();
                                         }
-                                        // Start new timer if interval > 0
                                         if secs > 0 {
                                             let app_for_timer = app_handle.clone();
                                             let duration = Duration::from_secs(secs);
-                                            let handle = tauri::async_runtime::spawn(async move {
-                                                loop {
-                                                    tokio::time::sleep(duration).await;
-                                                    send_command(&app_for_timer, "windows/autoplace").await;
-                                                }
-                                            });
+                                            let handle =
+                                                tauri::async_runtime::spawn(async move {
+                                                    loop {
+                                                        tokio::time::sleep(duration).await;
+                                                        send_command(
+                                                            &app_for_timer,
+                                                            "windows/autoplace",
+                                                        )
+                                                        .await;
+                                                    }
+                                                });
                                             *guard = Some(handle);
                                         }
                                     });

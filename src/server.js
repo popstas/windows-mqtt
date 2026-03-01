@@ -1,4 +1,5 @@
-const { mqttInit } = require('./mqtt');
+const isTauriBridge = process.env.TAURI_BRIDGE === '1';
+const { mqttInit } = require(isTauriBridge ? './mqtt-bridge' : './mqtt');
 const config = require('./config');
 const {log, getModulesEnabled, initModules} = require("./helpers");
 const stdinHandler = require('./stdin-handler');
@@ -81,22 +82,24 @@ async function start() {
         stdinHandler.register(mod.stdinActions);
       }
     }
-    // Register global stdin actions
-    stdinHandler.register({
-      'reconnect': async () => {
-        if (mqtt) {
-          if (messageHandler) {
-            mqtt.removeListener('message', messageHandler);
-            messageHandler = null;
+    // Register global stdin actions (reconnect only in standalone mode)
+    if (!isTauriBridge) {
+      stdinHandler.register({
+        'reconnect': async () => {
+          if (mqtt) {
+            if (messageHandler) {
+              mqtt.removeListener('message', messageHandler);
+              messageHandler = null;
+            }
+            mqtt.end(true);
           }
-          mqtt.end(true);
+          mqtt = mqttInit({});
+          subscribeToModuleTopics(modules);
+          listenModulesMQTT(modules);
         }
-        mqtt = mqttInit({});
-        subscribeToModuleTopics(modules);
-        listenModulesMQTT(modules);
-      }
-    });
-    stdinHandler.init();
+      });
+    }
+    stdinHandler.init(isTauriBridge ? mqtt : undefined);
 
     subscribeToModuleTopics(modules);
 

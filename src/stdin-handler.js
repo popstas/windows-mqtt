@@ -9,37 +9,47 @@ function register(actionMap) {
   }
 }
 
-function init() {
-  const rl = readline.createInterface({ input: process.stdin });
+async function handleAction(action) {
+  const handler = handlers[action];
+  if (!handler) {
+    log(`stdin: unknown action "${action}"`, 'warn');
+    return;
+  }
 
-  rl.on('line', async (line) => {
-    let cmd;
-    try {
-      cmd = JSON.parse(line);
-    } catch {
-      return;
-    }
+  try {
+    log(`stdin: ${action}`);
+    await handler();
+  } catch (e) {
+    log(`stdin: error in "${action}": ${e.message}`, 'error');
+  }
+}
 
-    const { action } = cmd;
-    if (!action) return;
+function init(mqttBridge) {
+  if (mqttBridge) {
+    // Bridge mode: actions arrive via mqttBridge 'action' events
+    mqttBridge.on('action', handleAction);
+  } else {
+    // Standalone mode: read JSON lines from stdin
+    const rl = readline.createInterface({ input: process.stdin });
 
-    const handler = handlers[action];
-    if (!handler) {
-      log(`stdin: unknown action "${action}"`, 'warn');
-      return;
-    }
+    rl.on('line', async (line) => {
+      let cmd;
+      try {
+        cmd = JSON.parse(line);
+      } catch {
+        return;
+      }
 
-    try {
-      log(`stdin: ${action}`);
-      await handler();
-    } catch (e) {
-      log(`stdin: error in "${action}": ${e.message}`, 'error');
-    }
-  });
+      const { action } = cmd;
+      if (!action) return;
 
-  rl.on('close', () => {
-    log('stdin closed');
-  });
+      await handleAction(action);
+    });
+
+    rl.on('close', () => {
+      log('stdin closed');
+    });
+  }
 }
 
 module.exports = { init, register };
