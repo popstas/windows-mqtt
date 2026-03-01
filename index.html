@@ -6,8 +6,6 @@
     <title>Windows-mqtt</title>
     <script>
       const lines = [];
-      const isTauri = !!window.__TAURI__;
-      const isElectron = !!window.electronAPI;
 
       function renderLogs() {
         const logTextarea = document.getElementById('log');
@@ -27,20 +25,7 @@
       }
 
       async function start() {
-        if (isElectron) {
-          window.electronAPI.sendMessage({type: 'getEnabledModules'});
-          window.electronAPI.onLine((message) => {
-            appendLog(message);
-          });
-          window.electronAPI.onMessage((message) => {
-            if (message.type === 'getEnabledModulesResponse') {
-              renderEnabledModules(message.data);
-            }
-          });
-          return;
-        }
-
-        if (isTauri) {
+        if (window.__TAURI__) {
           await window.__TAURI__.invoke('start_mqtt_server');
           const unlisten = await window.__TAURI__.event.listen('server-log', (event) => {
             const payload = event.payload || {};

@@ -3,26 +3,10 @@ const modulesRegistry = require('./modules');
 const os = require("os");
 const isWindows = os.platform() === 'win32';
 
-let electronLog;
-let ipcMain;
-
-try {
-  electronLog = require('electron-log');
-  ({ ipcMain } = require('electron'));
-} catch (error) {
-  electronLog = null;
-  ipcMain = null;
-}
-
 let windowsLogger;
 if (isWindows) {
   const EventLogger = require('node-windows').EventLogger;
   windowsLogger = new EventLogger('windows-mqtt');
-}
-
-if (config.log && config.log.path) {
-  electronLog.transports.file.resolvePathFn = () => config.log.path;
-  electronLog.transports.console.format = '{y}-{m}-{d} {h}:{i}:{s} {text}';
 }
 
 function log(msg, logLevel = 'info') {
@@ -37,25 +21,12 @@ function log(msg, logLevel = 'info') {
     replace(/T/, ' ').      // replace T with a space
       replace(/\..+/, '')     // delete the dot and everything after
 
-    if (electronLog) {
-      electronLog[logLevel](msg);
-    }
-    else {
-      console[logLevel](`${d} ${msg}`);
-    }
-
-    if (ipcMain) {
-      ipcMain.emit('log-to-frontend', `${d} ${msg}`, logLevel);
-    }
+    console[logLevel](`${d} ${msg}`);
   }
 
   if (isWindows && process.env.NODE_ENV === 'production') {
     windowsLogger[logLevel](msg);
   }
-
-  /* if (config.log && config.log.path) {
-    fs.appendFileSync(config.log.path, `${d} [${logLevel}] ${msg}\n`);
-  } */
 }
 
 function getModulesEnabled() {

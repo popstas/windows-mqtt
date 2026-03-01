@@ -44,19 +44,19 @@ Look at the commit history to get more examples.
 
 ## Getting Started
 1. Run `npm install` to install dependencies.
-2. Copy a `config.yml` and run `npm start` for headless mode or `npm run start-electron` for the tray UI.
+2. Copy a `config.yml` and run `npm start` for headless mode or `npm run start-tauri` for the Tauri dev UI.
 3. Explore `src/modules` to learn how features are implemented. Use `src/modules/_module.js` as a template for new modules.
 
 ## Commit Style
 Use short commit messages following the Angular style (e.g. `feat(module): description`, `fix: description`). Recent history shows examples like:
 ```
 feat(windows): reload configs
-fix: set electron window icon, hide menu
+feat(tauri): add tray menu actions and hotkeys
 ```
 
 ## Further Tips
 - Read `README.md` for details on each module and available MQTT topics.
-- Review `package.json` for useful scripts such as `start-electron` and Windows service helpers.
+- Review `package.json` for useful scripts such as `start-tauri` and Windows service helpers.
 
 ## Module Structure
 Modules are kept in `src/modules`. Each module exports an async function with

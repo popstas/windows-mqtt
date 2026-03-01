@@ -4,35 +4,13 @@
   "description": "Windows MQTT",
   "scripts": {
     "start": "node src/index.js",
-    "start-electron": "electron src/index-electron.js",
     "start-tauri": "node scripts/tauri-wrapper.js dev",
-    "build": "npm run build:dir",
-    "build:dir": "electron-builder --dir",
-    "build:dist": "electron-builder",
-    "build:tauri": "node scripts/tauri-wrapper.js build",
+    "build": "node scripts/tauri-wrapper.js build",
     "install-windows": "node scripts/service-install.js",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0",
     "uninstall-windows": "node scripts/service-uninstall.js",
     "deploy": "zsh data/deploy.sh"
   },
-  "postinstall": "electron-builder install-app-deps",
-  "main": "src/index-electron.js",
-  "build": {
-    "appId": "pro.popstas.windows-mqtt",
-    "asar": false,
-    "win": {
-      "target": "portable",
-      "icon": "assets/trayicon.png"
-    },
-    "extraFiles": [
-      "data/",
-      "config.yml"
-    ]
-  },
-  "files": [
-    "**/*",
-    "!*.log"
-  ],
   "author": "Stanislav Popov",
   "license": "ISC",
   "dependencies": {
@@ -40,7 +18,6 @@
     "chatgpt": "^5.1.2",
     "chokidar": "^3.5.3",
     "clipboardy": "^3.0.0",
-    "electron-log": "^5.2.2",
     "form-data": "^4.0.0",
     "js-yaml": "^4.1.0",
     "lodash.debounce": "^4.0.8",
@@ -56,8 +33,6 @@
     "windows11-manager": "file:../windows11-manager"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2",
-    "electron": "^26.6.10",
-    "electron-builder": "^25.1.8"
+    "@tauri-apps/cli": "^2"
   }
 }
