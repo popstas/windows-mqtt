@@ -42,7 +42,9 @@ impl MqttBridge {
         let subs_clone = subscriptions.clone();
         let client_clone = client.clone();
 
-        tokio::spawn(Self::run_event_loop(
+        // MqttBridge::new is called from Tauri's setup() (no ambient tokio
+        // runtime there) — tauri::async_runtime provides the runtime handle
+        tauri::async_runtime::spawn(Self::run_event_loop(
             event_loop,
             tx,
             subs_clone,
