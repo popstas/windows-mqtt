@@ -384,11 +384,16 @@ fn resolve_app_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
     // Dev: `tauri dev` runs the exe with cwd = src-tauri, so the project
     // root (live src/, config.yml, node_modules) is the parent dir.
-    if let Ok(cwd) = std::env::current_dir() {
-        if let Some(parent) = cwd.parent() {
-            candidates.push(parent.to_path_buf());
+    // Dev builds only: an installed exe can be launched from an arbitrary
+    // cwd (e.g. inside another Node project), which must not win over the
+    // bundled resources.
+    if cfg!(debug_assertions) {
+        if let Ok(cwd) = std::env::current_dir() {
+            if let Some(parent) = cwd.parent() {
+                candidates.push(parent.to_path_buf());
+            }
+            candidates.push(cwd);
         }
-        candidates.push(cwd);
     }
     // Bundled: Tauri v2 flattens `../` resources into `_up_/`.
     if let Ok(resource_dir) = app.path().resource_dir() {
