@@ -9,7 +9,8 @@
     "install-windows": "node scripts/service-install.js",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0",
     "uninstall-windows": "node scripts/service-uninstall.js",
-    "deploy": "zsh data/deploy.sh"
+    "deploy": "zsh data/deploy.sh",
+    "test": "node --test test/**/*.test.js"
   },
   "author": "Stanislav Popov",
   "license": "ISC",
