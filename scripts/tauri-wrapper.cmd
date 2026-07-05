@@ -1,13 +1,16 @@
 @echo off
-setlocal EnableDelayedExpansion
+setlocal
 
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 set "VS_PATH="
 
-if exist "%VSWHERE%" (
-  for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * -property installationPath 2^>nul`) do set "VS_PATH=%%i"
-)
+if not exist "%VSWHERE%" goto :fallbacks
+rem -products * is required to find Build Tools (vswhere default is full VS only)
+"%VSWHERE%" -latest -products * -property installationPath > "%TEMP%\wmqtt-vspath.txt" 2>nul
+set /p VS_PATH=<"%TEMP%\wmqtt-vspath.txt"
+del "%TEMP%\wmqtt-vspath.txt" >nul 2>&1
 
+:fallbacks
 if not defined VS_PATH (
   if exist "C:\Program Files\Microsoft Visual Studio\2022\Community" set "VS_PATH=C:\Program Files\Microsoft Visual Studio\2022\Community"
 )
@@ -19,6 +22,9 @@ if not defined VS_PATH (
 )
 if not defined VS_PATH (
   if exist "C:\Program Files\Microsoft Visual Studio\2022\BuildTools" set "VS_PATH=C:\Program Files\Microsoft Visual Studio\2022\BuildTools"
+)
+if not defined VS_PATH (
+  if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools" set "VS_PATH=%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools"
 )
 
 if not defined VS_PATH (
