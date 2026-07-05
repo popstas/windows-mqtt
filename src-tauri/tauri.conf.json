@@ -29,10 +29,7 @@
     }
   },
   "app": {
-    "trayIcon": {
-      "iconPath": "../assets/trayicon.png",
-      "iconAsTemplate": false
-    },
+    "withGlobalTauri": true,
     "windows": [
       {
         "label": "main",

@@ -15,7 +15,7 @@
 
       function appendLog(message) {
         lines.push(message);
-        lines.slice(0, 500);
+        if (lines.length > 500) lines.splice(0, lines.length - 500);
         renderLogs();
       }
 
@@ -25,22 +25,28 @@
       }
 
       async function start() {
-        if (window.__TAURI__) {
-          await window.__TAURI__.invoke('start_mqtt_server');
-          const unlisten = await window.__TAURI__.event.listen('server-log', (event) => {
-            const payload = event.payload || {};
-            const prefix = payload.level ? `[${payload.level}] ` : '';
-            appendLog(`${prefix}${payload.message || ''}`.trim());
-          });
-          const enabledModules = await window.__TAURI__.invoke('get_enabled_modules');
-          renderEnabledModules(enabledModules);
-          return () => unlisten();
+        if (!window.__TAURI__) {
+          appendLog('No backend detected.');
+          return;
         }
+        const { invoke } = window.__TAURI__.core;
+        const { listen } = window.__TAURI__.event;
 
-        appendLog('No backend detected.');
+        // Subscribe to logs BEFORE starting the server so early lines are kept.
+        await listen('server-log', (event) => {
+          const payload = event.payload || {};
+          const prefix = payload.level ? `[${payload.level}] ` : '';
+          appendLog(`${prefix}${payload.message || ''}`.trim());
+        });
+
+        await invoke('start_mqtt_server');
+        const enabledModules = await invoke('get_enabled_modules');
+        renderEnabledModules(enabledModules);
       }
 
-      void start();
+      window.addEventListener('DOMContentLoaded', () => {
+        start().catch((e) => appendLog(`Error: ${e}`));
+      });
     </script>
     <style>
         body {

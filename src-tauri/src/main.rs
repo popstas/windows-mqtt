@@ -706,14 +706,11 @@ fn main() {
                 eprintln!("Failed to register default hotkey: {}", e);
             }
 
-            let tray = TrayIconBuilder::new()
-                .menu(&menu)
-                .tooltip("windows-mqtt")
-                .icon(
-                    app.default_window_icon()
-                        .cloned()
-                        .unwrap_or_else(|| tauri::image::Image::new(&[], 0, 0)),
-                )
+            let mut tray_builder = TrayIconBuilder::new().menu(&menu).tooltip("windows-mqtt");
+            if let Some(icon) = app.default_window_icon().cloned() {
+                tray_builder = tray_builder.icon(icon);
+            }
+            let tray = tray_builder
                 .on_menu_event(move |app, event| {
                     let id = event.id().as_ref().to_string();
 
