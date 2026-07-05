@@ -62,11 +62,12 @@ module.exports = async (mqtt, config, log) => {
   async function ssh(topic, message) {
     const ssh_app = config.ssh_app || 'wt.exe ssh';
 
-    let cmd = `${ssh_app} ${message}`;
+    const cmd = `${ssh_app} ${message}`;
+    log(`< ${topic}: ${cmd}`);
 
     exec(cmd, (error, stdout, stderr) => {
-      if (stdout && !data.silent) console.log(`stdout: ${stdout}`);
-      if (stderr) console.error(`cmd: ${data.cmd}, stderr: ${stderr}`);
+      if (stdout) console.log(`stdout: ${stdout}`);
+      if (stderr) console.error(`cmd: ${cmd}, stderr: ${stderr}`);
     });
   }
 

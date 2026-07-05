@@ -25,7 +25,9 @@ function log(msg, logLevel = 'info') {
   }
 
   if (isWindows && process.env.NODE_ENV === 'production') {
-    windowsLogger[logLevel](msg);
+    // EventLogger has info/warn/error only — map debug to info
+    const method = logLevel === 'debug' ? 'info' : logLevel;
+    if (typeof windowsLogger[method] === 'function') windowsLogger[method](msg);
   }
 }
 
