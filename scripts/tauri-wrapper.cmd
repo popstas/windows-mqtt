@@ -23,9 +23,10 @@ if not defined VS_PATH (
 if not defined VS_PATH (
   if exist "C:\Program Files\Microsoft Visual Studio\2022\BuildTools" set "VS_PATH=C:\Program Files\Microsoft Visual Studio\2022\BuildTools"
 )
-if not defined VS_PATH (
-  if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools" set "VS_PATH=%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools"
-)
+rem no parens around this one: the ) in %ProgramFiles(x86)% breaks cmd block parsing
+if defined VS_PATH goto :detected
+if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools" set "VS_PATH=%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools"
+:detected
 
 if not defined VS_PATH (
   echo Error: Visual Studio not found. Install "Desktop development with C++" workload.
@@ -33,10 +34,11 @@ if not defined VS_PATH (
 )
 
 set "VCVARS=%VS_PATH%\VC\Auxiliary\Build\vcvars64.bat"
-if not exist "%VCVARS%" (
-  echo Error: vcvars64.bat not found at %VCVARS%
-  exit /b 1
-)
+rem no parens here either: expanded %VCVARS% may contain (x86)
+if exist "%VCVARS%" goto :runtauri
+echo Error: vcvars64.bat not found at "%VCVARS%"
+exit /b 1
 
+:runtauri
 call "%VCVARS%"
 npx tauri %*
