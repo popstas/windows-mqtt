@@ -37,7 +37,7 @@ The Node child is spawned with `TAURI_BRIDGE=1` env var. In this mode:
 | `message` | `topic, payload` |
 | `connected` | — |
 | `disconnected` | `reason` |
-| `action` | `action` (tray menu commands) |
+| `action` | `action` (tray menu commands; `app/shutdown` = graceful exit: Node runs cleanup() and exits) |
 
 ## Key Structs
 
@@ -62,3 +62,9 @@ The Node child is spawned with `TAURI_BRIDGE=1` env var. In this mode:
 ## Reconnect Behavior
 
 "Reconnect MQTT" tray action disconnects the Rust MQTT client. rumqttc auto-reconnects, and `MqttBridge` replays all tracked subscriptions on `ConnAck`. No Node restart needed.
+
+## Lifecycle
+
+- The Node child is spawned from `.setup()` (not from the webview). `start_mqtt_server` stays as an idempotent manual retry.
+- On Quit, Rust sends `action: app/shutdown`, waits 800ms for module `onStop` cleanup, then kills the child — no zombie node.exe.
+- If MQTT connects before the child is up, Rust replays `connected` right after spawn.

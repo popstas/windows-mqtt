@@ -9,7 +9,7 @@ Run `source "$HOME/.cargo/env"` before any cargo/rust commands.
 ## Tauri Architecture
 
 - **Tauri v2** (not v1, not Electron). Config schema: `https://schema.tauri.app/config/2`
-- Rust backend in `src-tauri/src/main.rs` — spawns a Node.js server as a child process via `tauri-plugin-shell`
+- Rust backend in `src-tauri/src/main.rs` — resolves an "app root" (dev: project root; bundled: `resource_dir/_up_`) via `resolve_app_root`, spawns the Node.js server from `setup()` as a child process via `tauri-plugin-shell`, and kills it gracefully on Quit (sends `app/shutdown` IPC action, then hard-kills after 800ms)
 - Permissions defined in `src-tauri/capabilities/default.json` (replaces v1 `allowlist`)
 - Tray icon built inside `.setup()` using `TrayIconBuilder`, with `on_menu_event` and `on_tray_icon_event` closures
 - Shell commands use `app.shell().command()` (from `ShellExt` trait), NOT `tauri::api::process::Command`
