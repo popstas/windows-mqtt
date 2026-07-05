@@ -93,12 +93,16 @@ async fn send_command(app: &tauri::AppHandle, action: &str) {
 
 // --- Read MQTT config from config.yml ---
 
-fn read_mqtt_config(resource_dir: &PathBuf) -> Result<MqttConfig, String> {
-    let config_path = resource_dir.join("config.yml");
+fn read_mqtt_config(app_root: &PathBuf) -> Result<MqttConfig, String> {
+    let config_path = app_root.join("config.yml");
 
-    let content = std::fs::read_to_string(&config_path)
-        .or_else(|_| std::fs::read_to_string(resource_dir.join("config.example.yml")))
-        .map_err(|e| format!("Failed to read config: {}", e))?;
+    let content = std::fs::read_to_string(&config_path).map_err(|e| {
+        format!(
+            "Failed to read {} ({}). Copy config.example.yml to config.yml.",
+            config_path.display(),
+            e
+        )
+    })?;
 
     let config: serde_yaml::Value =
         serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))?;
@@ -145,7 +149,7 @@ fn spawn_node_server(
     server_state: Arc<Mutex<Option<tauri_plugin_shell::process::CommandChild>>>,
     bridge: Arc<MqttBridge>,
 ) -> Result<tauri_plugin_shell::process::CommandChild, String> {
-    let resource_dir = resolve_resource_dir(app)?;
+    let resource_dir = resolve_app_root(app)?;
     let server_path = resource_dir.join("src").join("index.js");
 
     if !server_path.exists() {
@@ -311,15 +315,14 @@ async fn start_mqtt_server(
 
 #[tauri::command]
 async fn get_enabled_modules(app: tauri::AppHandle) -> Result<Vec<String>, String> {
-    let resource_dir = resolve_resource_dir(&app)?;
-    read_enabled_modules(&resource_dir)
+    let app_root = resolve_app_root(&app)?;
+    read_enabled_modules(&app_root)
 }
 
-fn read_enabled_modules(resource_dir: &PathBuf) -> Result<Vec<String>, String> {
-    let config_path = resource_dir.join("config.yml");
+fn read_enabled_modules(app_root: &PathBuf) -> Result<Vec<String>, String> {
+    let config_path = app_root.join("config.yml");
 
     let content = std::fs::read_to_string(&config_path)
-        .or_else(|_| std::fs::read_to_string(resource_dir.join("config.example.yml")))
         .map_err(|error| format!("Failed to read config: {}", error))?;
 
     let config: serde_yaml::Value = serde_yaml::from_str(&content)
@@ -348,13 +351,30 @@ fn read_enabled_modules(resource_dir: &PathBuf) -> Result<Vec<String>, String> {
     Ok(enabled)
 }
 
-fn resolve_resource_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .resource_dir()
-        .ok()
-        .or_else(|| app.path().app_data_dir().ok())
-        .or_else(|| std::env::current_dir().ok())
-        .ok_or_else(|| "Unable to resolve resource directory".to_string())
+fn find_app_root(candidates: &[PathBuf]) -> Option<PathBuf> {
+    candidates
+        .iter()
+        .find(|c| c.join("src").join("index.js").exists())
+        .cloned()
+}
+
+fn resolve_app_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    // Dev: `tauri dev` runs the exe with cwd = src-tauri, so the project
+    // root (live src/, config.yml, node_modules) is the parent dir.
+    if let Ok(cwd) = std::env::current_dir() {
+        if let Some(parent) = cwd.parent() {
+            candidates.push(parent.to_path_buf());
+        }
+        candidates.push(cwd);
+    }
+    // Bundled: Tauri v2 flattens `../` resources into `_up_/`.
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        candidates.push(resource_dir.join("_up_"));
+        candidates.push(resource_dir);
+    }
+    find_app_root(&candidates)
+        .ok_or_else(|| format!("Cannot find app root (src/index.js) in {:?}", candidates))
 }
 
 // --- Tray menu ---
@@ -586,10 +606,25 @@ fn main() {
             let app_handle = app.handle().clone();
 
             // Read MQTT config and create bridge
-            let resource_dir = resolve_resource_dir(&app_handle)
-                .expect("failed to resolve resource directory");
-            let mqtt_config =
-                read_mqtt_config(&resource_dir).expect("failed to read MQTT config");
+            let mqtt_config = resolve_app_root(&app_handle)
+                .and_then(|root| read_mqtt_config(&root))
+                .unwrap_or_else(|e| {
+                    eprintln!("MQTT config error: {e}");
+                    let _ = app_handle.emit(
+                        "server-log",
+                        LogPayload {
+                            message: format!("MQTT config error: {e}"),
+                            level: "error".into(),
+                        },
+                    );
+                    MqttConfig {
+                        host: "localhost".into(),
+                        port: 1883,
+                        username: None,
+                        password: None,
+                        client_id: "windows-mqtt-unconfigured".into(),
+                    }
+                });
 
             let (bridge, event_rx) = MqttBridge::new(&mqtt_config);
             let bridge = Arc::new(bridge);
@@ -771,4 +806,29 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::find_app_root;
+
+    #[test]
+    fn finds_first_candidate_containing_src_index_js() {
+        let base = std::env::temp_dir().join("wmqtt-approot-test");
+        let src = base.join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("index.js"), "").unwrap();
+        let missing = std::env::temp_dir().join("wmqtt-approot-missing");
+
+        let found = find_app_root(&[missing, base.clone()]);
+        assert_eq!(found, Some(base.clone()));
+
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn returns_none_when_no_candidate_matches() {
+        let missing = std::env::temp_dir().join("wmqtt-approot-none");
+        assert_eq!(find_app_root(&[missing]), None);
+    }
 }
