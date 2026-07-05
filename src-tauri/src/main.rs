@@ -54,6 +54,8 @@ struct ServerState(Arc<Mutex<Option<tauri_plugin_shell::process::CommandChild>>>
 
 struct BridgeState(Arc<MqttBridge>);
 
+struct MqttConnected(Arc<std::sync::atomic::AtomicBool>);
+
 #[derive(Clone, Serialize)]
 struct LogPayload {
     message: String,
@@ -88,6 +90,23 @@ async fn send_command(app: &tauri::AppHandle, action: &str) {
                 },
             );
         }
+    }
+}
+
+async fn shutdown_node(app: &tauri::AppHandle) {
+    let state = app.state::<ServerState>();
+    let child = state.0.lock().await.take();
+    if let Some(mut child) = child {
+        let msg = IpcToJs::Action {
+            action: "app/shutdown".to_string(),
+        };
+        if let Ok(line) = serde_json::to_string(&msg) {
+            let _ = child.write((line + "\n").as_bytes());
+        }
+        // Give module onStop handlers a moment to close watchers/sockets,
+        // then hard-kill in case the child didn't exit on its own.
+        tokio::time::sleep(Duration::from_millis(800)).await;
+        let _ = child.kill();
     }
 }
 
@@ -149,8 +168,8 @@ fn spawn_node_server(
     server_state: Arc<Mutex<Option<tauri_plugin_shell::process::CommandChild>>>,
     bridge: Arc<MqttBridge>,
 ) -> Result<tauri_plugin_shell::process::CommandChild, String> {
-    let resource_dir = resolve_app_root(app)?;
-    let server_path = resource_dir.join("src").join("index.js");
+    let app_root = resolve_app_root(app)?;
+    let server_path = app_root.join("src").join("index.js");
 
     if !server_path.exists() {
         return Err(format!(
@@ -164,7 +183,7 @@ fn spawn_node_server(
         .command("node")
         .args([server_path.to_string_lossy().to_string()])
         .env("TAURI_BRIDGE", "1")
-        .current_dir(resource_dir)
+        .current_dir(app_root)
         .spawn()
         .map_err(|error| error.to_string())?;
 
@@ -253,12 +272,14 @@ fn spawn_node_server(
 fn spawn_bridge_to_js_writer(
     app: tauri::AppHandle,
     mut event_rx: tokio::sync::mpsc::Receiver<MqttEvent>,
+    connected: Arc<std::sync::atomic::AtomicBool>,
 ) {
     tauri::async_runtime::spawn(async move {
         while let Some(event) = event_rx.recv().await {
             let ipc = match event {
                 MqttEvent::Message { topic, payload } => IpcToJs::Message { topic, payload },
                 MqttEvent::Connected => {
+                    connected.store(true, std::sync::atomic::Ordering::Relaxed);
                     let _ = app.emit(
                         "server-log",
                         LogPayload {
@@ -269,6 +290,7 @@ fn spawn_bridge_to_js_writer(
                     IpcToJs::Connected
                 }
                 MqttEvent::Disconnected(reason) => {
+                    connected.store(false, std::sync::atomic::Ordering::Relaxed);
                     let _ = app.emit(
                         "server-log",
                         LogPayload {
@@ -631,7 +653,46 @@ fn main() {
             app.manage(BridgeState(bridge.clone()));
 
             // Forward MQTT events to JS child
-            spawn_bridge_to_js_writer(app_handle.clone(), event_rx);
+            let connected = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            app.manage(MqttConnected(connected.clone()));
+            spawn_bridge_to_js_writer(app_handle.clone(), event_rx, connected.clone());
+
+            // Start the Node server immediately — do not depend on the hidden
+            // webview invoking start_mqtt_server.
+            let autostart_handle = app_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                let state = autostart_handle.state::<ServerState>();
+                let mut guard = state.0.lock().await;
+                if guard.is_none() {
+                    let bridge = autostart_handle.state::<BridgeState>().0.clone();
+                    match spawn_node_server(&autostart_handle, state.0.clone(), bridge) {
+                        Ok(mut child) => {
+                            // If MQTT connected before the child existed, the
+                            // 'connected' IPC line was dropped — replay it.
+                            let connected = autostart_handle
+                                .state::<MqttConnected>()
+                                .0
+                                .load(std::sync::atomic::Ordering::Relaxed);
+                            if connected {
+                                let line = serde_json::to_string(&IpcToJs::Connected)
+                                    .map(|s| s + "\n")
+                                    .unwrap_or_default();
+                                let _ = child.write(line.as_bytes());
+                            }
+                            *guard = Some(child);
+                        }
+                        Err(e) => {
+                            let _ = autostart_handle.emit(
+                                "server-log",
+                                LogPayload {
+                                    message: format!("Failed to start Node server: {e}"),
+                                    level: "error".into(),
+                                },
+                            );
+                        }
+                    }
+                }
+            });
 
             let (menu, hotkey_items, interval_items) =
                 build_tray_menu(&app_handle).expect("failed to build tray menu");
@@ -681,7 +742,13 @@ fn main() {
                     }
 
                     match id.as_str() {
-                        "quit" => app.exit(0),
+                        "quit" => {
+                            let app_handle = app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                shutdown_node(&app_handle).await;
+                                app_handle.exit(0);
+                            });
+                        }
                         "show" => {
                             if let Some(window) = app.get_webview_window("main") {
                                 let _ = window.show();

@@ -99,6 +99,14 @@ async function start() {
         }
       });
     }
+    // Graceful shutdown requested by Tauri before it kills the child —
+    // lets module onStop handlers close watchers/intervals/sockets.
+    stdinHandler.register({
+      'app/shutdown': async () => {
+        await cleanup();
+        process.exit(0);
+      }
+    });
     stdinHandler.init(isTauriBridge ? mqtt : undefined);
 
     subscribeToModuleTopics(modules);
