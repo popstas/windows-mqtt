@@ -5,7 +5,7 @@ set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 set "VS_PATH="
 
 if exist "%VSWHERE%" (
-  for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -property installationPath 2^>nul`) do set "VS_PATH=%%i"
+  for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * -property installationPath 2^>nul`) do set "VS_PATH=%%i"
 )
 
 if not defined VS_PATH (
