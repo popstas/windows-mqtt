@@ -1,7 +1,7 @@
-const midi = require('midi');
-const usbDetect = require('usb-detection');
+const midi = require('@julusian/midi');
+const { usb } = require('usb');
 const debounce = require('lodash.debounce');
-const robot = require('robotjs');
+const robot = require('@hurdlegroup/robotjs');
 
 const maxRangeDelay = 200; // for ranges should be at least 2 events per maxRangeDelay
 const minChanges = 3; // for avoid false positives
@@ -41,27 +41,32 @@ module.exports = async (mqtt, config, log) => {
     const isDeviceConfigured = device?.vid && device?.pid;
 
     // переподключение, когда найдено midi устройство
-    usbDetect.startMonitoring();
     if (isDeviceConfigured) {
-      const usbListener = function(usbDevice) {
-        console.log('midi: add', usbDevice);
+      const vid = parseInt(device.vid, 10);
+      const pid = parseInt(device.pid, 10);
+      const usbListener = function (usbDevice) {
+        const d = usbDevice.deviceDescriptor;
+        if (d.idVendor !== vid || d.idProduct !== pid) return;
+        console.log(`midi: add ${d.idVendor}:${d.idProduct}`);
         setTimeout(() => openMidi(input, device), 500);
       };
-      usbDetect.on(`add:${device.vid}:${device.pid}`, usbListener);
-      usbListeners.push({ event: `add:${device.vid}:${device.pid}`, handler: usbListener });
+      usb.on('attach', usbListener);
+      usbListeners.push({ event: 'attach', handler: usbListener });
       listenKeys(input, device);
     }
     else {
       console.log('! To find out vid, pid and portName, reconnect your midi device');
       // list all devices add
-      const usbListener = function(device) {
-        console.log('add', device);
+      const usbListener = function (usbDevice) {
+        const d = usbDevice.deviceDescriptor;
+        console.log(`add: vid ${d.idVendor}, pid ${d.idProduct}`);
         console.log('add to midi: {} section in config:');
-        console.log(`portName: '${device.deviceName}',`);
-        console.log(`device: { vid: ${device.vendorId}, pid: ${device.productId} },`)
+        console.log(`vid: '${d.idVendor}',`);
+        console.log(`pid: '${d.idProduct}',`);
+        console.log(`portName: see "midi ports" debug log`);
       };
-      usbDetect.on(`add`, usbListener);
-      usbListeners.push({ event: 'add', handler: usbListener });
+      usb.on('attach', usbListener);
+      usbListeners.push({ event: 'attach', handler: usbListener });
     }
   }
 
@@ -292,20 +297,14 @@ module.exports = async (mqtt, config, log) => {
       input.closePort();
     }
     midiMessageHandlers.clear();
-    
-    // Remove USB detection listeners
+
+    // Remove USB detection listeners (node-usb stops hotplug monitoring
+    // automatically when the last 'attach' listener is removed)
     for (const listener of usbListeners) {
-      usbDetect.removeListener(listener.event, listener.handler);
+      usb.removeListener(listener.event, listener.handler);
     }
     usbListeners.length = 0;
-    
-    // Stop USB monitoring if no more listeners
-    try {
-      usbDetect.stopMonitoring();
-    } catch (e) {
-      // Ignore errors if monitoring wasn't started
-    }
-    
+
     // Remove MQTT connect listeners
     for (const listener of mqttConnectListeners) {
       mqtt.removeListener('connect', listener);
