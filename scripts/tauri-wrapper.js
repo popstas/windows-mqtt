@@ -10,6 +10,18 @@ if (args.length === 0) {
 
 const projectRoot = path.resolve(__dirname, '..');
 
+// Bundling the runtime deps (`../node_modules/**/*`) lives in a build-only
+// config overlay, NOT the base tauri.conf.json. Keeping it out of the base means
+// `dev` doesn't make Tauri's build script walk the live `windows11-manager`
+// junction (a ~5.9 GB sibling repo, incl. its `.git`) — a walk that is slow and
+// intermittently fails when a background git op locks an object. The overlay is
+// applied only for `build`, after prepareDeps() has replaced the junction with a
+// pruned, VCS-free copy. Path is relative to cwd (projectRoot) to avoid spaces.
+const isBuild = args[0] === 'build';
+if (isBuild) {
+  args.push('--config', 'src-tauri/tauri.bundle.conf.json');
+}
+
 function runTauri() {
   if (process.platform === 'win32') {
     const cmdPath = path.join(projectRoot, 'scripts', 'tauri-wrapper.cmd');
@@ -26,9 +38,8 @@ function runTauri() {
   return result.status ?? 1;
 }
 
-// Only `build` bundles node_modules and needs the windows11-manager junction
-// replaced with a real copy; `dev` must keep the live link intact.
-const isBuild = args[0] === 'build';
+// `build` also needs the windows11-manager junction replaced with a real copy
+// (see prepareDeps); `dev` must keep the live link intact.
 let status = 1;
 if (isBuild) prepareDeps();
 try {

@@ -15,13 +15,6 @@
       "icons/icon.ico",
       "../assets/trayicon.png"
     ],
-    "resources": [
-      "../config.example.yml",
-      "../commands.example.yml",
-      "../src/*",
-      "../src/**/*",
-      "../node_modules/**/*"
-    ],
     "windows": {
       "wix": {
         "enableElevatedUpdateTask": false

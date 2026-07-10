@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": [
+      "../config.example.yml",
+      "../commands.example.yml",
+      "../src/*",
+      "../src/**/*",
+      "../node_modules/**/*"
+    ]
+  }
+}
