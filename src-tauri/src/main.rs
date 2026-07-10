@@ -112,12 +112,11 @@ async fn shutdown_node(app: &tauri::AppHandle) {
 
 // --- Read MQTT config from config.yml ---
 
-fn read_mqtt_config(app_root: &PathBuf) -> Result<MqttConfig, String> {
-    let config_path = app_root.join("config.yml");
-
-    let content = std::fs::read_to_string(&config_path).map_err(|e| {
+fn read_mqtt_config(config_path: &PathBuf) -> Result<MqttConfig, String> {
+    let content = std::fs::read_to_string(config_path).map_err(|e| {
         format!(
-            "Failed to read {} ({}). Copy config.example.yml to config.yml.",
+            "Failed to read {} ({}). Create it (copy config.example.yml) in the app \
+             data dir, %APPDATA%\\windows-mqtt\\config.yml, or ./data/config.yml.",
             config_path.display(),
             e
         )
@@ -178,11 +177,16 @@ fn spawn_node_server(
         ));
     }
 
+    // Resolve the config path here so the Node child reads exactly the same
+    // file the Rust side does (single source of truth, no drift).
+    let config_path = resolve_config_path(app, &app_root);
+
     let (mut rx, child) = app
         .shell()
         .command("node")
         .args([server_path.to_string_lossy().to_string()])
         .env("TAURI_BRIDGE", "1")
+        .env("CONFIG", config_path.to_string_lossy().to_string())
         .current_dir(app_root)
         .spawn()
         .map_err(|error| error.to_string())?;
@@ -338,13 +342,12 @@ async fn start_mqtt_server(
 #[tauri::command]
 async fn get_enabled_modules(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     let app_root = resolve_app_root(&app)?;
-    read_enabled_modules(&app_root)
+    let config_path = resolve_config_path(&app, &app_root);
+    read_enabled_modules(&config_path)
 }
 
-fn read_enabled_modules(app_root: &PathBuf) -> Result<Vec<String>, String> {
-    let config_path = app_root.join("config.yml");
-
-    let content = std::fs::read_to_string(&config_path)
+fn read_enabled_modules(config_path: &PathBuf) -> Result<Vec<String>, String> {
+    let content = std::fs::read_to_string(config_path)
         .map_err(|error| format!("Failed to read config: {}", error))?;
 
     let config: serde_yaml::Value = serde_yaml::from_str(&content)
@@ -401,7 +404,57 @@ fn resolve_app_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         candidates.push(resource_dir);
     }
     find_app_root(&candidates)
+        .map(|root| strip_verbatim_prefix(&root))
         .ok_or_else(|| format!("Cannot find app root (src/index.js) in {:?}", candidates))
+}
+
+// Tauri's `resource_dir()` returns a Windows verbatim path (`\\?\C:\...`).
+// Node.js's main-module resolver mishandles that prefix and dies with
+// `EISDIR: illegal operation on a directory, lstat 'C:'`, so normalize the
+// app root before deriving the script/config paths handed to the Node child.
+fn strip_verbatim_prefix(path: &PathBuf) -> PathBuf {
+    let text = path.to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{}", rest))
+    } else if let Some(rest) = text.strip_prefix(r"\\?\") {
+        PathBuf::from(rest)
+    } else {
+        path.clone()
+    }
+}
+
+// Config search priority (must stay in sync with resolveConfigPath in
+// src/config.js). First existing candidate wins; the legacy root path is the
+// fallback so error messages point somewhere sensible.
+fn config_candidates(app: &tauri::AppHandle, app_root: &PathBuf) -> Vec<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(env_path) = std::env::var("CONFIG") {
+        if !env_path.is_empty() {
+            candidates.push(PathBuf::from(env_path));
+        }
+    }
+    candidates.push(app_root.join("data").join("config.yml"));
+    // Tauri v2 config_dir: %APPDATA% (Windows), ~/Library/Application Support
+    // (macOS), $XDG_CONFIG_HOME or ~/.config (Linux).
+    if let Ok(config_dir) = app.path().config_dir() {
+        candidates.push(config_dir.join("windows-mqtt").join("config.yml"));
+    }
+    candidates.push(app_root.join("config.yml"));
+    candidates
+}
+
+fn resolve_config_path(app: &tauri::AppHandle, app_root: &PathBuf) -> PathBuf {
+    let candidates = config_candidates(app, app_root);
+    candidates
+        .iter()
+        .find(|path| path.exists())
+        .cloned()
+        .unwrap_or_else(|| {
+            candidates
+                .last()
+                .cloned()
+                .unwrap_or_else(|| app_root.join("config.yml"))
+        })
 }
 
 // --- Tray menu ---
@@ -634,7 +687,10 @@ fn main() {
 
             // Read MQTT config and create bridge
             let mqtt_config = resolve_app_root(&app_handle)
-                .and_then(|root| read_mqtt_config(&root))
+                .and_then(|root| {
+                    let config_path = resolve_config_path(&app_handle, &root);
+                    read_mqtt_config(&config_path)
+                })
                 .unwrap_or_else(|e| {
                     eprintln!("MQTT config error: {e}");
                     let _ = app_handle.emit(

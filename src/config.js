@@ -1,10 +1,10 @@
 const fs = require('fs');
 const yaml = require('js-yaml');
-const path = require('path');
+const { resolveAppFile } = require('./paths');
 
 function loadConfig() {
   try {
-    const configPath = process.env.CONFIG || path.join(__dirname, '..', 'config.yml');
+    const configPath = resolveAppFile('config.yml', 'CONFIG');
     const fileContents = fs.readFileSync(configPath, 'utf8');
     const data = yaml.load(fileContents, {});
     return data;

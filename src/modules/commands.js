@@ -2,9 +2,14 @@ const fs = require('fs');
 const path = require('path');
 const globalConfig = require('../config.js');
 const yaml = require('js-yaml');
+const { resolveUserDataFile } = require('../paths');
 
 module.exports = async (mqtt, config, log) => {
   const subscriptions = [];
+
+  // Route the configured (possibly relative) custom-commands path through the
+  // settings-folder resolver so it is found/written under %APPDATA%/windows-mqtt.
+  const customCommandsPath = resolveUserDataFile(config.custom_commands_path);
 
   function cmdsHandler(cmds) {
     return function (topic, message) {
@@ -15,8 +20,8 @@ module.exports = async (mqtt, config, log) => {
 
   function getCustomCommands() {
     try {
-      // console.log('config.custom_commands_path: ', config.custom_commands_path);
-      return yaml.load(fs.readFileSync(config.custom_commands_path, 'utf8'));
+      // console.log('custom_commands_path: ', customCommandsPath);
+      return yaml.load(fs.readFileSync(customCommandsPath, 'utf8'));
     } catch(e) {
       console.log('e.message: ', e.message);
       return [];
@@ -50,7 +55,8 @@ module.exports = async (mqtt, config, log) => {
     commands.push(cmd);
 
     // save new list
-    fs.writeFileSync(config.custom_commands_path, yaml.dump(commands));
+    fs.mkdirSync(path.dirname(customCommandsPath), { recursive: true });
+    fs.writeFileSync(customCommandsPath, yaml.dump(commands));
 
     // refresh runtime cache
     loadYamlCommands();
@@ -136,7 +142,8 @@ module.exports = async (mqtt, config, log) => {
     let commands = [];
 
     try {
-      commands = yaml.load(fs.readFileSync(__dirname + '/../../commands.yml', 'utf8'));
+      const { resolveAppFile } = require('../paths');
+      commands = yaml.load(fs.readFileSync(resolveAppFile('commands.yml'), 'utf8'));
       // console.log(commands);
     } catch (e) {
       console.log('commands.yml not found', e.message);
