@@ -762,12 +762,36 @@ fn main() {
             app.manage(HotkeyMenuItems(hotkey_items));
             app.manage(IntervalMenuItems(interval_items));
 
-            // Register default hotkey
-            if let Err(e) = register_shortcut(&app_handle, "ctrl+alt+shift+p") {
-                eprintln!("Failed to register default hotkey: {}", e);
-            }
+            // Register default hotkey. On `tauri dev` hot-reload (and any relaunch
+            // while a previous tray-resident instance is still tearing down) the old
+            // process briefly still owns the global shortcut, so a single attempt
+            // loses it for the whole session. Retry off-thread until the old owner
+            // releases it, without blocking startup.
+            let hotkey_handle = app_handle.clone();
+            std::thread::spawn(move || {
+                const SHORTCUT: &str = "ctrl+alt+shift+p";
+                const ATTEMPTS: u32 = 10;
+                for attempt in 1..=ATTEMPTS {
+                    // Clear any stale registration owned by this process first.
+                    unregister_shortcut(&hotkey_handle, SHORTCUT);
+                    match register_shortcut(&hotkey_handle, SHORTCUT) {
+                        Ok(()) => return,
+                        Err(e) if attempt == ATTEMPTS => {
+                            eprintln!(
+                                "Failed to register default hotkey after {ATTEMPTS} attempts: {e}"
+                            );
+                        }
+                        Err(_) => std::thread::sleep(Duration::from_millis(300)),
+                    }
+                }
+            });
 
-            let mut tray_builder = TrayIconBuilder::new().menu(&menu).tooltip("windows-mqtt");
+            let mut tray_builder = TrayIconBuilder::new()
+                .menu(&menu)
+                // Left click toggles the window (handled in on_tray_icon_event);
+                // the context menu is reserved for right click.
+                .show_menu_on_left_click(false)
+                .tooltip("windows-mqtt");
             if let Some(icon) = app.default_window_icon().cloned() {
                 tray_builder = tray_builder.icon(icon);
             }
@@ -905,8 +929,11 @@ fn main() {
                     }
                 })
                 .on_tray_icon_event(|tray, event| {
+                    // A physical click emits `Click` twice (Down then Up); react to
+                    // a single edge so the toggle doesn't fire twice and cancel out.
                     if let tauri::tray::TrayIconEvent::Click {
                         button: tauri::tray::MouseButton::Left,
+                        button_state: tauri::tray::MouseButtonState::Up,
                         ..
                     } = event
                     {
