@@ -73,7 +73,11 @@ class MqttBridge extends EventEmitter {
   }
 
   _send(obj) {
-    process.stdout.write(JSON.stringify(obj) + '\n');
+    try {
+      process.stdout.write(JSON.stringify(obj) + '\n');
+    } catch {
+      // Parent process is gone, pipe is broken — nothing to deliver to
+    }
   }
 }
 
