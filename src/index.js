@@ -5,16 +5,18 @@ if (process.env.TAURI_BRIDGE === '1') {
   // log the error to the same dead pipe, creating a 100% CPU error loop.
   process.stdout.on('error', () => {});
   process.stderr.on('error', () => {});
-  const stderrWrite = (...args) => {
+  // Tag each line with its level so the Rust side can label server-log
+  // events correctly (everything on stderr used to show up as [error]).
+  const stderrWrite = (level) => (...args) => {
     try {
-      process.stderr.write(args.join(' ') + '\n');
+      process.stderr.write(`[${level}] ` + args.join(' ') + '\n');
     } catch {}
   };
-  console.log = stderrWrite;
-  console.info = stderrWrite;
-  console.warn = stderrWrite;
-  console.error = stderrWrite;
-  console.debug = stderrWrite;
+  console.log = stderrWrite('info');
+  console.info = stderrWrite('info');
+  console.warn = stderrWrite('warn');
+  console.error = stderrWrite('error');
+  console.debug = stderrWrite('debug');
 }
 
 const {start} = require('./server');

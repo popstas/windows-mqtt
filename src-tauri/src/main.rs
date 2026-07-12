@@ -110,6 +110,16 @@ async fn shutdown_node(app: &tauri::AppHandle) {
     }
 }
 
+fn parse_stderr_log(line: &str) -> (&'static str, String) {
+    for level in ["debug", "info", "warn", "error"] {
+        let tag = format!("[{level}] ");
+        if let Some(rest) = line.strip_prefix(&tag) {
+            return (level, rest.to_string());
+        }
+    }
+    ("info", line.to_string())
+}
+
 // --- Read MQTT config from config.yml ---
 
 fn read_mqtt_config(config_path: &PathBuf) -> Result<MqttConfig, String> {
@@ -241,12 +251,16 @@ fn spawn_node_server(
                     }
                 }
                 CommandEvent::Stderr(buf) => {
+                    // In bridge mode the child redirects ALL console output to
+                    // stderr with a "[level] " tag; untagged lines (crash
+                    // traces, direct stderr writes) default to "info".
                     let line = String::from_utf8_lossy(&buf).to_string();
+                    let (level, message) = parse_stderr_log(&line);
                     let _ = app_handle.emit(
                         "server-log",
                         LogPayload {
-                            message: line,
-                            level: "error".into(),
+                            message,
+                            level: level.into(),
                         },
                     );
                 }
