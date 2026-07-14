@@ -1,6 +1,7 @@
 const { spawnSync } = require('child_process');
 const path = require('path');
 const { prepareDeps, restoreDeps } = require('./deps-bundle');
+const { build: buildAudioWatcher } = require('./build-audio-watcher');
 
 const args = process.argv.slice(2);
 if (args.length === 0) {
@@ -41,7 +42,11 @@ function runTauri() {
 // `build` also needs the windows11-manager junction replaced with a real copy
 // (see prepareDeps); `dev` must keep the live link intact.
 let status = 1;
-if (isBuild) prepareDeps();
+if (isBuild) {
+  // Bundle a fresh audio-watcher sidecar into ../bin (a bundle resource).
+  if (!buildAudioWatcher()) process.exit(1);
+  prepareDeps();
+}
 try {
   status = runTauri();
 } finally {

@@ -6,6 +6,7 @@
     "start": "node src/index.js",
     "start-tauri": "node scripts/tauri-wrapper.js dev",
     "build": "node scripts/tauri-wrapper.js build",
+    "build-audio-watcher": "node scripts/build-audio-watcher.js",
     "install-windows": "node scripts/service-install.js",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0",
     "uninstall-windows": "node scripts/service-uninstall.js",

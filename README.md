@@ -11,6 +11,12 @@ Publish to:
 
 - `home/room/pc/audio/volume`
 - `home/room/pc/audio/mute`
+- `home/room/pc/audio/device` - default recording device name
+- `home/room/pc/audio/device/playback` - default playback device name
+
+Device names are reported event-driven by the native `audio-watcher` sidecar
+(Core Audio, no PowerShell polling). Build it once with
+`npm run build-audio-watcher`; `npm run build` bundles it automatically.
 
 ### clipboard
 - `home/room/pc/clipboard/set` - copy text to system clipboard

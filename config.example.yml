@@ -20,6 +20,16 @@ modules:
     mute:
       set: '/mute/set'
       stat: '/mute'
+    # Default playback/recording device reporting, event-driven via the native
+    # audio-watcher sidecar (no PowerShell). Build it with
+    # `npm run build-audio-watcher`. Set `device: false` to disable.
+    device:
+      stat: '/device'                 # recording device topic
+      playbackStat: '/device/playback' # playback device topic
+      # restartSec: 5                  # respawn delay if the sidecar dies
+      # Optional exact-name relabels (device friendly name -> published value):
+      # aliases:
+      #   'Наушники': 'Наушники'
   clipboard:
     screenshotPath: 'data/screenshot.png'
     imageSearchPath: 'data/images/search'

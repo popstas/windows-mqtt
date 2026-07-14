@@ -8,3 +8,5 @@ commands.yml
 TEMP/
 *.log
 .w11m-bundle-state
+bin/
+audio-watcher/target/
