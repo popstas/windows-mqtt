@@ -1,3 +1,14 @@
+// Native crash (SIGSEGV) capture. uncaughtException CANNOT catch native addon
+// segfaults (e.g. the historical CryptoPro cpsuprt crash), so register this as
+// early as possible. Writes the stack to crash.log in the user settings dir,
+// which survives the process death. Optional — never block startup if missing.
+try {
+  const path = require('path');
+  const { appDataDir } = require('./paths');
+  const SegfaultHandler = require('segfault-handler');
+  SegfaultHandler.registerHandler(path.join(appDataDir(), 'windows-mqtt', 'crash.log'));
+} catch {}
+
 // In Tauri bridge mode, stdout is the IPC channel — redirect all console output to stderr
 if (process.env.TAURI_BRIDGE === '1') {
   // When the parent Tauri process dies, the stdio pipes break and every write
