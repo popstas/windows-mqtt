@@ -3,7 +3,7 @@ name = "audio-watcher"
 version = "0.0.1"
 authors = ["Stanislav Popov"]
 edition = "2021"
-description = "Prints the Windows default playback/recording device on change (Core Audio IMMNotificationClient)"
+description = "Prints the Windows default audio device + volume/mute on change (Core Audio, event-driven)"
 
 [[bin]]
 name = "audio-watcher"
@@ -20,6 +20,7 @@ features = [
   "implement",
   "Win32_Foundation",
   "Win32_Media_Audio",
+  "Win32_Media_Audio_Endpoints",
   "Win32_System_Com",
   "Win32_System_Com_StructuredStorage",
   "Win32_UI_Shell_PropertiesSystem",
