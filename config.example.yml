@@ -9,7 +9,6 @@ mqtt:
   user: 'your_username'
   password: 'your_password'
   base: 'home/room/pc'
-  self_kill_cmd: 'C:/path/to/pskill.exe node-windows-mqtt.exe'
 
 modules:
   audio:
