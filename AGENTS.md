@@ -17,6 +17,26 @@ Run `source "$HOME/.cargo/env"` before any cargo/rust commands.
 - Build check: `cd src-tauri && cargo check`
 - Dev run: `npm run start-tauri` or `cargo tauri dev`. The npm scripts use `scripts/tauri-wrapper.js` to ensure MSVC linker is available when running from Git Bash (vcvars64.bat is invoked before Tauri). If you see `LNK1181: cannot open input file 'kernel32.lib'`, ensure the "Desktop development with C++" workload includes the Windows 10/11 SDK.
 
+## Deployment
+
+To update the installed app with new code:
+
+1. **Build** the bundle: `npm run build`. This also builds the `audio-watcher`
+   sidecar and produces the NSIS installer at
+   `src-tauri/target/release/bundle/nsis/windows-mqtt_0.0.1_x64-setup.exe`.
+2. **Stop the running app together with its Node child** — the installer can't
+   replace files that are in use, and killing only the parent can leave an
+   orphan `node.exe`. Kill the whole tree:
+   `taskkill /IM windows-mqtt.exe /T /F` (the Node child runs
+   `...\windows-mqtt\_up_\src\index.js`).
+3. **Run the installer silently**: `<...>_x64-setup.exe /S` (NSIS `/S` flag).
+4. **Launch**: start `C:\Users\popstas\AppData\Local\windows-mqtt\windows-mqtt.exe`.
+
+For a quick module-only test without rebuilding, the installed bundle can be
+hot-patched: copy the changed file into `...\windows-mqtt\_up_\src\...` (and
+`bin\audio-watcher.exe` into `...\_up_\bin\`), then restart the app. An official
+rebuild+install overwrites such patches.
+
 ### Tauri v2 Gotchas
 - `devUrl` must be a proper URL (e.g. `http://localhost:1420`), not a relative path
 - Resource globs: use `"../src/*"` + `"../src/**/*"` instead of `"../src/**"` (v2 is stricter)
