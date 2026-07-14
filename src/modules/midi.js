@@ -23,6 +23,8 @@ module.exports = async (mqtt, config, log) => {
   const usbListeners = []; // Store USB detection listeners
   const mqttConnectListeners = []; // Store MQTT connect listeners
   const midiMessageHandlers = new Map(); // Store MIDI message handlers per input
+  const notFoundLogged = new Set(); // dedupe "Cannot find" per portName across retries
+  let retryTimer = null; // periodic re-bind for devices plugged in but not yet opened
 
   start();
 
@@ -33,6 +35,27 @@ module.exports = async (mqtt, config, log) => {
       inputs.push(input);
       initDevice(device, input);
     }
+    startRetryTimer();
+  }
+
+  // The initial openMidi() during start() runs once. If a configured device is
+  // already plugged in but its MIDI port has not been enumerated yet (e.g. right
+  // after a forced restart while the USB stack settles), that one-shot open fails
+  // and nothing retries it until the user physically replugs. Re-check every few
+  // seconds and (re)open any configured device whose port exists but isn't open.
+  function startRetryTimer() {
+    if (retryTimer) return;
+    retryTimer = setInterval(() => {
+      if (modulePaused) return;
+      for (let i = 0; i < inputs.length; i++) {
+        const device = config.devices[i];
+        const input = inputs[i];
+        if (!device?.vid || !device?.pid) continue; // only configured devices
+        if (input.isPortOpen()) continue; // already bound, leave it alone
+        openMidi(input, device);
+      }
+    }, 3000);
+    if (retryTimer.unref) retryTimer.unref();
   }
 
   function initDevice(device, input) {
@@ -97,18 +120,27 @@ module.exports = async (mqtt, config, log) => {
     }
 
     if (portNum === undefined){
-      log(`midi: Cannot find MIDI device "${device.portName}"`, 'debug');
-      return;
+      // Log once per device until it appears; the retry timer calls this every
+      // few seconds, and a genuinely-absent device (e.g. a config entry with no
+      // matching port) must not spam the log on each tick.
+      if (!notFoundLogged.has(device.portName)) {
+        notFoundLogged.add(device.portName);
+        log(`midi: Cannot find MIDI device "${device.portName}"`, 'debug');
+      }
+      return false;
     }
     // else log(`Try to using port ${portNum}`, 'debug');
+    notFoundLogged.delete(device.portName); // found again: allow a fresh log if it vanishes later
 
     try {
       input.openPort(portNum);
       log(`midi: ${input.getPortName(portNum)} inited`);
+      return true;
     }
     catch (e) {
       log('midi: Failed to open ' + portNum);
       log(e.message);
+      return false;
     }
 
     /* const output = new midi.Output();
@@ -291,6 +323,13 @@ module.exports = async (mqtt, config, log) => {
 
 
   function closeMidi() {
+    // Stop the re-bind timer (start() re-creates it via startRetryTimer)
+    if (retryTimer) {
+      clearInterval(retryTimer);
+      retryTimer = null;
+    }
+    notFoundLogged.clear();
+
     // Remove MIDI message handlers
     for (const [input, handler] of midiMessageHandlers.entries()) {
       input.removeListener('message', handler);
