@@ -334,6 +334,25 @@ fn spawn_bridge_to_js_writer(
     });
 }
 
+// If MQTT connected before the child existed, the 'connected' IPC line was
+// dropped by spawn_bridge_to_js_writer (no child to write to yet) — replay it
+// to the freshly spawned child so its modules see the connected state.
+fn replay_connected_if_needed(
+    app: &tauri::AppHandle,
+    child: &mut tauri_plugin_shell::process::CommandChild,
+) {
+    let connected = app
+        .state::<MqttConnected>()
+        .0
+        .load(std::sync::atomic::Ordering::Relaxed);
+    if connected {
+        let line = serde_json::to_string(&IpcToJs::Connected)
+            .map(|s| s + "\n")
+            .unwrap_or_default();
+        let _ = child.write(line.as_bytes());
+    }
+}
+
 // --- Tauri commands ---
 
 #[tauri::command]
@@ -347,7 +366,8 @@ async fn start_mqtt_server(
     }
 
     let bridge = app.state::<BridgeState>();
-    let child = spawn_node_server(&app, state.0.clone(), bridge.0.clone())?;
+    let mut child = spawn_node_server(&app, state.0.clone(), bridge.0.clone())?;
+    replay_connected_if_needed(&app, &mut child);
     *child_guard = Some(child);
 
     Ok(())
@@ -742,18 +762,7 @@ fn main() {
                     let bridge = autostart_handle.state::<BridgeState>().0.clone();
                     match spawn_node_server(&autostart_handle, state.0.clone(), bridge) {
                         Ok(mut child) => {
-                            // If MQTT connected before the child existed, the
-                            // 'connected' IPC line was dropped — replay it.
-                            let connected = autostart_handle
-                                .state::<MqttConnected>()
-                                .0
-                                .load(std::sync::atomic::Ordering::Relaxed);
-                            if connected {
-                                let line = serde_json::to_string(&IpcToJs::Connected)
-                                    .map(|s| s + "\n")
-                                    .unwrap_or_default();
-                                let _ = child.write(line.as_bytes());
-                            }
+                            replay_connected_if_needed(&autostart_handle, &mut child);
                             *guard = Some(child);
                         }
                         Err(e) => {

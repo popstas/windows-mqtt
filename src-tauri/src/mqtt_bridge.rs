@@ -24,13 +24,25 @@ pub struct MqttBridge {
     subscriptions: Arc<Mutex<HashSet<String>>>,
 }
 
+/// Decide the MQTT credentials to send.
+///
+/// A username alone is enough to authenticate: brokers commonly accept a
+/// username with an empty password. Requiring both (the old behaviour) silently
+/// dropped username-only credentials, so the client connected anonymously.
+fn credentials_for(config: &MqttConfig) -> Option<(&str, &str)> {
+    config
+        .username
+        .as_deref()
+        .map(|user| (user, config.password.as_deref().unwrap_or("")))
+}
+
 impl MqttBridge {
     pub fn new(config: &MqttConfig) -> (Self, mpsc::Receiver<MqttEvent>) {
         let mut opts = MqttOptions::new(&config.client_id, &config.host, config.port);
         opts.set_keep_alive(std::time::Duration::from_secs(30));
         opts.set_clean_session(false);
 
-        if let (Some(ref user), Some(ref pass)) = (&config.username, &config.password) {
+        if let Some((user, pass)) = credentials_for(config) {
             opts.set_credentials(user, pass);
         }
 
@@ -127,5 +139,51 @@ impl MqttBridge {
 
     pub async fn disconnect(&self) {
         let _ = self.client.disconnect().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config(username: Option<&str>, password: Option<&str>) -> MqttConfig {
+        MqttConfig {
+            host: "localhost".into(),
+            port: 1883,
+            username: username.map(str::to_string),
+            password: password.map(str::to_string),
+            client_id: "test".into(),
+        }
+    }
+
+    #[test]
+    fn credentials_with_username_and_password() {
+        let cfg = config(Some("user"), Some("pass"));
+        assert_eq!(credentials_for(&cfg), Some(("user", "pass")));
+    }
+
+    #[test]
+    fn credentials_with_username_only() {
+        let cfg = config(Some("user"), None);
+        assert_eq!(credentials_for(&cfg), Some(("user", "")));
+    }
+
+    #[test]
+    fn credentials_with_username_and_empty_password() {
+        let cfg = config(Some("user"), Some(""));
+        assert_eq!(credentials_for(&cfg), Some(("user", "")));
+    }
+
+    #[test]
+    fn no_credentials_without_username() {
+        let cfg = config(None, None);
+        assert_eq!(credentials_for(&cfg), None);
+    }
+
+    #[test]
+    fn no_credentials_with_password_only() {
+        // A password without a username cannot authenticate — send nothing.
+        let cfg = config(None, Some("pass"));
+        assert_eq!(credentials_for(&cfg), None);
     }
 }

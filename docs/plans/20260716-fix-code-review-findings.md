@@ -75,11 +75,11 @@
 - [x] run `npm test` — must pass before next task (6 new tests pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 6: Rust — username-only MQTT credentials and Connected replay on manual restart (findings: major-5, minor-1)
-- [ ] in `src-tauri/src/mqtt_bridge.rs:33`: set credentials when username alone is present — `if let Some(ref user) = config.username { opts.set_credentials(user, config.password.as_deref().unwrap_or("")); }`
-- [ ] in `src-tauri/src/main.rs`: extract the Connected-replay block from the setup() autostart closure (lines ~744-756) into a helper and call it from `start_mqtt_server` too, so a manual "Start server" after MQTT is already connected replays the `connected` IPC line to the fresh child
-- [ ] add a Rust unit test for the credentials logic if structure allows (or verify via `cargo check` + code review note)
-- [ ] run `source "$HOME/.cargo/env" && cd src-tauri && cargo check` — must pass
-- [ ] run `npm test` — must pass before next task
+- [x] in `src-tauri/src/mqtt_bridge.rs:33`: set credentials when username alone is present (extracted to pure `credentials_for(config)` helper returning `Some((user, pass))` with empty-string password fallback; `MqttBridge::new` now uses it)
+- [x] in `src-tauri/src/main.rs`: extract the Connected-replay block from the setup() autostart closure into a `replay_connected_if_needed(app, child)` helper and call it from `start_mqtt_server` too, so a manual "Start server" after MQTT is already connected replays the `connected` IPC line to the fresh child
+- [x] add a Rust unit test for the credentials logic (5 tests in `mqtt_bridge.rs` `#[cfg(test)]` mod: user+pass, user-only→empty pass, user+empty pass, no username→None, password-only→None)
+- [x] run `source "$HOME/.cargo/env" && cd src-tauri && cargo check` — must pass (passes; Rust tests pass via `TAURI_CONFIG='{"bundle":{"resources":[]}}' cargo test` — the tauri build script's resource-copy step otherwise walks node_modules/.git on Linux where the audio-watcher `bin/` sidecar is absent)
+- [x] run `npm test` — must pass before next task (27 pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 7: Shared Windows-safe log rotation for helpers.js and monitor.js (findings: major-7, minor-6)
 - [ ] add `rotateFile(file, maxBytes, onWarn)` to a shared module (e.g. `src/paths.js` or new `src/log-rotate.js`): statSync size check, `rmSync(file + '.1', { force: true })` before `renameSync`, distinguish ENOENT (silent) from other errors (report via `onWarn`)
