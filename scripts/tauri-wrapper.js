@@ -47,9 +47,13 @@ let status = 1;
 if (isBuild) {
   // Bundle a fresh audio-watcher sidecar into ../bin (a bundle resource).
   if (!buildAudioWatcher()) process.exit(1);
-  prepareDeps();
 }
 try {
+  // prepareDeps() is destructive (replaces the windows11-manager junction with
+  // a real copy) and can throw mid-copy, so it lives inside the try to guarantee
+  // restoreDeps() runs in `finally` and puts the dev junction back. restoreDeps
+  // is a no-op unless prepareDeps got far enough to record its state file.
+  if (isBuild) prepareDeps();
   status = runTauri();
 } finally {
   if (isBuild) restoreDeps();

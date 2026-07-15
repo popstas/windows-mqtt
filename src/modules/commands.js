@@ -58,7 +58,10 @@ module.exports = async (mqtt, config, log) => {
   function getCustomCommands() {
     try {
       // console.log('custom_commands_path: ', customCommandsPath);
-      return yaml.load(fs.readFileSync(customCommandsPath, 'utf8'));
+      // Coerce to an array: yaml.load returns undefined for an empty file and a
+      // non-array for malformed content, and callers spread the result.
+      const loaded = yaml.load(fs.readFileSync(customCommandsPath, 'utf8'));
+      return Array.isArray(loaded) ? loaded : [];
     } catch(e) {
       console.log('e.message: ', e.message);
       return [];
