@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { performance } = require('perf_hooks');
-const { appDataDir } = require('./paths');
+const { settingsDir } = require('./paths');
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -13,7 +13,7 @@ function startMonitor({ mqtt, log, config }) {
   if (opts.enabled === false) return { stop: () => {} };
 
   const intervalMs = (opts.interval || 60) * 1000;
-  const filePath = opts.path || path.join(appDataDir(), 'windows-mqtt', 'sysstats.jsonl');
+  const filePath = opts.path || settingsDir('sysstats.jsonl');
   const topic = opts.topic || `${config.mqtt.base}/sysstats`;
   const mode = process.env.TAURI_BRIDGE === '1' ? 'bridge' : 'standalone';
 

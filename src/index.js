@@ -3,10 +3,14 @@
 // early as possible. Writes the stack to crash.log in the user settings dir,
 // which survives the process death. Optional — never block startup if missing.
 try {
-  const path = require('path');
-  const { appDataDir } = require('./paths');
+  const fs = require('fs');
+  const { settingsDir } = require('./paths');
   const SegfaultHandler = require('segfault-handler');
-  SegfaultHandler.registerHandler(path.join(appDataDir(), 'windows-mqtt', 'crash.log'));
+  const crashLog = settingsDir('crash.log');
+  // A fresh bundled install has no settings dir yet; without it segfault-handler
+  // silently fails to write crash.log. Create it before registering.
+  fs.mkdirSync(settingsDir(), { recursive: true });
+  SegfaultHandler.registerHandler(crashLog);
 } catch {}
 
 // In Tauri bridge mode, stdout is the IPC channel — redirect all console output to stderr

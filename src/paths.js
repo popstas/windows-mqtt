@@ -19,6 +19,13 @@ function appDataDir() {
   return process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
 }
 
+// Settings dir for user files: <appDataDir>/windows-mqtt[/<...segments>].
+// Single source of truth for the per-user, writable app dir so the
+// 'windows-mqtt' segment is never hand-built at call sites.
+function settingsDir(...segments) {
+  return path.join(appDataDir(), 'windows-mqtt', ...segments);
+}
+
 // Resolve a user file (config.yml, commands.yml, ...) by priority. Must stay in
 // sync with resolve_config_path in src-tauri/src/main.rs. First existing wins;
 // the legacy app-root path is returned as the fallback so error messages point
@@ -31,7 +38,7 @@ function resolveAppFile(name, envVar) {
   if (envVar && process.env[envVar]) return process.env[envVar];
   const candidates = [
     path.join(appRoot, 'data', name),
-    path.join(appDataDir(), 'windows-mqtt', name),
+    settingsDir(name),
     path.join(appRoot, name),
   ];
   for (const candidate of candidates) {
@@ -50,14 +57,14 @@ function resolveUserDataFile(configPath) {
   const name = path.basename(configPath);
   const candidates = [
     path.join(appRoot, 'data', name),
-    path.join(appDataDir(), 'windows-mqtt', name),
+    settingsDir(name),
     path.join(appRoot, configPath),
     path.join(appRoot, name),
   ];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) return candidate;
   }
-  return path.join(appDataDir(), 'windows-mqtt', name);
+  return settingsDir(name);
 }
 
-module.exports = { appRoot, appDataDir, resolveAppFile, resolveUserDataFile };
+module.exports = { appRoot, appDataDir, settingsDir, resolveAppFile, resolveUserDataFile };

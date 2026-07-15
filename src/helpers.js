@@ -3,7 +3,7 @@ const { load: loadModule } = require('./modules');
 const os = require("os");
 const fs = require("fs");
 const path = require("path");
-const { appDataDir, resolveUserDataFile } = require("./paths");
+const { settingsDir, resolveUserDataFile } = require("./paths");
 const isWindows = os.platform() === 'win32';
 
 let windowsLogger;
@@ -24,7 +24,7 @@ function getLogFilePath() {
     const configured = config.log && config.log.path;
     logFilePath = configured
       ? resolveUserDataFile(configured)
-      : path.join(appDataDir(), 'windows-mqtt', 'windows-mqtt.log');
+      : settingsDir('windows-mqtt.log');
     try {
       fs.mkdirSync(path.dirname(logFilePath), { recursive: true });
     } catch {
