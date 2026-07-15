@@ -82,12 +82,12 @@
 - [x] run `npm test` — must pass before next task (27 pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 7: Shared Windows-safe log rotation for helpers.js and monitor.js (findings: major-7, minor-6)
-- [ ] add `rotateFile(file, maxBytes, onWarn)` to a shared module (e.g. `src/paths.js` or new `src/log-rotate.js`): statSync size check, `rmSync(file + '.1', { force: true })` before `renameSync`, distinguish ENOENT (silent) from other errors (report via `onWarn`)
-- [ ] use it in `src/helpers.js` `writeToLogFile` (replace inline rotation)
-- [ ] use it in `src/monitor.js` `rotateIfNeeded` — rotation failures must produce a warn log instead of being swallowed, so sysstats.jsonl cannot grow unbounded silently
-- [ ] in `src/helpers.js` `log()`: compute `Date.now()` once and derive both console and file timestamps from the same instant
-- [ ] write tests for rotateFile: rotates past cap, replaces existing .1, silent on missing file, calls onWarn on rename failure (simulate via read-only dir or mock)
-- [ ] run `npm test` — must pass before next task
+- [x] add `rotateFile(file, maxBytes, onWarn)` to a shared module (new `src/log-rotate.js`): statSync size check, `rmSync(file + '.1', { force: true })` before `renameSync`, distinguish ENOENT (silent) from other errors (report via `onWarn`)
+- [x] use it in `src/helpers.js` `writeToLogFile` (replace inline rotation; onWarn goes to `console.warn` to avoid recursing back into `log`)
+- [x] use it in `src/monitor.js` `writeStats`/`rotateIfNeeded` — rotation failures now produce a warn log instead of being swallowed, so sysstats.jsonl cannot grow unbounded silently
+- [x] in `src/helpers.js` `log()`: compute the local ISO instant once and derive both console and file timestamps from it (no second `Date.now()`)
+- [x] write tests for rotateFile: rotates past cap, replaces existing .1, silent on missing file, calls onWarn on rename failure (blocker dir), no-throw when onWarn omitted (`test/log-rotate.test.js`, 6 tests)
+- [x] run `npm test` — must pass before next task (6 new tests pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 8: MIDI — restore portName discovery, dedupe open-failure log (findings: major-9, minor-2)
 - [ ] in `src/modules/midi.js` unconfigured-device attach listener: enumerate MIDI input ports right there (new `midi.Input()`, `getPortCount`/`getPortName`) and print the port list at info level (`console.log`) so the user can copy `portName:` without enabling debug

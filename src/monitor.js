@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { performance } = require('perf_hooks');
 const { settingsDir } = require('./paths');
+const { rotateFile } = require('./log-rotate');
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -66,21 +67,12 @@ function startMonitor({ mqtt, log, config }) {
 
   function writeStats(stats) {
     try {
-      rotateIfNeeded();
+      // Report rotation failures via the logger so sysstats.jsonl cannot grow
+      // unbounded silently when a rename is blocked.
+      rotateFile(filePath, MAX_FILE_BYTES, (m) => log(`monitor: ${m}`, 'warn'));
       fs.appendFileSync(filePath, JSON.stringify(stats) + '\n');
     } catch (e) {
       log(`monitor: write failed: ${e.message}`, 'warn');
-    }
-  }
-
-  function rotateIfNeeded() {
-    try {
-      const { size } = fs.statSync(filePath);
-      if (size > MAX_FILE_BYTES) {
-        fs.renameSync(filePath, filePath + '.1');
-      }
-    } catch {
-      // File doesn't exist yet
     }
   }
 

@@ -4,6 +4,7 @@ const os = require("os");
 const fs = require("fs");
 const path = require("path");
 const { settingsDir, resolveUserDataFile } = require("./paths");
+const { rotateFile } = require("./log-rotate");
 const isWindows = os.platform() === 'win32';
 
 let windowsLogger;
@@ -49,17 +50,9 @@ function writeToLogFile(line) {
   const file = getLogFilePath();
   if (!file) return;
   try {
-    // Rotate to a single .1 backup once the log grows past the cap. Windows
-    // renameSync fails if the target exists, so drop the old backup first.
-    try {
-      const { size } = fs.statSync(file);
-      if (size > LOG_MAX_BYTES) {
-        try { fs.rmSync(file + '.1', { force: true }); } catch {}
-        fs.renameSync(file, file + '.1');
-      }
-    } catch {
-      // File doesn't exist yet — nothing to rotate.
-    }
+    // Rotate to a single .1 backup once the log grows past the cap. Report
+    // failures via console.warn (not log()) to avoid recursing back here.
+    rotateFile(file, LOG_MAX_BYTES, (m) => console.warn(m));
     fs.appendFileSync(file, line + '\n');
   } catch {
     // Never let logging crash the process.
@@ -73,14 +66,15 @@ function log(msg, logLevel = 'info') {
 
   if (messageLogLevel >= currentLogLevel) {
     const tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
-    const d = new Date(Date.now() - tzoffset).
-    toISOString().
+    // Compute the instant once so console and file timestamps can't drift.
+    const local = new Date(Date.now() - tzoffset).toISOString();
+    const d = local.
     replace(/T/, ' ').      // replace T with a space
       replace(/\..+/, '')     // delete the dot and everything after
 
     console[logLevel](`${d} ${msg}`);
     // Full timestamp with ms + level tag on disk for crash forensics.
-    const fileTs = new Date(Date.now() - tzoffset).toISOString().replace(/T/, ' ').replace(/Z$/, '');
+    const fileTs = local.replace(/T/, ' ').replace(/Z$/, '');
     writeToLogFile(`${fileTs} [${logLevel}] ${stringifyMsg(msg)}`);
   }
 
