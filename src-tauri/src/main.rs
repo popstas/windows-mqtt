@@ -474,6 +474,10 @@ fn config_candidates(app: &tauri::AppHandle, app_root: &PathBuf) -> Vec<PathBuf>
         candidates.push(config_dir.join("windows-mqtt").join("config.yml"));
     }
     candidates.push(app_root.join("config.yml"));
+    // Bundled example config: last resort so a fresh install (no user config.yml)
+    // still yields a readable config instead of erroring. Keeps the Rust side in
+    // sync with the JS config-loader fallback (src/config-loader.js).
+    candidates.push(app_root.join("config.example.yml"));
     candidates
 }
 

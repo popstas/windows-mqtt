@@ -86,7 +86,10 @@ module.exports = async (mqtt, config, log) => {
         }
       ]
     }
-    if (res = msg.match(/сайт (.*)/g)) {
+    // Non-global match so res[1] captures the phrase after "сайт " (the /g flag
+    // returns full matches only, leaving res[1] undefined → q=undefined).
+    const res = msg.match(/сайт (.*)/);
+    if (res) {
       cmd.cmds = [ { mqtt: 'home/room/pc/site', payload: `https://www.google.com/search?btnI=1&q=${res[1]}`} ];
     }
     commands.push(cmd);

@@ -3,6 +3,15 @@ debug: true
 logLevel: debug
 log:
   path: 'data/windows-mqtt.log'
+  # enabled: false   # set to disable on-disk logging (console output stays)
+# Periodic process-health sampling (memory, CPU, event-loop utilization, handle
+# counts). Appends JSONL to <settings-dir>/windows-mqtt/sysstats.jsonl (rotated
+# at 10 MB) and publishes JSON to <mqtt.base>/sysstats. Enabled by default.
+monitor:
+  # enabled: false   # disable sampling entirely
+  interval: 60       # sampling period in seconds (default 60)
+  # topic: 'home/room/pc/sysstats'   # override the publish topic
+  # path: 'data/sysstats.jsonl'      # override the on-disk stats file
 mqtt:
   host: 'mqtt.example.com'
   port: 1883

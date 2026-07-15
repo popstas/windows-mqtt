@@ -65,6 +65,7 @@ function shouldScheduleRestart({ stopping, timerActive }) {
 async function onVolumeSet(topic, message) {
   console.log(`< volume/set: ${message}`);
   const volume = parseInt(message);
+  if (Number.isNaN(volume)) return; // ignore non-numeric payloads (would set/publish NaN)
   const value = `${volume}`;
   lastVolume = value;
   await loudness.setVolume(volume);
@@ -181,6 +182,10 @@ module.exports = async (mqttClient, config, log) => {
     lastVolume = undefined;
     lastMute = undefined;
     if (!shouldScheduleRestart({ stopping: watcherStopping, timerActive: watcherRestartTimer !== null })) return;
+    // A present-but-failing binary would otherwise loop forever with no
+    // volume/mute reporting. Poll via loudness during the retry window; a fresh
+    // watcher that spawns successfully stops this again (startWatcher).
+    startFallbackPolling();
     log(`audio-watcher ${reason}, restarting in ${watcherRestartMs}ms`, 'warn');
     watcherRestartTimer = setTimeout(() => {
       watcherRestartTimer = null;
