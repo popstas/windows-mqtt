@@ -67,12 +67,12 @@
 - [x] run `npm test` — must pass before next task (6 new tests pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 5: Audio — volume/mute must survive missing watcher and device:false; recover from spawn error (findings: major-4, major-6)
-- [ ] in `src/modules/audio.js`: decouple gating — `config.device === false` / `deviceCfg.enabled === false` must only disable device-topic publishing (`publishDevice`), NOT the watcher spawn that feeds volume/mute
-- [ ] when `resolveWatcherBin()` returns nothing: log a warn that explicitly mentions volume/mute reporting is affected, and start a fallback `loudness`-based polling loop (package already in dependencies) publishing volume/mute on the existing topics at `config.interval || 5` seconds; stop polling if a watcher later starts
-- [ ] fix `watcher.on('error')`: clear `watcher`, reset last* state, and schedule `startWatcher` via `watcherRestartTimer` (respect `watcherStopping`; guard against double-restart when both 'error' and 'exit' fire)
-- [ ] update `config.example.yml` audio section: document `interval` as the fallback polling period (or remove it if fallback is rejected during implementation — keep config and code in sync)
-- [ ] write tests for the gating logic and error-handler restart scheduling (extract pure helpers if needed to avoid spawning binaries in tests)
-- [ ] run `npm test` — must pass before next task
+- [x] in `src/modules/audio.js`: decouple gating — `config.device === false` / `deviceCfg.enabled === false` must only disable device-topic publishing (`publishDevice`), NOT the watcher spawn that feeds volume/mute (`startWatcher` no longer early-returns on `deviceDisabled`; `publishDevice` guards on it instead; gating extracted to pure `isDeviceDisabled`)
+- [x] when `resolveWatcherBin()` returns nothing: log a warn that explicitly mentions volume/mute reporting is affected, and start a fallback `loudness`-based polling loop (package already in dependencies) publishing volume/mute on the existing topics at `config.interval || 5` seconds; stop polling if a watcher later starts (added `startFallbackPolling`/`stopFallbackPolling`; watcher start calls `stopFallbackPolling`; timer unref'd)
+- [x] fix `watcher.on('error')`: clear `watcher`, reset last* state, and schedule `startWatcher` via `watcherRestartTimer` (respect `watcherStopping`; guard against double-restart when both 'error' and 'exit' fire) (shared `scheduleRestart` used by both handlers; guard extracted to pure `shouldScheduleRestart`)
+- [x] update `config.example.yml` audio section: document `interval` as the fallback polling period (kept and documented)
+- [x] write tests for the gating logic and error-handler restart scheduling (extract pure helpers if needed to avoid spawning binaries in tests) (`test/audio.test.js`, 6 tests covering `isDeviceDisabled`, `parseWatcherLine`, `fallbackIntervalMs`, `shouldScheduleRestart`)
+- [x] run `npm test` — must pass before next task (6 new tests pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 6: Rust — username-only MQTT credentials and Connected replay on manual restart (findings: major-5, minor-1)
 - [ ] in `src-tauri/src/mqtt_bridge.rs:33`: set credentials when username alone is present — `if let Some(ref user) = config.username { opts.set_credentials(user, config.password.as_deref().unwrap_or("")); }`

@@ -12,7 +12,8 @@ mqtt:
 
 modules:
   audio:
-    interval: 5
+    interval: 5   # loudness fallback polling period (seconds), used only when
+                  # the audio-watcher sidecar binary is missing
     volume:
       set: '/volume/set'
       stat: '/volume'

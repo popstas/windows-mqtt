@@ -1,7 +1,8 @@
-// `loudness` is used only on the write path (volume/mute set via MQTT command).
-// Reads are event-driven through the native audio-watcher sidecar, because
-// loudness has no Windows API and shells out an .exe on every getVolume/getMuted
-// call — a per-tick process spawn we deliberately removed.
+// `loudness` is used on the write path (volume/mute set via MQTT command) and
+// as a fallback read path (polling) when the native audio-watcher sidecar is
+// missing. When the watcher is available, reads are event-driven through it,
+// because loudness has no Windows event API and shells out an .exe on every
+// getVolume/getMuted call — a per-tick process spawn we avoid when we can.
 const loudness = require('loudness');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -25,6 +26,40 @@ function resolveWatcherBin() {
     if (fs.existsSync(candidate)) return candidate;
   }
   return null;
+}
+
+// --- Pure, testable helpers (no spawning / no closures over module state) ---
+
+// Whether the default-device topics should be silenced. This gates ONLY
+// device-topic publishing — volume/mute reporting must keep flowing regardless.
+function isDeviceDisabled(config) {
+  if (!config) return false;
+  const deviceCfg = (config.device && typeof config.device === 'object') ? config.device : {};
+  return config.device === false || deviceCfg.enabled === false;
+}
+
+// Parse a single `kind\tvalue` line from the audio-watcher. Returns
+// { kind, value } or null when the line is malformed / has an empty value.
+function parseWatcherLine(line) {
+  const idx = line.indexOf('\t');
+  if (idx === -1) return null;
+  const kind = line.slice(0, idx);
+  const value = line.slice(idx + 1).trim();
+  if (!value) return null;
+  return { kind, value };
+}
+
+// Fallback loudness polling period in ms (config.interval seconds, default 5).
+function fallbackIntervalMs(config) {
+  const seconds = (config && config.interval) || 5;
+  return seconds * 1000;
+}
+
+// Guard for the watcher restart timer: never schedule while stopping, and never
+// double-schedule when a timer is already pending (both 'error' and 'exit' can
+// fire for one failed spawn).
+function shouldScheduleRestart({ stopping, timerActive }) {
+  return !stopping && !timerActive;
 }
 
 async function onVolumeSet(topic, message) {
@@ -56,7 +91,9 @@ module.exports = async (mqttClient, config, log) => {
 
   // --- Default audio device reporting (event-driven, via audio-watcher) ---
   const deviceCfg = (config.device && typeof config.device === 'object') ? config.device : {};
-  const deviceDisabled = config.device === false || deviceCfg.enabled === false;
+  // Gates ONLY device-topic publishing; the watcher still runs so volume/mute
+  // keep flowing even when device reporting is turned off.
+  const deviceDisabled = isDeviceDisabled(config);
   const recordingStatTopic = config.base + (deviceCfg.stat || '/device');
   const playbackStatTopic = config.base + (deviceCfg.playbackStat || '/device/playback');
   const deviceAliases = deviceCfg.aliases || {};
@@ -67,8 +104,10 @@ module.exports = async (mqttClient, config, log) => {
   let watcherRestartTimer = null;
   let watcherStdoutBuf = '';
   let lastPlayback, lastRecording;
+  let fallbackTimer = null;
 
   function publishDevice(kind, rawName) {
+    if (deviceDisabled) return;
     const name = deviceAliases[rawName] || rawName;
     if (kind === 'playback') {
       if (name === lastPlayback) return;
@@ -98,22 +137,68 @@ module.exports = async (mqttClient, config, log) => {
   }
 
   function onWatcherLine(line) {
-    const idx = line.indexOf('\t');
-    if (idx === -1) return;
-    const kind = line.slice(0, idx);
-    const value = line.slice(idx + 1).trim();
-    if (!value) return;
+    const parsed = parseWatcherLine(line);
+    if (!parsed) return;
+    const { kind, value } = parsed;
     if (kind === 'playback' || kind === 'recording') publishDevice(kind, value);
     else if (kind === 'volume' || kind === 'mute') publishVolumeMute(kind, value);
   }
 
+  // --- loudness fallback polling (used only when the watcher binary is absent) ---
+  function startFallbackPolling() {
+    if (fallbackTimer) return;
+    const intervalMs = fallbackIntervalMs(config);
+    const poll = async () => {
+      try {
+        const vol = await loudness.getVolume();
+        publishVolumeMute('volume', `${Math.round(vol)}`);
+      } catch (e) {
+        log(`audio fallback volume poll error: ${e.message}`, 'error');
+      }
+      try {
+        const muted = await loudness.getMuted();
+        publishVolumeMute('mute', muted ? '1' : '0');
+      } catch (e) {
+        log(`audio fallback mute poll error: ${e.message}`, 'error');
+      }
+    };
+    poll();
+    fallbackTimer = setInterval(poll, intervalMs);
+    if (fallbackTimer.unref) fallbackTimer.unref();
+  }
+
+  function stopFallbackPolling() {
+    if (!fallbackTimer) return;
+    clearInterval(fallbackTimer);
+    fallbackTimer = null;
+  }
+
+  function scheduleRestart(reason) {
+    watcher = null;
+    // Force a re-publish of the current state once a fresh watcher starts.
+    lastPlayback = undefined;
+    lastRecording = undefined;
+    lastVolume = undefined;
+    lastMute = undefined;
+    if (!shouldScheduleRestart({ stopping: watcherStopping, timerActive: watcherRestartTimer !== null })) return;
+    log(`audio-watcher ${reason}, restarting in ${watcherRestartMs}ms`, 'warn');
+    watcherRestartTimer = setTimeout(() => {
+      watcherRestartTimer = null;
+      startWatcher();
+    }, watcherRestartMs);
+    if (watcherRestartTimer.unref) watcherRestartTimer.unref();
+  }
+
   function startWatcher() {
-    if (deviceDisabled || watcher) return;
+    if (watcher) return;
     const bin = resolveWatcherBin();
     if (!bin) {
-      log('audio-watcher binary not found, device reporting disabled (run `npm run build-audio-watcher`)', 'warn');
+      log('audio-watcher binary not found — volume/mute reporting falls back to loudness polling and device reporting is unavailable (run `npm run build-audio-watcher` for event-driven reporting)', 'warn');
+      startFallbackPolling();
       return;
     }
+    // A real watcher supersedes the polling fallback.
+    stopFallbackPolling();
     watcherStopping = false;
     watcherStdoutBuf = '';
     watcher = spawn(bin, [], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -137,18 +222,11 @@ module.exports = async (mqttClient, config, log) => {
 
     watcher.on('error', (err) => {
       log(`audio-watcher spawn error: ${err.message}`, 'error');
+      scheduleRestart('spawn error');
     });
 
     watcher.on('exit', (code) => {
-      watcher = null;
-      // Force a re-publish of the current state once a fresh watcher starts.
-      lastPlayback = undefined;
-      lastRecording = undefined;
-      lastVolume = undefined;
-      lastMute = undefined;
-      if (watcherStopping) return;
-      log(`audio-watcher exited (code ${code}), restarting in ${watcherRestartMs}ms`, 'warn');
-      watcherRestartTimer = setTimeout(startWatcher, watcherRestartMs);
+      scheduleRestart(`exited (code ${code})`);
     });
   }
 
@@ -158,6 +236,7 @@ module.exports = async (mqttClient, config, log) => {
       clearTimeout(watcherRestartTimer);
       watcherRestartTimer = null;
     }
+    stopFallbackPolling();
     if (!watcher) return;
     const child = watcher;
     watcher = null;
@@ -191,3 +270,9 @@ module.exports = async (mqttClient, config, log) => {
     onStart,
   }
 }
+
+module.exports.isDeviceDisabled = isDeviceDisabled;
+module.exports.parseWatcherLine = parseWatcherLine;
+module.exports.fallbackIntervalMs = fallbackIntervalMs;
+module.exports.shouldScheduleRestart = shouldScheduleRestart;
+module.exports.resolveWatcherBin = resolveWatcherBin;
