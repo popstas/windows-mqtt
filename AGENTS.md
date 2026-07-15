@@ -40,6 +40,13 @@ rebuild+install overwrites such patches.
 ### Tauri v2 Gotchas
 - `devUrl` must be a proper URL (e.g. `http://localhost:1420`), not a relative path
 - Resource globs: use `"../src/*"` + `"../src/**/*"` instead of `"../src/**"` (v2 is stricter)
+- The full `bundle.resources` list (Node source + `node_modules`) lives in the base
+  `tauri.conf.json`, so a plain `npx tauri build` (without `scripts/tauri-wrapper.js`)
+  still produces a complete bundle. `dev` runs overlay `tauri.dev.conf.json` whose
+  empty `resources` array REPLACES the base list (Tauri v2 merges configs per JSON
+  Merge Patch / RFC 7396 — arrays are replaced, not appended), keeping dev out of the
+  slow `node_modules`/`windows11-manager` junction walk. `scripts/tauri-wrapper.js`
+  injects `--config src-tauri/tauri.dev.conf.json` only for `dev`.
 - `emit_all()` → `emit()`, `get_window()` → `get_webview_window()`, `path_resolver()` → `path()`
 - `on_window_event` closure signature is `|window, event|` (not `|event|`)
 

@@ -51,13 +51,13 @@
 - [x] run `npm test` — must pass before next task (6 new tests pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 3: Make direct `tauri build` produce a complete bundle (finding: major-2)
-- [ ] move the `resources` list from `src-tauri/tauri.bundle.conf.json` into the base `src-tauri/tauri.conf.json` `bundle` section (correct-by-default builds)
-- [ ] create `src-tauri/tauri.dev.conf.json` overlay with `"bundle": { "resources": [] }` and make `scripts/tauri-wrapper.js` pass `--config src-tauri/tauri.dev.conf.json` for `dev` runs (Tauri v2 merge replaces arrays), keeping dev out of the node_modules resource walk
-- [ ] delete `src-tauri/tauri.bundle.conf.json` and remove the `--config` injection for `build` from `scripts/tauri-wrapper.js`; verify no other references remain (grep repo)
-- [ ] ⚠️ verify with Tauri v2 docs/behavior that overlay arrays replace (not append) — if they append instead, invert: keep resources in an overlay for build but make `resolve_app_root` failure message in `src-tauri/src/main.rs` explain that the bundle was built without the wrapper
-- [ ] update `AGENTS.md`/`CLAUDE.md` deployment section if the build command semantics changed
-- [ ] write/adjust test or script check if feasible (e.g. a test asserting tauri.conf.json contains the resource globs); otherwise verify via `node scripts/prepare-frontend.js && npx tauri build --help`-level dry check and document in plan
-- [ ] run `npm test` — must pass before next task
+- [x] move the `resources` list from `src-tauri/tauri.bundle.conf.json` into the base `src-tauri/tauri.conf.json` `bundle` section (correct-by-default builds)
+- [x] create `src-tauri/tauri.dev.conf.json` overlay with `"bundle": { "resources": [] }` and make `scripts/tauri-wrapper.js` pass `--config src-tauri/tauri.dev.conf.json` for `dev` runs (Tauri v2 merge replaces arrays), keeping dev out of the node_modules resource walk
+- [x] delete `src-tauri/tauri.bundle.conf.json` and remove the `--config` injection for `build` from `scripts/tauri-wrapper.js`; verify no other references remain (grep repo — only the new regression test references the old filename)
+- [x] ⚠️ verify with Tauri v2 docs/behavior that overlay arrays replace (not append) — confirmed via official docs (https://v2.tauri.app/develop/configuration-files/): Tauri v2 merges configs per JSON Merge Patch (RFC 7396), which treats arrays as atomic — the overlay's empty `resources` array REPLACES the base list. Inversion fallback not needed.
+- [x] update `AGENTS.md`/`CLAUDE.md` deployment section if the build command semantics changed (added a Tauri v2 Gotcha explaining base-config resources + dev overlay; CLAUDE.md is a symlink to AGENTS.md)
+- [x] write/adjust test or script check if feasible (e.g. a test asserting tauri.conf.json contains the resource globs); otherwise verify via `node scripts/prepare-frontend.js && npx tauri build --help`-level dry check and document in plan (added `test/tauri-config.test.js`: base config has the globs, dev overlay empties them, legacy file removed)
+- [x] run `npm test` — must pass before next task (3 new tests pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 4: Script-type commands write temp files to a writable dir; dedupe requires (findings: major-3, minor-5)
 - [ ] in `src/modules/commands.js` `runCmds`: write `cmd.script` temp files to `os.tmpdir()` (e.g. `path.join(os.tmpdir(), 'windows-mqtt-script-...')`) instead of `path.resolve('data/...')` — cwd in a bundled app is read-only and has no `data/`

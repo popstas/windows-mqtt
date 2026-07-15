@@ -11,6 +11,14 @@
   },
   "bundle": {
     "active": true,
+    "resources": [
+      "../config.example.yml",
+      "../commands.example.yml",
+      "../bin/*",
+      "../src/*",
+      "../src/**/*",
+      "../node_modules/**/*"
+    ],
     "icon": [
       "icons/icon.ico",
       "../assets/trayicon.png"
