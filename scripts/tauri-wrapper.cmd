@@ -41,4 +41,12 @@ exit /b 1
 
 :runtauri
 call "%VCVARS%"
+rem Build the audio-watcher sidecar here (only for `build`) so its `cargo build`
+rem inherits the vcvars MSVC environment. Running it earlier from Node (Git Bash)
+rem misses kernel32.lib and hits the same LNK1181 failure as Tauri would.
+rem No parens block: a ) inside expanded paths breaks cmd parsing (see above).
+if /I not "%~1"=="build" goto :tauri
+node "%~dp0build-audio-watcher.js"
+if errorlevel 1 exit /b 1
+:tauri
 npx tauri %*

@@ -41,12 +41,30 @@ function parseCommandsFile(filePath) {
   }
 }
 
+// Write the compiled runtime commands cache. The parent dir may not exist in a
+// bundled app (cwd is the read-only payload with no `data/`), so create it
+// first and tolerate a write failure instead of throwing during module init.
+function writeCommandsCache(cachePath, commands) {
+  if (!cachePath) return;
+  try {
+    fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+    fs.writeFileSync(cachePath, yaml.dump(commands));
+  } catch (e) {
+    console.log('failed to write commands cache:', e.message);
+  }
+}
+
 module.exports = async (mqtt, config, log) => {
   const subscriptions = [];
 
   // Route the configured (possibly relative) custom-commands path through the
   // settings-folder resolver so it is found/written under %APPDATA%/windows-mqtt.
   const customCommandsPath = resolveUserDataFile(config.custom_commands_path);
+
+  // Same for the compiled-commands cache: the configured default is the
+  // relative `data/windows-mqtt-commands.yml`, which has no writable `data/`
+  // dir in a bundled install — resolve it to the writable settings dir.
+  const cachePath = resolveUserDataFile(config.cache_path);
 
   function cmdsHandler(cmds) {
     return function (topic, message) {
@@ -181,10 +199,8 @@ module.exports = async (mqtt, config, log) => {
 
     commands.push(...getCustomCommands());
 
-    // save runtime cache compiled yml
-    if (config.cache_path) {
-      fs.writeFileSync(config.cache_path, yaml.dump(commands));
-    }
+    // save runtime cache compiled yml (writable settings dir, dir auto-created)
+    writeCommandsCache(cachePath, commands);
 
     return commands;
   }
@@ -208,3 +224,4 @@ module.exports = async (mqtt, config, log) => {
 module.exports.writeScriptFile = writeScriptFile;
 module.exports.removeScriptFile = removeScriptFile;
 module.exports.parseCommandsFile = parseCommandsFile;
+module.exports.writeCommandsCache = writeCommandsCache;

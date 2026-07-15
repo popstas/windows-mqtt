@@ -4,8 +4,15 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
+const yaml = require('js-yaml');
+
 const commands = require('../src/modules/commands');
-const { writeScriptFile, removeScriptFile, parseCommandsFile } = commands;
+const {
+  writeScriptFile,
+  removeScriptFile,
+  parseCommandsFile,
+  writeCommandsCache,
+} = commands;
 
 test('writeScriptFile writes the script under os.tmpdir()', () => {
   const filePath = writeScriptFile('echo hello');
@@ -62,4 +69,23 @@ test('parseCommandsFile returns [] for an empty document', () => {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('writeCommandsCache creates a missing parent dir and writes the yaml', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wm-cache-'));
+  try {
+    // Nested, not-yet-existing dir mirrors a fresh install with no `data/`.
+    const cachePath = path.join(dir, 'nested', 'windows-mqtt-commands.yml');
+    const list = [{ name: 'test', mqtt_topic: 'actions/test' }];
+    writeCommandsCache(cachePath, list);
+    assert.ok(fs.existsSync(cachePath), 'cache file should be written');
+    assert.deepStrictEqual(yaml.load(fs.readFileSync(cachePath, 'utf8')), list);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('writeCommandsCache is a no-op without a path and never throws', () => {
+  assert.doesNotThrow(() => writeCommandsCache(undefined, [{ a: 1 }]));
+  assert.doesNotThrow(() => writeCommandsCache('', [{ a: 1 }]));
 });

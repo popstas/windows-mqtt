@@ -44,8 +44,11 @@ function runTauri() {
 // `build` also needs the windows11-manager junction replaced with a real copy
 // (see prepareDeps); `dev` must keep the live link intact.
 let status = 1;
-if (isBuild) {
+if (isBuild && process.platform !== 'win32') {
   // Bundle a fresh audio-watcher sidecar into ../bin (a bundle resource).
+  // On Windows this cargo build needs the MSVC toolchain (kernel32.lib etc.) on
+  // PATH, which only tauri-wrapper.cmd provides via vcvars64.bat — so there the
+  // sidecar is built *inside* the .cmd, after vcvars, rather than here.
   if (!buildAudioWatcher()) process.exit(1);
 }
 try {

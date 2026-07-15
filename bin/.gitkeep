@@ -1,0 +1,3 @@
+# This placeholder keeps the bin/ resource glob (../bin/*) in
+# src-tauri/tauri.conf.json resolvable on a clean checkout, before
+# `npm run build` produces bin/audio-watcher.exe. Do not remove.
