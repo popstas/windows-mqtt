@@ -43,12 +43,12 @@
 - [x] run `npm test` — must pass before next task (native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable; new paths tests pass)
 
 ### Task 2: Config fallback to config.example.yml, never-null config (finding: major-1)
-- [ ] in `src/config.js` `loadConfig()`: if reading `resolveAppFile('config.yml', 'CONFIG')` fails, fall back to `resolveAppFile('config.example.yml')` (bundled via tauri.bundle.conf.json) and log a clear warning to stderr that the example config is in use and where to put a real one
-- [ ] if the example also fails, return a minimal safe default object (`{ mqtt: {}, modules: {} }`) instead of `null` so `helpers.log()` never dereferences null
-- [ ] in `src/paths.js` `resolveAppFile`: when `envVar` is set but the file at `process.env[envVar]` does not exist, fall through to the candidate list instead of returning a nonexistent path (Rust passes CONFIG unconditionally)
-- [ ] write tests for loadConfig fallback chain (missing config.yml → example; both missing → safe default, no throw) using temp dirs and CONFIG env var
-- [ ] write tests for resolveAppFile env-var fallthrough (existing env path wins; nonexistent env path falls through)
-- [ ] run `npm test` — must pass before next task
+- [x] in `src/config.js` `loadConfig()`: if reading `resolveAppFile('config.yml', 'CONFIG')` fails, fall back to `resolveAppFile('config.example.yml')` (bundled via tauri.bundle.conf.json) and log a clear warning to stderr that the example config is in use and where to put a real one (logic extracted to new `src/config-loader.js` for testability with injectable resolver; `src/config.js` now delegates to it)
+- [x] if the example also fails, return a minimal safe default object (`{ mqtt: {}, modules: {} }`) instead of `null` so `helpers.log()` never dereferences null (also maps empty yaml document to the safe-default shape)
+- [x] in `src/paths.js` `resolveAppFile`: when `envVar` is set but the file at `process.env[envVar]` does not exist, fall through to the candidate list instead of returning a nonexistent path (Rust passes CONFIG unconditionally)
+- [x] write tests for loadConfig fallback chain (missing config.yml → example; both missing → safe default, no throw) using temp dirs and CONFIG env var
+- [x] write tests for resolveAppFile env-var fallthrough (existing env path wins; nonexistent env path falls through)
+- [x] run `npm test` — must pass before next task (6 new tests pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 3: Make direct `tauri build` produce a complete bundle (finding: major-2)
 - [ ] move the `resources` list from `src-tauri/tauri.bundle.conf.json` into the base `src-tauri/tauri.conf.json` `bundle` section (correct-by-default builds)

@@ -30,12 +30,17 @@ function settingsDir(...segments) {
 // sync with resolve_config_path in src-tauri/src/main.rs. First existing wins;
 // the legacy app-root path is returned as the fallback so error messages point
 // somewhere sensible.
-//   1. process.env[envVar] (if envVar given and set) - explicit override
+//   1. process.env[envVar] (if envVar given and the file exists) - override
 //   2. <app_root>/data/<name>                        - local/dev
 //   3. <settings-dir>/windows-mqtt/<name>            - per-user OS settings
 //   4. <app_root>/<name>                             - legacy fallback
 function resolveAppFile(name, envVar) {
-  if (envVar && process.env[envVar]) return process.env[envVar];
+  // Honor an explicit env override only when it points at a file that exists.
+  // Rust passes CONFIG unconditionally, so a stale/missing path must not win
+  // over the candidate list below (e.g. fresh install with no user config).
+  if (envVar && process.env[envVar] && fs.existsSync(process.env[envVar])) {
+    return process.env[envVar];
+  }
   const candidates = [
     path.join(appRoot, 'data', name),
     settingsDir(name),
