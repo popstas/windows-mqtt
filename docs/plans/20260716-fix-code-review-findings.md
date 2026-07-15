@@ -60,11 +60,11 @@
 - [x] run `npm test` — must pass before next task (3 new tests pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 4: Script-type commands write temp files to a writable dir; dedupe requires (findings: major-3, minor-5)
-- [ ] in `src/modules/commands.js` `runCmds`: write `cmd.script` temp files to `os.tmpdir()` (e.g. `path.join(os.tmpdir(), 'windows-mqtt-script-...')`) instead of `path.resolve('data/...')` — cwd in a bundled app is read-only and has no `data/`
-- [ ] guard the delayed `fs.unlinkSync` with try/catch so a missing file doesn't throw in the timer
-- [ ] remove duplicated in-function `require('js-yaml')`, `require('fs')`, `require('../paths')` inside `loadYamlCommands()` — use the top-level imports (add `resolveAppFile` to the top-level paths import)
-- [ ] write tests: script temp file is created under os.tmpdir() and cleaned up; loadYamlCommands still parses a commands.yml from a temp dir
-- [ ] run `npm test` — must pass before next task
+- [x] in `src/modules/commands.js` `runCmds`: write `cmd.script` temp files to `os.tmpdir()` (e.g. `path.join(os.tmpdir(), 'windows-mqtt-script-...')`) instead of `path.resolve('data/...')` — cwd in a bundled app is read-only and has no `data/` (extracted to top-level `writeScriptFile` helper; cleanup timer unref'd)
+- [x] guard the delayed `fs.unlinkSync` with try/catch so a missing file doesn't throw in the timer (extracted to `removeScriptFile` helper)
+- [x] remove duplicated in-function `require('js-yaml')`, `require('fs')`, `require('../paths')` inside `loadYamlCommands()` — use the top-level imports (add `resolveAppFile` to the top-level paths import; parsing extracted to top-level `parseCommandsFile`)
+- [x] write tests: script temp file is created under os.tmpdir() and cleaned up; loadYamlCommands still parses a commands.yml from a temp dir (`test/commands.test.js`, 6 tests)
+- [x] run `npm test` — must pass before next task (6 new tests pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 5: Audio — volume/mute must survive missing watcher and device:false; recover from spawn error (findings: major-4, major-6)
 - [ ] in `src/modules/audio.js`: decouple gating — `config.device === false` / `deviceCfg.enabled === false` must only disable device-topic publishing (`publishDevice`), NOT the watcher spawn that feeds volume/mute

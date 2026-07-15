@@ -1,8 +1,45 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const globalConfig = require('../config.js');
 const yaml = require('js-yaml');
-const { resolveUserDataFile } = require('../paths');
+const { resolveUserDataFile, resolveAppFile } = require('../paths');
+
+// Write a script-type command body to a temp file in the OS temp dir (always
+// writable, unlike a bundled app's read-only cwd) and schedule cleanup. Returns
+// the temp file path. The cleanup timer is unref'd so it never keeps the
+// process (or a test run) alive.
+function writeScriptFile(script) {
+  const filePath = path.join(
+    os.tmpdir(),
+    `windows-mqtt-script-${Date.now()}-${Math.round(Math.random() * 1000)}`
+  );
+  fs.writeFileSync(filePath, script);
+  const timer = setTimeout(() => removeScriptFile(filePath), 5000);
+  if (timer.unref) timer.unref();
+  return filePath;
+}
+
+// Delete a script temp file, tolerating an already-removed file so the delayed
+// timer never throws.
+function removeScriptFile(filePath) {
+  try {
+    fs.unlinkSync(filePath);
+  } catch (e) {
+    // File may already be gone; nothing to clean up.
+  }
+}
+
+// Read and parse a commands.yml-style file, returning [] on any read/parse
+// error (or an empty document) so callers can always spread the result.
+function parseCommandsFile(filePath) {
+  try {
+    return yaml.load(fs.readFileSync(filePath, 'utf8')) || [];
+  } catch (e) {
+    console.log('commands.yml not found', e.message);
+    return [];
+  }
+}
 
 module.exports = async (mqtt, config, log) => {
   const subscriptions = [];
@@ -91,10 +128,7 @@ module.exports = async (mqtt, config, log) => {
         }
 
         if (cmd.script) {
-          const filePath = path.resolve(`data/windows-mqtt-script-${Date.now()}-${Math.random() * 1000}`);
-          fs.writeFileSync(filePath, cmd.script);
-          args.push(filePath);
-          setTimeout(() => {fs.unlinkSync(filePath)}, 5000);
+          args.push(writeScriptFile(cmd.script));
         }
 
         const message = JSON.stringify({
@@ -137,18 +171,8 @@ module.exports = async (mqtt, config, log) => {
   }
 
   function loadYamlCommands() {
-    const yaml = require('js-yaml');
-    const fs = require('fs');
-    let commands = [];
+    const commands = parseCommandsFile(resolveAppFile('commands.yml'));
 
-    try {
-      const { resolveAppFile } = require('../paths');
-      commands = yaml.load(fs.readFileSync(resolveAppFile('commands.yml'), 'utf8'));
-      // console.log(commands);
-    } catch (e) {
-      console.log('commands.yml not found', e.message);
-    }
-    
     commands.push(...getCustomCommands());
 
     // save runtime cache compiled yml
@@ -174,3 +198,7 @@ module.exports = async (mqtt, config, log) => {
 
   return { subscriptions };
 }
+
+module.exports.writeScriptFile = writeScriptFile;
+module.exports.removeScriptFile = removeScriptFile;
+module.exports.parseCommandsFile = parseCommandsFile;
