@@ -2,6 +2,7 @@ const midi = require('@julusian/midi');
 const { usb } = require('usb');
 const debounce = require('lodash.debounce');
 const robot = require('@hurdlegroup/robotjs');
+const { listPortNames, formatMidiPortHelp, shouldLogOnce } = require('./midi-utils');
 
 const maxRangeDelay = 200; // for ranges should be at least 2 events per maxRangeDelay
 const minChanges = 3; // for avoid false positives
@@ -24,6 +25,7 @@ module.exports = async (mqtt, config, log) => {
   const mqttConnectListeners = []; // Store MQTT connect listeners
   const midiMessageHandlers = new Map(); // Store MIDI message handlers per input
   const notFoundLogged = new Set(); // dedupe "Cannot find" per portName across retries
+  const openFailedLogged = new Set(); // dedupe "Failed to open" per port across retries
   let retryTimer = null; // periodic re-bind for devices plugged in but not yet opened
 
   start();
@@ -86,7 +88,14 @@ module.exports = async (mqtt, config, log) => {
         console.log('add to midi: {} section in config:');
         console.log(`vid: '${d.idVendor}',`);
         console.log(`pid: '${d.idProduct}',`);
-        console.log(`portName: see "midi ports" debug log`);
+        // Enumerate MIDI input ports and print the portName candidates at info
+        // level so the user can copy one straight into config.yml without
+        // enabling debug. The MIDI port appears a moment after USB attach, so
+        // give the stack a short settle window before probing.
+        setTimeout(() => {
+          const portNames = listPortNames(new midi.Input());
+          for (const line of formatMidiPortHelp(portNames)) console.log(line);
+        }, 500);
       };
       usb.on('attach', usbListener);
       usbListeners.push({ event: 'attach', handler: usbListener });
@@ -135,11 +144,17 @@ module.exports = async (mqtt, config, log) => {
     try {
       input.openPort(portNum);
       log(`midi: ${input.getPortName(portNum)} inited`);
+      openFailedLogged.delete(device.portName ?? portNum); // opened: allow a fresh log if it fails later
       return true;
     }
     catch (e) {
-      log('midi: Failed to open ' + portNum);
-      log(e.message);
+      // The retry timer calls openMidi every few seconds; log an open failure
+      // once per port until it succeeds so a persistently-failing device
+      // (e.g. held open by another app) doesn't spam the log on each tick.
+      if (shouldLogOnce(openFailedLogged, device.portName ?? portNum)) {
+        log('midi: Failed to open ' + portNum);
+        log(e.message);
+      }
       return false;
     }
 
@@ -329,6 +344,7 @@ module.exports = async (mqtt, config, log) => {
       retryTimer = null;
     }
     notFoundLogged.clear();
+    openFailedLogged.clear();
 
     // Remove MIDI message handlers
     for (const [input, handler] of midiMessageHandlers.entries()) {

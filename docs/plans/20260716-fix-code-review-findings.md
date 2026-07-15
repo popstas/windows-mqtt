@@ -90,11 +90,11 @@
 - [x] run `npm test` — must pass before next task (6 new tests pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 8: MIDI — restore portName discovery, dedupe open-failure log (findings: major-9, minor-2)
-- [ ] in `src/modules/midi.js` unconfigured-device attach listener: enumerate MIDI input ports right there (new `midi.Input()`, `getPortCount`/`getPortName`) and print the port list at info level (`console.log`) so the user can copy `portName:` without enabling debug
-- [ ] keep the vid/pid snippet output; print `portName: '<name>'` candidates from the enumerated list
-- [ ] dedupe the retry-loop failure log in `openMidi` catch branch: add an `openFailedLogged` set keyed by portNum/portName (mirroring `notFoundLogged`), clear on successful open
-- [ ] write tests for the dedupe logic if extractable; otherwise cover the port-list formatting helper
-- [ ] run `npm test` — must pass before next task
+- [x] in `src/modules/midi.js` unconfigured-device attach listener: enumerate MIDI input ports right there (new `midi.Input()`, `getPortCount`/`getPortName`) and print the port list at info level (`console.log`) so the user can copy `portName:` without enabling debug (pure `listPortNames`/`formatMidiPortHelp` extracted to `src/modules/midi-utils.js` so tests avoid native deps)
+- [x] keep the vid/pid snippet output; print `portName: '<name>'` candidates from the enumerated list
+- [x] dedupe the retry-loop failure log in `openMidi` catch branch: add an `openFailedLogged` set keyed by portNum/portName (mirroring `notFoundLogged`), clear on successful open (via pure `shouldLogOnce` helper)
+- [x] write tests for the dedupe logic if extractable; otherwise cover the port-list formatting helper (`test/midi.test.js`, 6 tests)
+- [x] run `npm test` — must pass before next task (6 new tests pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 9: Multi-line stderr keeps its log level (finding: major-10)
 - [ ] in `src/index.js` `stderrWrite`: split the joined message on `'\n'` and prefix EVERY line with `[${level}] ` before writing, so multi-line error stacks arrive in Rust `parse_stderr_log` with the correct level on each physical line
