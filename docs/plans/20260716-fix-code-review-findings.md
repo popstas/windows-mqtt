@@ -109,11 +109,11 @@
 - [x] run `npm test` — must pass before next task (4 new tests pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 11: Verify acceptance criteria
-- [ ] re-check every finding from the review list against the code (all 17 addressed)
-- [ ] run full `npm test`
-- [ ] run `source "$HOME/.cargo/env" && cd src-tauri && cargo check`
-- [ ] grep for leftovers: `tauri.bundle.conf.json` references, `data/windows-mqtt-script`, `appDataDir(), 'windows-mqtt'` duplicates
-- [ ] verify config.example.yml matches actual config keys (audio.interval semantics)
+- [x] re-check every finding from the review list against the code (all 17 addressed across Tasks 1-10, all marked complete)
+- [x] run full `npm test` (47 pass, 1 skip; only failure is pre-existing native-modules.test.js — robotjs native dep unavailable on Linux)
+- [x] run `source "$HOME/.cargo/env" && cd src-tauri && cargo check` (passes with `TAURI_CONFIG='{"bundle":{"resources":[]}}'` to skip the node_modules resource walk on Linux)
+- [x] grep for leftovers: no live `tauri.bundle.conf.json` refs (only docs/plan + the regression test asserting removal); `windows-mqtt-script` is the `os.tmpdir()` temp name; `appDataDir` in src is only the single canonical `settingsDir(...)` join
+- [x] verify config.example.yml matches actual config keys (audio.interval documented as loudness fallback polling period, used only when the audio-watcher sidecar is missing)
 
 ### Task 12: [Final] Update documentation
 - [ ] update `README.md` if audio fallback/polling behavior or build commands changed
