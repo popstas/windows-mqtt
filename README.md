@@ -18,6 +18,12 @@ Device names are reported event-driven by the native `audio-watcher` sidecar
 (Core Audio, no PowerShell polling). Build it once with
 `npm run build-audio-watcher`; `npm run build` bundles it automatically.
 
+If the `audio-watcher` binary is missing, volume/mute still report via a
+`loudness`-based polling fallback (a warning is logged, and device-name topics
+are unavailable until the sidecar is present). The poll period is
+`modules.audio.interval` seconds (default `5`). Setting `modules.audio.device`
+to `false` only disables the device-name topics; volume/mute keep working.
+
 ### clipboard
 - `home/room/pc/clipboard/set` - copy text to system clipboard
 

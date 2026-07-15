@@ -67,4 +67,4 @@ The Node child is spawned with `TAURI_BRIDGE=1` env var. In this mode:
 
 - The Node child is spawned from `.setup()` (not from the webview). `start_mqtt_server` stays as an idempotent manual retry.
 - On Quit, Rust sends `action: app/shutdown`, waits 800ms for module `onStop` cleanup, then kills the child — no zombie node.exe.
-- If MQTT connects before the child is up, Rust replays `connected` right after spawn.
+- If MQTT is already connected when a child is (re)spawned, Rust replays `connected` right after spawn via the shared `replay_connected_if_needed(app, child)` helper. It runs from BOTH the `.setup()` autostart path and `start_mqtt_server`, so a manual "Start server" after MQTT is connected still delivers `connected` to the fresh child (otherwise the replay was dropped by `spawn_bridge_to_js_writer` because no child existed yet).

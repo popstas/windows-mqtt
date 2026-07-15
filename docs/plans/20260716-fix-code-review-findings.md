@@ -116,9 +116,9 @@
 - [x] verify config.example.yml matches actual config keys (audio.interval documented as loudness fallback polling period, used only when the audio-watcher sidecar is missing)
 
 ### Task 12: [Final] Update documentation
-- [ ] update `README.md` if audio fallback/polling behavior or build commands changed
-- [ ] update `AGENTS.md`/`CLAUDE.md` deployment/build notes if wrapper config flags changed
-- [ ] update `src-tauri/CLAUDE.md` if IPC/lifecycle notes changed (Connected replay in start_mqtt_server)
+- [x] update `README.md` if audio fallback/polling behavior or build commands changed (documented loudness-based volume/mute polling fallback when the audio-watcher sidecar is missing, `modules.audio.interval` poll period default 5s, and that `device: false` only silences device-name topics)
+- [x] update `AGENTS.md`/`CLAUDE.md` deployment/build notes if wrapper config flags changed (already current — Task 3 added the Tauri v2 Gotcha covering base-config resources + `tauri.dev.conf.json` overlay and the `--config` dev-only injection; CLAUDE.md is a symlink to AGENTS.md; no further wrapper-flag changes to document)
+- [x] update `src-tauri/CLAUDE.md` if IPC/lifecycle notes changed (Connected replay in start_mqtt_server) (documented shared `replay_connected_if_needed(app, child)` helper firing from both the setup() autostart path and `start_mqtt_server` so a manual restart replays `connected`)
 
 ## Technical Details
 - **Config fallback order** (JS, must stay in sync with Rust `resolve_config_path`): `$CONFIG` (if exists) → `<app_root>/data/config.yml` → `<settings>/windows-mqtt/config.yml` → `<app_root>/config.yml` → `config.example.yml` (same resolution) → safe default `{}`-shaped object.
