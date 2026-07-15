@@ -47,8 +47,8 @@ function startMonitor({ mqtt, log, config }) {
       external_mb: round1(mem.external / 1048576),
       cpu_pct: elapsedMs > 500 ? round1((cpuMs / elapsedMs) * 100) : null,
       elu_pct: round1(performance.eventLoopUtilization(elu, lastElu).utilization * 100),
-      handles: process._getActiveHandles().length,
-      requests: process._getActiveRequests().length,
+      handles: safeCount(process, '_getActiveHandles'),
+      requests: safeCount(process, '_getActiveRequests'),
     };
     lastCpu = cpu;
     lastElu = elu;
@@ -91,4 +91,11 @@ function round1(n) {
   return Math.round(n * 10) / 10;
 }
 
-module.exports = { startMonitor };
+// Count entries from the deprecated private handle/request introspection APIs,
+// falling back to null if a future Node.js removes them so sampling never throws.
+function safeCount(obj, method) {
+  const fn = obj[method];
+  return typeof fn === 'function' ? fn.call(obj).length : null;
+}
+
+module.exports = { startMonitor, safeCount };

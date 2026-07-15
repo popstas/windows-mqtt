@@ -103,10 +103,10 @@
 - [x] run `npm test` — must pass before next task (4 new tests pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 10: Remaining minors — dead override, deprecated API guard (findings: minor-4, minor-7)
-- [ ] delete the redundant `removeListener(event, fn)` override in `src/mqtt-bridge.js:71-73` (pure super delegation)
-- [ ] in `src/monitor.js` `sample()`: guard `process._getActiveHandles()`/`process._getActiveRequests()` with `typeof ... === 'function'` (fall back to `null` in stats) so a future Node removal of these private APIs cannot break sampling
-- [ ] write/extend test for stats shape with guards applied
-- [ ] run `npm test` — must pass before next task
+- [x] delete the redundant `removeListener(event, fn)` override in `src/mqtt-bridge.js:71-73` (pure super delegation)
+- [x] in `src/monitor.js` `sample()`: guard `process._getActiveHandles()`/`process._getActiveRequests()` with `typeof ... === 'function'` (fall back to `null` in stats) so a future Node removal of these private APIs cannot break sampling (extracted pure `safeCount(obj, method)` helper, exported for tests)
+- [x] write/extend test for stats shape with guards applied (`test/monitor.test.js`, 4 tests: counts entries, null on missing method, null on non-function, receiver preserved for real process APIs)
+- [x] run `npm test` — must pass before next task (4 new tests pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 11: Verify acceptance criteria
 - [ ] re-check every finding from the review list against the code (all 17 addressed)

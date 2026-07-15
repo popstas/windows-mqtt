@@ -68,10 +68,6 @@ class MqttBridge extends EventEmitter {
     // No-op: Rust owns the MQTT connection
   }
 
-  removeListener(event, fn) {
-    return super.removeListener(event, fn);
-  }
-
   _send(obj) {
     try {
       process.stdout.write(JSON.stringify(obj) + '\n');
