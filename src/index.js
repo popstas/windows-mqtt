@@ -22,9 +22,11 @@ if (process.env.TAURI_BRIDGE === '1') {
   process.stderr.on('error', () => {});
   // Tag each line with its level so the Rust side can label server-log
   // events correctly (everything on stderr used to show up as [error]).
+  // Multi-line stacks must tag EVERY line — Rust strips one prefix per line.
+  const { tagLines } = require('./log-tag');
   const stderrWrite = (level) => (...args) => {
     try {
-      process.stderr.write(`[${level}] ` + args.join(' ') + '\n');
+      process.stderr.write(tagLines(level, args.join(' ')) + '\n');
     } catch {}
   };
   console.log = stderrWrite('info');

@@ -97,10 +97,10 @@
 - [x] run `npm test` — must pass before next task (6 new tests pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 9: Multi-line stderr keeps its log level (finding: major-10)
-- [ ] in `src/index.js` `stderrWrite`: split the joined message on `'\n'` and prefix EVERY line with `[${level}] ` before writing, so multi-line error stacks arrive in Rust `parse_stderr_log` with the correct level on each physical line
-- [ ] extract the line-tagging function to a small testable helper (e.g. in `src/helpers.js` or inline export) — `src/index.js` must stay side-effect-minimal
-- [ ] write tests: single-line tagging, multi-line stack tagging (every line tagged), empty message
-- [ ] run `npm test` — must pass before next task
+- [x] in `src/index.js` `stderrWrite`: split the joined message on `'\n'` and prefix EVERY line with `[${level}] ` before writing, so multi-line error stacks arrive in Rust `parse_stderr_log` with the correct level on each physical line (delegates to `tagLines`)
+- [x] extract the line-tagging function to a small testable helper (new side-effect-free `src/log-tag.js` exporting `tagLines`) — `src/index.js` stays side-effect-minimal (no config/module load pulled in)
+- [x] write tests: single-line tagging, multi-line stack tagging (every line tagged), empty message (`test/log-tag.test.js`, 4 tests incl. non-string coercion)
+- [x] run `npm test` — must pass before next task (4 new tests pass; native-modules.test.js fails pre-existing on Linux: robotjs native dep unavailable)
 
 ### Task 10: Remaining minors — dead override, deprecated API guard (findings: minor-4, minor-7)
 - [ ] delete the redundant `removeListener(event, fn)` override in `src/mqtt-bridge.js:71-73` (pure super delegation)
