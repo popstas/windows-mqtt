@@ -1,6 +1,6 @@
 {
   "name": "windows-mqtt",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "Windows MQTT",
   "scripts": {
     "start": "node src/index.js",
