@@ -21,10 +21,13 @@ Run `source "$HOME/.cargo/env"` before any cargo/rust commands.
 
 ## Deployment
 
-To update the installed app with new code:
+`npm run deploy-local` does the whole cycle below (build installer → kill →
+silent install → relaunch). The individual steps:
 
-1. **Build** the bundle: `npm run build`. This also builds the `audio-watcher`
-   sidecar and produces the NSIS installer at
+1. **Build** the installer: `npm run build-installer` (`npm run build` with
+   `--bundles nsis`; plain `npm run build` also builds every other bundle type).
+   Either also builds the `audio-watcher` sidecar and produces the NSIS
+   installer at
    `src-tauri/target/release/bundle/nsis/windows-mqtt_0.0.1_x64-setup.exe`.
 2. **Stop the running app together with its Node child** — the installer can't
    replace files that are in use, and killing only the parent can leave an
@@ -33,6 +36,9 @@ To update the installed app with new code:
    `...\windows-mqtt\_up_\src\index.js`).
 3. **Run the installer silently**: `<...>_x64-setup.exe /S` (NSIS `/S` flag).
 4. **Launch**: start `C:\Users\popstas\AppData\Local\windows-mqtt\windows-mqtt.exe`.
+
+Steps 2-4 are what `npm run install-local` (`scripts/install-local.js`)
+automates against the newest `*-setup.exe` in the nsis bundle dir.
 
 For a quick module-only test without rebuilding, the installed bundle can be
 hot-patched: copy the changed file into `...\windows-mqtt\_up_\src\...` (and

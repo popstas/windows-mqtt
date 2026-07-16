@@ -110,6 +110,45 @@ async fn shutdown_node(app: &tauri::AppHandle) {
     }
 }
 
+// Windows reports a native crash as an NTSTATUS exit code, not a signal, and
+// nothing in-process can catch it: an access violation in a native addon kills
+// node outright (verified — Node's process.report writes nothing for it, and
+// the `segfault-handler` that used to cover this was removed because its
+// unfiltered vectored exception handler reported every benign
+// DBG_PRINTEXCEPTION_C as a fake SIGSEGV). The child's exit code is therefore
+// the only remaining signal that a native crash happened at all, so surface it
+// as an error rather than a bland "stopped with code -1073741819".
+fn native_crash_reason(status: u32) -> Option<&'static str> {
+    match status {
+        0xC0000005 => Some("access violation"),
+        0xC000001D => Some("illegal instruction"),
+        0xC0000025 => Some("noncontinuable exception"),
+        0xC00000FD => Some("stack overflow"),
+        0xC0000374 => Some("heap corruption"),
+        0xC0000409 => Some("stack buffer overrun"),
+        _ => None,
+    }
+}
+
+fn describe_child_exit(code: i32) -> (&'static str, String) {
+    // Exit codes arrive as i32; NTSTATUS values are conventionally written
+    // unsigned (0xC0000005 == -1073741819i32), so compare in u32 space.
+    let status = code as u32;
+    if let Some(reason) = native_crash_reason(status) {
+        return (
+            "error",
+            format!(
+                "Node server crashed in native code: {} (0x{:08X})",
+                reason, status
+            ),
+        );
+    }
+    if code == 0 {
+        return ("info", "Node server stopped".to_string());
+    }
+    ("warn", format!("Node server stopped with code {}", code))
+}
+
 fn parse_stderr_log(line: &str) -> (&'static str, String) {
     for level in ["debug", "info", "warn", "error"] {
         let tag = format!("[{level}] ");
@@ -265,12 +304,15 @@ fn spawn_node_server(
                     );
                 }
                 CommandEvent::Terminated(payload) => {
-                    let exit = payload.code.unwrap_or_default();
+                    let (level, message) = match payload.code {
+                        Some(code) => describe_child_exit(code),
+                        None => ("warn", "Node server stopped (no exit code)".to_string()),
+                    };
                     let _ = app_handle.emit(
                         "server-log",
                         LogPayload {
-                            message: format!("Node server stopped with code {}", exit),
-                            level: "warn".into(),
+                            message,
+                            level: level.into(),
                         },
                     );
                     let mut guard = server_state.lock().await;
@@ -989,7 +1031,40 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::find_app_root;
+    use super::{describe_child_exit, find_app_root};
+
+    #[test]
+    fn reports_access_violation_as_a_native_crash_error() {
+        // 0xC0000005 arrives as a negative i32 from the OS.
+        let (level, message) = describe_child_exit(-1073741819);
+        assert_eq!(level, "error");
+        assert!(message.contains("crashed in native code"), "{}", message);
+        assert!(message.contains("access violation"), "{}", message);
+        assert!(message.contains("0xC0000005"), "{}", message);
+    }
+
+    #[test]
+    fn reports_stack_overflow_and_heap_corruption_as_native_crashes() {
+        for code in [0xC00000FDu32, 0xC0000374, 0xC0000409] {
+            let (level, message) = describe_child_exit(code as i32);
+            assert_eq!(level, "error", "{}", message);
+            assert!(message.contains("crashed in native code"), "{}", message);
+        }
+    }
+
+    #[test]
+    fn clean_exit_is_info_not_a_crash() {
+        let (level, message) = describe_child_exit(0);
+        assert_eq!(level, "info");
+        assert!(!message.contains("crashed"), "{}", message);
+    }
+
+    #[test]
+    fn ordinary_nonzero_exit_stays_a_plain_warn() {
+        let (level, message) = describe_child_exit(1);
+        assert_eq!(level, "warn");
+        assert_eq!(message, "Node server stopped with code 1");
+    }
 
     #[test]
     fn finds_first_candidate_containing_src_index_js() {

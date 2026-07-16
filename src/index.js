@@ -1,16 +1,16 @@
-// Native crash (SIGSEGV) capture. uncaughtException CANNOT catch native addon
-// segfaults (e.g. the historical CryptoPro cpsuprt crash), so register this as
-// early as possible. Writes the stack to crash.log in the user settings dir,
-// which survives the process death. Optional — never block startup if missing.
+// Diagnostic reports for runtime-fatal events (OOM, V8 fatal errors), written
+// to the user settings dir so they survive the process death. Configure as
+// early as possible. Optional — never block startup if it fails.
+// See src/crash-report.js for what this does and does not capture.
 try {
   const fs = require('fs');
   const { settingsDir } = require('./paths');
-  const SegfaultHandler = require('segfault-handler');
-  const crashLog = settingsDir('crash.log');
-  // A fresh bundled install has no settings dir yet; without it segfault-handler
-  // silently fails to write crash.log. Create it before registering.
-  fs.mkdirSync(settingsDir(), { recursive: true });
-  SegfaultHandler.registerHandler(crashLog);
+  const { configureReport } = require('./crash-report');
+  const reportDir = settingsDir('reports');
+  // Node falls back to cwd (read-only in a bundled install) if the report
+  // directory does not exist, so create it before pointing process.report there.
+  fs.mkdirSync(reportDir, { recursive: true });
+  configureReport(process.report, reportDir);
 } catch {}
 
 // In Tauri bridge mode, stdout is the IPC channel — redirect all console output to stderr

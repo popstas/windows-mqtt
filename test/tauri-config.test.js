@@ -39,6 +39,26 @@ test('dev overlay empties bundle.resources', () => {
   assert.deepStrictEqual(dev.bundle.resources, []);
 });
 
+// NSIS only overwrites files present in the new bundle, so files dropped from
+// it survive upgrades and can shadow real config at runtime. The PREINSTALL
+// hook wipes the payload dir to make every install a clean install.
+test('nsis installer hook is wired up and wipes the app payload dir', () => {
+  const base = readJson('tauri.conf.json');
+  const hookPath =
+    base.bundle &&
+    base.bundle.windows &&
+    base.bundle.windows.nsis &&
+    base.bundle.windows.nsis.installerHooks;
+  assert.equal(hookPath, './nsis-hooks.nsh');
+
+  const hookFile = path.join(srcTauri, 'nsis-hooks.nsh');
+  assert.ok(fs.existsSync(hookFile), 'installerHooks must point at a real file');
+
+  const hook = fs.readFileSync(hookFile, 'utf8');
+  assert.match(hook, /!macro NSIS_HOOK_PREINSTALL/);
+  assert.match(hook, /RMDir \/r "\$INSTDIR\\_up_"/);
+});
+
 // The old build-only overlay is gone; builds are correct-by-default.
 test('legacy tauri.bundle.conf.json is removed', () => {
   assert.ok(

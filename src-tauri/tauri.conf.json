@@ -26,6 +26,9 @@
     "windows": {
       "wix": {
         "enableElevatedUpdateTask": false
+      },
+      "nsis": {
+        "installerHooks": "./nsis-hooks.nsh"
       }
     }
   },
