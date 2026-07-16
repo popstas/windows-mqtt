@@ -7,3 +7,7 @@ config.yml
 commands.yml
 TEMP/
 *.log
+.w11m-bundle-state
+bin/*
+!bin/.gitkeep
+audio-watcher/target/

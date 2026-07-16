@@ -6,14 +6,21 @@
     "start": "node src/index.js",
     "start-tauri": "node scripts/tauri-wrapper.js dev",
     "build": "node scripts/tauri-wrapper.js build",
+    "build-installer": "node scripts/tauri-wrapper.js build --bundles nsis",
+    "install-local": "node scripts/install-local.js",
+    "deploy-local": "npm run build-installer && npm run install-local",
+    "build-audio-watcher": "node scripts/build-audio-watcher.js",
     "install-windows": "node scripts/service-install.js",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0",
     "uninstall-windows": "node scripts/service-uninstall.js",
-    "deploy": "zsh data/deploy.sh"
+    "deploy": "zsh data/deploy.sh",
+    "test": "node --test test/**/*.test.js"
   },
   "author": "Stanislav Popov",
   "license": "ISC",
   "dependencies": {
+    "@hurdlegroup/robotjs": "^0.12.3",
+    "@julusian/midi": "^3.6.1",
     "axios": "^1.7.8",
     "chatgpt": "^5.1.2",
     "chokidar": "^3.5.3",
@@ -27,6 +34,7 @@
     "node-windows": "^1.0.0-beta.5",
     "obs-websocket-js": "^5.0.5",
     "sherpa-onnx-node": "^1.10.30",
+    "usb": "^2.18.0",
     "ws": "^8.18.0"
   },
   "optionalDependencies": {

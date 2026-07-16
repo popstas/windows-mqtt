@@ -1,12 +1,62 @@
 const config = require("./config");
-const modulesRegistry = require('./modules');
+const { load: loadModule } = require('./modules');
 const os = require("os");
+const fs = require("fs");
+const path = require("path");
+const { settingsDir, resolveUserDataFile } = require("./paths");
+const { rotateFile } = require("./log-rotate");
 const isWindows = os.platform() === 'win32';
 
 let windowsLogger;
 if (isWindows) {
   const EventLogger = require('node-windows').EventLogger;
   windowsLogger = new EventLogger('windows-mqtt');
+}
+
+// Persistent on-disk log. In Tauri bridge mode console output only reaches the
+// webview and is lost when the app dies, so crashes left no trace. This file
+// survives the process — uncaughtException/unhandledRejection stacks land here.
+const LOG_MAX_BYTES = 5 * 1024 * 1024;
+let logFilePath;
+function getLogFilePath() {
+  if (logFilePath === undefined) {
+    // Honor the documented `log.path` config key; relative paths resolve into
+    // the writable settings dir. Fall back to the default settings-dir file.
+    const configured = config.log && config.log.path;
+    logFilePath = configured
+      ? resolveUserDataFile(configured)
+      : settingsDir('windows-mqtt.log');
+    try {
+      fs.mkdirSync(path.dirname(logFilePath), { recursive: true });
+    } catch {
+      logFilePath = null; // disable file logging if the dir can't be created
+    }
+  }
+  return logFilePath;
+}
+
+function stringifyMsg(v) {
+  if (typeof v === 'string') return v;
+  if (v instanceof Error) return v.stack || v.message;
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}
+
+function writeToLogFile(line) {
+  if (config.log && config.log.enabled === false) return;
+  const file = getLogFilePath();
+  if (!file) return;
+  try {
+    // Rotate to a single .1 backup once the log grows past the cap. Report
+    // failures via console.warn (not log()) to avoid recursing back here.
+    rotateFile(file, LOG_MAX_BYTES, (m) => console.warn(m));
+    fs.appendFileSync(file, line + '\n');
+  } catch {
+    // Never let logging crash the process.
+  }
 }
 
 function log(msg, logLevel = 'info') {
@@ -16,16 +66,22 @@ function log(msg, logLevel = 'info') {
 
   if (messageLogLevel >= currentLogLevel) {
     const tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
-    const d = new Date(Date.now() - tzoffset).
-    toISOString().
+    // Compute the instant once so console and file timestamps can't drift.
+    const local = new Date(Date.now() - tzoffset).toISOString();
+    const d = local.
     replace(/T/, ' ').      // replace T with a space
       replace(/\..+/, '')     // delete the dot and everything after
 
     console[logLevel](`${d} ${msg}`);
+    // Full timestamp with ms + level tag on disk for crash forensics.
+    const fileTs = local.replace(/T/, ' ').replace(/Z$/, '');
+    writeToLogFile(`${fileTs} [${logLevel}] ${stringifyMsg(msg)}`);
   }
 
   if (isWindows && process.env.NODE_ENV === 'production') {
-    windowsLogger[logLevel](msg);
+    // EventLogger has info/warn/error only — map debug to info
+    const method = logLevel === 'debug' ? 'info' : logLevel;
+    if (typeof windowsLogger[method] === 'function') windowsLogger[method](msg);
   }
 }
 
@@ -52,10 +108,7 @@ async function initModules(modulesEnabled, mqtt) {
       opts.base = `${config.mqtt.base}/${name}`;
 
     try {
-      const mod = modulesRegistry[name];
-      if (!mod) {
-        throw new Error(`Unknown module: ${name}`);
-      }
+      const mod = loadModule(name);
 
       const modInited = {
         ...{

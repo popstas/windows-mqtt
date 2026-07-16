@@ -3,23 +3,42 @@ debug: true
 logLevel: debug
 log:
   path: 'data/windows-mqtt.log'
+  # enabled: false   # set to disable on-disk logging (console output stays)
+# Periodic process-health sampling (memory, CPU, event-loop utilization, handle
+# counts). Appends JSONL to <settings-dir>/windows-mqtt/sysstats.jsonl (rotated
+# at 10 MB) and publishes JSON to <mqtt.base>/sysstats. Enabled by default.
+monitor:
+  # enabled: false   # disable sampling entirely
+  interval: 60       # sampling period in seconds (default 60)
+  # topic: 'home/room/pc/sysstats'   # override the publish topic
+  # path: 'data/sysstats.jsonl'      # override the on-disk stats file
 mqtt:
   host: 'mqtt.example.com'
   port: 1883
   user: 'your_username'
   password: 'your_password'
   base: 'home/room/pc'
-  self_kill_cmd: 'C:/path/to/pskill.exe node-windows-mqtt.exe'
 
 modules:
   audio:
-    interval: 5
+    interval: 5   # loudness fallback polling period (seconds), used only when
+                  # the audio-watcher sidecar binary is missing
     volume:
       set: '/volume/set'
       stat: '/volume'
     mute:
       set: '/mute/set'
       stat: '/mute'
+    # Default playback/recording device reporting, event-driven via the native
+    # audio-watcher sidecar (no PowerShell). Build it with
+    # `npm run build-audio-watcher`. Set `device: false` to disable.
+    device:
+      stat: '/device'                 # recording device topic
+      playbackStat: '/device/playback' # playback device topic
+      # restartSec: 5                  # respawn delay if the sidecar dies
+      # Optional exact-name relabels (device friendly name -> published value):
+      # aliases:
+      #   'Наушники': 'Наушники'
   clipboard:
     screenshotPath: 'data/screenshot.png'
     imageSearchPath: 'data/images/search'

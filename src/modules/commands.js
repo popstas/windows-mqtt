@@ -1,10 +1,70 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const globalConfig = require('../config.js');
 const yaml = require('js-yaml');
+const { resolveUserDataFile, resolveAppFile } = require('../paths');
+
+// Write a script-type command body to a temp file in the OS temp dir (always
+// writable, unlike a bundled app's read-only cwd) and schedule cleanup. Returns
+// the temp file path. The cleanup timer is unref'd so it never keeps the
+// process (or a test run) alive.
+function writeScriptFile(script) {
+  const filePath = path.join(
+    os.tmpdir(),
+    `windows-mqtt-script-${Date.now()}-${Math.round(Math.random() * 1000)}`
+  );
+  fs.writeFileSync(filePath, script);
+  const timer = setTimeout(() => removeScriptFile(filePath), 5000);
+  if (timer.unref) timer.unref();
+  return filePath;
+}
+
+// Delete a script temp file, tolerating an already-removed file so the delayed
+// timer never throws.
+function removeScriptFile(filePath) {
+  try {
+    fs.unlinkSync(filePath);
+  } catch (e) {
+    // File may already be gone; nothing to clean up.
+  }
+}
+
+// Read and parse a commands.yml-style file, returning [] on any read/parse
+// error (or an empty document) so callers can always spread the result.
+function parseCommandsFile(filePath) {
+  try {
+    return yaml.load(fs.readFileSync(filePath, 'utf8')) || [];
+  } catch (e) {
+    console.log('commands.yml not found', e.message);
+    return [];
+  }
+}
+
+// Write the compiled runtime commands cache. The parent dir may not exist in a
+// bundled app (cwd is the read-only payload with no `data/`), so create it
+// first and tolerate a write failure instead of throwing during module init.
+function writeCommandsCache(cachePath, commands) {
+  if (!cachePath) return;
+  try {
+    fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+    fs.writeFileSync(cachePath, yaml.dump(commands));
+  } catch (e) {
+    console.log('failed to write commands cache:', e.message);
+  }
+}
 
 module.exports = async (mqtt, config, log) => {
   const subscriptions = [];
+
+  // Route the configured (possibly relative) custom-commands path through the
+  // settings-folder resolver so it is found/written under %APPDATA%/windows-mqtt.
+  const customCommandsPath = resolveUserDataFile(config.custom_commands_path);
+
+  // Same for the compiled-commands cache: the configured default is the
+  // relative `data/windows-mqtt-commands.yml`, which has no writable `data/`
+  // dir in a bundled install — resolve it to the writable settings dir.
+  const cachePath = resolveUserDataFile(config.cache_path);
 
   function cmdsHandler(cmds) {
     return function (topic, message) {
@@ -15,8 +75,11 @@ module.exports = async (mqtt, config, log) => {
 
   function getCustomCommands() {
     try {
-      // console.log('config.custom_commands_path: ', config.custom_commands_path);
-      return yaml.load(fs.readFileSync(config.custom_commands_path, 'utf8'));
+      // console.log('custom_commands_path: ', customCommandsPath);
+      // Coerce to an array: yaml.load returns undefined for an empty file and a
+      // non-array for malformed content, and callers spread the result.
+      const loaded = yaml.load(fs.readFileSync(customCommandsPath, 'utf8'));
+      return Array.isArray(loaded) ? loaded : [];
     } catch(e) {
       console.log('e.message: ', e.message);
       return [];
@@ -44,13 +107,17 @@ module.exports = async (mqtt, config, log) => {
         }
       ]
     }
-    if (res = msg.match(/сайт (.*)/g)) {
+    // Non-global match so res[1] captures the phrase after "сайт " (the /g flag
+    // returns full matches only, leaving res[1] undefined → q=undefined).
+    const res = msg.match(/сайт (.*)/);
+    if (res) {
       cmd.cmds = [ { mqtt: 'home/room/pc/site', payload: `https://www.google.com/search?btnI=1&q=${res[1]}`} ];
     }
     commands.push(cmd);
 
     // save new list
-    fs.writeFileSync(config.custom_commands_path, yaml.dump(commands));
+    fs.mkdirSync(path.dirname(customCommandsPath), { recursive: true });
+    fs.writeFileSync(customCommandsPath, yaml.dump(commands));
 
     // refresh runtime cache
     loadYamlCommands();
@@ -85,10 +152,7 @@ module.exports = async (mqtt, config, log) => {
         }
 
         if (cmd.script) {
-          const filePath = path.resolve(`data/windows-mqtt-script-${Date.now()}-${Math.random() * 1000}`);
-          fs.writeFileSync(filePath, cmd.script);
-          args.push(filePath);
-          setTimeout(() => {fs.unlinkSync(filePath)}, 5000);
+          args.push(writeScriptFile(cmd.script));
         }
 
         const message = JSON.stringify({
@@ -131,23 +195,12 @@ module.exports = async (mqtt, config, log) => {
   }
 
   function loadYamlCommands() {
-    const yaml = require('js-yaml');
-    const fs = require('fs');
-    let commands = [];
+    const commands = parseCommandsFile(resolveAppFile('commands.yml'));
 
-    try {
-      commands = yaml.load(fs.readFileSync(__dirname + '/../../commands.yml', 'utf8'));
-      // console.log(commands);
-    } catch (e) {
-      console.log('commands.yml not found', e.message);
-    }
-    
     commands.push(...getCustomCommands());
 
-    // save runtime cache compiled yml
-    if (config.cache_path) {
-      fs.writeFileSync(config.cache_path, yaml.dump(commands));
-    }
+    // save runtime cache compiled yml (writable settings dir, dir auto-created)
+    writeCommandsCache(cachePath, commands);
 
     return commands;
   }
@@ -167,3 +220,8 @@ module.exports = async (mqtt, config, log) => {
 
   return { subscriptions };
 }
+
+module.exports.writeScriptFile = writeScriptFile;
+module.exports.removeScriptFile = removeScriptFile;
+module.exports.parseCommandsFile = parseCommandsFile;
+module.exports.writeCommandsCache = writeCommandsCache;

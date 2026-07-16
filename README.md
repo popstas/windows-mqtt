@@ -11,6 +11,18 @@ Publish to:
 
 - `home/room/pc/audio/volume`
 - `home/room/pc/audio/mute`
+- `home/room/pc/audio/device` - default recording device name
+- `home/room/pc/audio/device/playback` - default playback device name
+
+Device names are reported event-driven by the native `audio-watcher` sidecar
+(Core Audio, no PowerShell polling). Build it once with
+`npm run build-audio-watcher`; `npm run build` bundles it automatically.
+
+If the `audio-watcher` binary is missing, volume/mute still report via a
+`loudness`-based polling fallback (a warning is logged, and device-name topics
+are unavailable until the sidecar is present). The poll period is
+`modules.audio.interval` seconds (default `5`). Setting `modules.audio.device`
+to `false` only disables the device-name topics; volume/mute keep working.
 
 ### clipboard
 - `home/room/pc/clipboard/set` - copy text to system clipboard
@@ -112,6 +124,16 @@ Voice activity detection (VAD) using silero-vad.
 - `home/room/pc/windows/restart` - restart PC, `nostore` for just restart, other payload for store opened windows
 
 It's using module, https://github.com/popstas/windows11-manager, Vitrual desktop manager work only for Windows 11 now, as I am single user.
+
+## Monitoring and logs
+- Process health is sampled periodically (memory, CPU, event-loop utilization,
+  handle/request counts) and published as JSON to `<mqtt.base>/sysstats`, plus
+  appended to `<settings-dir>/windows-mqtt/sysstats.jsonl` (rotated at 10 MB).
+  Enabled by default; configure via the top-level `monitor:` block
+  (`monitor.enabled`, `monitor.interval` seconds, `monitor.topic`, `monitor.path`).
+- All log output is also written to `<settings-dir>/windows-mqtt/windows-mqtt.log`
+  (rotated at 5 MB) so it survives Tauri bridge mode where console output only
+  reaches the webview. Set `log.enabled: false` to disable file logging.
 
 ## Bugs
 - Keyboard and mouse emulation not work while `windows-mqtt` running as Windows service.

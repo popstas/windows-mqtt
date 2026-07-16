@@ -54,6 +54,8 @@ struct ServerState(Arc<Mutex<Option<tauri_plugin_shell::process::CommandChild>>>
 
 struct BridgeState(Arc<MqttBridge>);
 
+struct MqttConnected(Arc<std::sync::atomic::AtomicBool>);
+
 #[derive(Clone, Serialize)]
 struct LogPayload {
     message: String,
@@ -91,14 +93,83 @@ async fn send_command(app: &tauri::AppHandle, action: &str) {
     }
 }
 
+async fn shutdown_node(app: &tauri::AppHandle) {
+    let state = app.state::<ServerState>();
+    let child = state.0.lock().await.take();
+    if let Some(mut child) = child {
+        let msg = IpcToJs::Action {
+            action: "app/shutdown".to_string(),
+        };
+        if let Ok(line) = serde_json::to_string(&msg) {
+            let _ = child.write((line + "\n").as_bytes());
+        }
+        // Give module onStop handlers a moment to close watchers/sockets,
+        // then hard-kill in case the child didn't exit on its own.
+        tokio::time::sleep(Duration::from_millis(800)).await;
+        let _ = child.kill();
+    }
+}
+
+// Windows reports a native crash as an NTSTATUS exit code, not a signal, and
+// nothing in-process can catch it: an access violation in a native addon kills
+// node outright (verified — Node's process.report writes nothing for it, and
+// the `segfault-handler` that used to cover this was removed because its
+// unfiltered vectored exception handler reported every benign
+// DBG_PRINTEXCEPTION_C as a fake SIGSEGV). The child's exit code is therefore
+// the only remaining signal that a native crash happened at all, so surface it
+// as an error rather than a bland "stopped with code -1073741819".
+fn native_crash_reason(status: u32) -> Option<&'static str> {
+    match status {
+        0xC0000005 => Some("access violation"),
+        0xC000001D => Some("illegal instruction"),
+        0xC0000025 => Some("noncontinuable exception"),
+        0xC00000FD => Some("stack overflow"),
+        0xC0000374 => Some("heap corruption"),
+        0xC0000409 => Some("stack buffer overrun"),
+        _ => None,
+    }
+}
+
+fn describe_child_exit(code: i32) -> (&'static str, String) {
+    // Exit codes arrive as i32; NTSTATUS values are conventionally written
+    // unsigned (0xC0000005 == -1073741819i32), so compare in u32 space.
+    let status = code as u32;
+    if let Some(reason) = native_crash_reason(status) {
+        return (
+            "error",
+            format!(
+                "Node server crashed in native code: {} (0x{:08X})",
+                reason, status
+            ),
+        );
+    }
+    if code == 0 {
+        return ("info", "Node server stopped".to_string());
+    }
+    ("warn", format!("Node server stopped with code {}", code))
+}
+
+fn parse_stderr_log(line: &str) -> (&'static str, String) {
+    for level in ["debug", "info", "warn", "error"] {
+        let tag = format!("[{level}] ");
+        if let Some(rest) = line.strip_prefix(&tag) {
+            return (level, rest.to_string());
+        }
+    }
+    ("info", line.to_string())
+}
+
 // --- Read MQTT config from config.yml ---
 
-fn read_mqtt_config(resource_dir: &PathBuf) -> Result<MqttConfig, String> {
-    let config_path = resource_dir.join("config.yml");
-
-    let content = std::fs::read_to_string(&config_path)
-        .or_else(|_| std::fs::read_to_string(resource_dir.join("config.example.yml")))
-        .map_err(|e| format!("Failed to read config: {}", e))?;
+fn read_mqtt_config(config_path: &PathBuf) -> Result<MqttConfig, String> {
+    let content = std::fs::read_to_string(config_path).map_err(|e| {
+        format!(
+            "Failed to read {} ({}). Create it (copy config.example.yml) in the app \
+             data dir, %APPDATA%\\windows-mqtt\\config.yml, or ./data/config.yml.",
+            config_path.display(),
+            e
+        )
+    })?;
 
     let config: serde_yaml::Value =
         serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))?;
@@ -145,8 +216,8 @@ fn spawn_node_server(
     server_state: Arc<Mutex<Option<tauri_plugin_shell::process::CommandChild>>>,
     bridge: Arc<MqttBridge>,
 ) -> Result<tauri_plugin_shell::process::CommandChild, String> {
-    let resource_dir = resolve_resource_dir(app)?;
-    let server_path = resource_dir.join("src").join("index.js");
+    let app_root = resolve_app_root(app)?;
+    let server_path = app_root.join("src").join("index.js");
 
     if !server_path.exists() {
         return Err(format!(
@@ -155,12 +226,17 @@ fn spawn_node_server(
         ));
     }
 
+    // Resolve the config path here so the Node child reads exactly the same
+    // file the Rust side does (single source of truth, no drift).
+    let config_path = resolve_config_path(app, &app_root);
+
     let (mut rx, child) = app
         .shell()
         .command("node")
         .args([server_path.to_string_lossy().to_string()])
         .env("TAURI_BRIDGE", "1")
-        .current_dir(resource_dir)
+        .env("CONFIG", config_path.to_string_lossy().to_string())
+        .current_dir(app_root)
         .spawn()
         .map_err(|error| error.to_string())?;
 
@@ -214,22 +290,29 @@ fn spawn_node_server(
                     }
                 }
                 CommandEvent::Stderr(buf) => {
+                    // In bridge mode the child redirects ALL console output to
+                    // stderr with a "[level] " tag; untagged lines (crash
+                    // traces, direct stderr writes) default to "info".
                     let line = String::from_utf8_lossy(&buf).to_string();
+                    let (level, message) = parse_stderr_log(&line);
                     let _ = app_handle.emit(
                         "server-log",
                         LogPayload {
-                            message: line,
-                            level: "error".into(),
+                            message,
+                            level: level.into(),
                         },
                     );
                 }
                 CommandEvent::Terminated(payload) => {
-                    let exit = payload.code.unwrap_or_default();
+                    let (level, message) = match payload.code {
+                        Some(code) => describe_child_exit(code),
+                        None => ("warn", "Node server stopped (no exit code)".to_string()),
+                    };
                     let _ = app_handle.emit(
                         "server-log",
                         LogPayload {
-                            message: format!("Node server stopped with code {}", exit),
-                            level: "warn".into(),
+                            message,
+                            level: level.into(),
                         },
                     );
                     let mut guard = server_state.lock().await;
@@ -249,12 +332,14 @@ fn spawn_node_server(
 fn spawn_bridge_to_js_writer(
     app: tauri::AppHandle,
     mut event_rx: tokio::sync::mpsc::Receiver<MqttEvent>,
+    connected: Arc<std::sync::atomic::AtomicBool>,
 ) {
     tauri::async_runtime::spawn(async move {
         while let Some(event) = event_rx.recv().await {
             let ipc = match event {
                 MqttEvent::Message { topic, payload } => IpcToJs::Message { topic, payload },
                 MqttEvent::Connected => {
+                    connected.store(true, std::sync::atomic::Ordering::Relaxed);
                     let _ = app.emit(
                         "server-log",
                         LogPayload {
@@ -265,6 +350,7 @@ fn spawn_bridge_to_js_writer(
                     IpcToJs::Connected
                 }
                 MqttEvent::Disconnected(reason) => {
+                    connected.store(false, std::sync::atomic::Ordering::Relaxed);
                     let _ = app.emit(
                         "server-log",
                         LogPayload {
@@ -290,6 +376,25 @@ fn spawn_bridge_to_js_writer(
     });
 }
 
+// If MQTT connected before the child existed, the 'connected' IPC line was
+// dropped by spawn_bridge_to_js_writer (no child to write to yet) — replay it
+// to the freshly spawned child so its modules see the connected state.
+fn replay_connected_if_needed(
+    app: &tauri::AppHandle,
+    child: &mut tauri_plugin_shell::process::CommandChild,
+) {
+    let connected = app
+        .state::<MqttConnected>()
+        .0
+        .load(std::sync::atomic::Ordering::Relaxed);
+    if connected {
+        let line = serde_json::to_string(&IpcToJs::Connected)
+            .map(|s| s + "\n")
+            .unwrap_or_default();
+        let _ = child.write(line.as_bytes());
+    }
+}
+
 // --- Tauri commands ---
 
 #[tauri::command]
@@ -303,7 +408,8 @@ async fn start_mqtt_server(
     }
 
     let bridge = app.state::<BridgeState>();
-    let child = spawn_node_server(&app, state.0.clone(), bridge.0.clone())?;
+    let mut child = spawn_node_server(&app, state.0.clone(), bridge.0.clone())?;
+    replay_connected_if_needed(&app, &mut child);
     *child_guard = Some(child);
 
     Ok(())
@@ -311,15 +417,13 @@ async fn start_mqtt_server(
 
 #[tauri::command]
 async fn get_enabled_modules(app: tauri::AppHandle) -> Result<Vec<String>, String> {
-    let resource_dir = resolve_resource_dir(&app)?;
-    read_enabled_modules(&resource_dir)
+    let app_root = resolve_app_root(&app)?;
+    let config_path = resolve_config_path(&app, &app_root);
+    read_enabled_modules(&config_path)
 }
 
-fn read_enabled_modules(resource_dir: &PathBuf) -> Result<Vec<String>, String> {
-    let config_path = resource_dir.join("config.yml");
-
-    let content = std::fs::read_to_string(&config_path)
-        .or_else(|_| std::fs::read_to_string(resource_dir.join("config.example.yml")))
+fn read_enabled_modules(config_path: &PathBuf) -> Result<Vec<String>, String> {
+    let content = std::fs::read_to_string(config_path)
         .map_err(|error| format!("Failed to read config: {}", error))?;
 
     let config: serde_yaml::Value = serde_yaml::from_str(&content)
@@ -348,13 +452,89 @@ fn read_enabled_modules(resource_dir: &PathBuf) -> Result<Vec<String>, String> {
     Ok(enabled)
 }
 
-fn resolve_resource_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .resource_dir()
-        .ok()
-        .or_else(|| app.path().app_data_dir().ok())
-        .or_else(|| std::env::current_dir().ok())
-        .ok_or_else(|| "Unable to resolve resource directory".to_string())
+fn find_app_root(candidates: &[PathBuf]) -> Option<PathBuf> {
+    candidates
+        .iter()
+        .find(|c| c.join("src").join("index.js").exists())
+        .cloned()
+}
+
+fn resolve_app_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    // Dev: `tauri dev` runs the exe with cwd = src-tauri, so the project
+    // root (live src/, config.yml, node_modules) is the parent dir.
+    // Dev builds only: an installed exe can be launched from an arbitrary
+    // cwd (e.g. inside another Node project), which must not win over the
+    // bundled resources.
+    if cfg!(debug_assertions) {
+        if let Ok(cwd) = std::env::current_dir() {
+            if let Some(parent) = cwd.parent() {
+                candidates.push(parent.to_path_buf());
+            }
+            candidates.push(cwd);
+        }
+    }
+    // Bundled: Tauri v2 flattens `../` resources into `_up_/`.
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        candidates.push(resource_dir.join("_up_"));
+        candidates.push(resource_dir);
+    }
+    find_app_root(&candidates)
+        .map(|root| strip_verbatim_prefix(&root))
+        .ok_or_else(|| format!("Cannot find app root (src/index.js) in {:?}", candidates))
+}
+
+// Tauri's `resource_dir()` returns a Windows verbatim path (`\\?\C:\...`).
+// Node.js's main-module resolver mishandles that prefix and dies with
+// `EISDIR: illegal operation on a directory, lstat 'C:'`, so normalize the
+// app root before deriving the script/config paths handed to the Node child.
+fn strip_verbatim_prefix(path: &PathBuf) -> PathBuf {
+    let text = path.to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{}", rest))
+    } else if let Some(rest) = text.strip_prefix(r"\\?\") {
+        PathBuf::from(rest)
+    } else {
+        path.clone()
+    }
+}
+
+// Config search priority (must stay in sync with resolveConfigPath in
+// src/config.js). First existing candidate wins; the legacy root path is the
+// fallback so error messages point somewhere sensible.
+fn config_candidates(app: &tauri::AppHandle, app_root: &PathBuf) -> Vec<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(env_path) = std::env::var("CONFIG") {
+        if !env_path.is_empty() {
+            candidates.push(PathBuf::from(env_path));
+        }
+    }
+    candidates.push(app_root.join("data").join("config.yml"));
+    // Tauri v2 config_dir: %APPDATA% (Windows), ~/Library/Application Support
+    // (macOS), $XDG_CONFIG_HOME or ~/.config (Linux).
+    if let Ok(config_dir) = app.path().config_dir() {
+        candidates.push(config_dir.join("windows-mqtt").join("config.yml"));
+    }
+    candidates.push(app_root.join("config.yml"));
+    // Bundled example config: last resort so a fresh install (no user config.yml)
+    // still yields a readable config instead of erroring. Keeps the Rust side in
+    // sync with the JS config-loader fallback (src/config-loader.js).
+    candidates.push(app_root.join("config.example.yml"));
+    candidates
+}
+
+fn resolve_config_path(app: &tauri::AppHandle, app_root: &PathBuf) -> PathBuf {
+    let candidates = config_candidates(app, app_root);
+    candidates
+        .iter()
+        .find(|path| path.exists())
+        .cloned()
+        .unwrap_or_else(|| {
+            candidates
+                .last()
+                .cloned()
+                .unwrap_or_else(|| app_root.join("config.yml"))
+        })
 }
 
 // --- Tray menu ---
@@ -586,17 +766,63 @@ fn main() {
             let app_handle = app.handle().clone();
 
             // Read MQTT config and create bridge
-            let resource_dir = resolve_resource_dir(&app_handle)
-                .expect("failed to resolve resource directory");
-            let mqtt_config =
-                read_mqtt_config(&resource_dir).expect("failed to read MQTT config");
+            let mqtt_config = resolve_app_root(&app_handle)
+                .and_then(|root| {
+                    let config_path = resolve_config_path(&app_handle, &root);
+                    read_mqtt_config(&config_path)
+                })
+                .unwrap_or_else(|e| {
+                    eprintln!("MQTT config error: {e}");
+                    let _ = app_handle.emit(
+                        "server-log",
+                        LogPayload {
+                            message: format!("MQTT config error: {e}"),
+                            level: "error".into(),
+                        },
+                    );
+                    MqttConfig {
+                        host: "localhost".into(),
+                        port: 1883,
+                        username: None,
+                        password: None,
+                        client_id: "windows-mqtt-unconfigured".into(),
+                    }
+                });
 
             let (bridge, event_rx) = MqttBridge::new(&mqtt_config);
             let bridge = Arc::new(bridge);
             app.manage(BridgeState(bridge.clone()));
 
             // Forward MQTT events to JS child
-            spawn_bridge_to_js_writer(app_handle.clone(), event_rx);
+            let connected = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            app.manage(MqttConnected(connected.clone()));
+            spawn_bridge_to_js_writer(app_handle.clone(), event_rx, connected.clone());
+
+            // Start the Node server immediately — do not depend on the hidden
+            // webview invoking start_mqtt_server.
+            let autostart_handle = app_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                let state = autostart_handle.state::<ServerState>();
+                let mut guard = state.0.lock().await;
+                if guard.is_none() {
+                    let bridge = autostart_handle.state::<BridgeState>().0.clone();
+                    match spawn_node_server(&autostart_handle, state.0.clone(), bridge) {
+                        Ok(mut child) => {
+                            replay_connected_if_needed(&autostart_handle, &mut child);
+                            *guard = Some(child);
+                        }
+                        Err(e) => {
+                            let _ = autostart_handle.emit(
+                                "server-log",
+                                LogPayload {
+                                    message: format!("Failed to start Node server: {e}"),
+                                    level: "error".into(),
+                                },
+                            );
+                        }
+                    }
+                }
+            });
 
             let (menu, hotkey_items, interval_items) =
                 build_tray_menu(&app_handle).expect("failed to build tray menu");
@@ -605,19 +831,40 @@ fn main() {
             app.manage(HotkeyMenuItems(hotkey_items));
             app.manage(IntervalMenuItems(interval_items));
 
-            // Register default hotkey
-            if let Err(e) = register_shortcut(&app_handle, "ctrl+alt+shift+p") {
-                eprintln!("Failed to register default hotkey: {}", e);
-            }
+            // Register default hotkey. On `tauri dev` hot-reload (and any relaunch
+            // while a previous tray-resident instance is still tearing down) the old
+            // process briefly still owns the global shortcut, so a single attempt
+            // loses it for the whole session. Retry off-thread until the old owner
+            // releases it, without blocking startup.
+            let hotkey_handle = app_handle.clone();
+            std::thread::spawn(move || {
+                const SHORTCUT: &str = "ctrl+alt+shift+p";
+                const ATTEMPTS: u32 = 10;
+                for attempt in 1..=ATTEMPTS {
+                    // Clear any stale registration owned by this process first.
+                    unregister_shortcut(&hotkey_handle, SHORTCUT);
+                    match register_shortcut(&hotkey_handle, SHORTCUT) {
+                        Ok(()) => return,
+                        Err(e) if attempt == ATTEMPTS => {
+                            eprintln!(
+                                "Failed to register default hotkey after {ATTEMPTS} attempts: {e}"
+                            );
+                        }
+                        Err(_) => std::thread::sleep(Duration::from_millis(300)),
+                    }
+                }
+            });
 
-            let tray = TrayIconBuilder::new()
+            let mut tray_builder = TrayIconBuilder::new()
                 .menu(&menu)
-                .tooltip("windows-mqtt")
-                .icon(
-                    app.default_window_icon()
-                        .cloned()
-                        .unwrap_or_else(|| tauri::image::Image::new(&[], 0, 0)),
-                )
+                // Left click toggles the window (handled in on_tray_icon_event);
+                // the context menu is reserved for right click.
+                .show_menu_on_left_click(false)
+                .tooltip("windows-mqtt");
+            if let Some(icon) = app.default_window_icon().cloned() {
+                tray_builder = tray_builder.icon(icon);
+            }
+            let tray = tray_builder
                 .on_menu_event(move |app, event| {
                     let id = event.id().as_ref().to_string();
 
@@ -646,7 +893,13 @@ fn main() {
                     }
 
                     match id.as_str() {
-                        "quit" => app.exit(0),
+                        "quit" => {
+                            let app_handle = app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                shutdown_node(&app_handle).await;
+                                app_handle.exit(0);
+                            });
+                        }
                         "show" => {
                             if let Some(window) = app.get_webview_window("main") {
                                 let _ = window.show();
@@ -745,8 +998,11 @@ fn main() {
                     }
                 })
                 .on_tray_icon_event(|tray, event| {
+                    // A physical click emits `Click` twice (Down then Up); react to
+                    // a single edge so the toggle doesn't fire twice and cancel out.
                     if let tauri::tray::TrayIconEvent::Click {
                         button: tauri::tray::MouseButton::Left,
+                        button_state: tauri::tray::MouseButtonState::Up,
                         ..
                     } = event
                     {
@@ -771,4 +1027,62 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{describe_child_exit, find_app_root};
+
+    #[test]
+    fn reports_access_violation_as_a_native_crash_error() {
+        // 0xC0000005 arrives as a negative i32 from the OS.
+        let (level, message) = describe_child_exit(-1073741819);
+        assert_eq!(level, "error");
+        assert!(message.contains("crashed in native code"), "{}", message);
+        assert!(message.contains("access violation"), "{}", message);
+        assert!(message.contains("0xC0000005"), "{}", message);
+    }
+
+    #[test]
+    fn reports_stack_overflow_and_heap_corruption_as_native_crashes() {
+        for code in [0xC00000FDu32, 0xC0000374, 0xC0000409] {
+            let (level, message) = describe_child_exit(code as i32);
+            assert_eq!(level, "error", "{}", message);
+            assert!(message.contains("crashed in native code"), "{}", message);
+        }
+    }
+
+    #[test]
+    fn clean_exit_is_info_not_a_crash() {
+        let (level, message) = describe_child_exit(0);
+        assert_eq!(level, "info");
+        assert!(!message.contains("crashed"), "{}", message);
+    }
+
+    #[test]
+    fn ordinary_nonzero_exit_stays_a_plain_warn() {
+        let (level, message) = describe_child_exit(1);
+        assert_eq!(level, "warn");
+        assert_eq!(message, "Node server stopped with code 1");
+    }
+
+    #[test]
+    fn finds_first_candidate_containing_src_index_js() {
+        let base = std::env::temp_dir().join("wmqtt-approot-test");
+        let src = base.join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("index.js"), "").unwrap();
+        let missing = std::env::temp_dir().join("wmqtt-approot-missing");
+
+        let found = find_app_root(&[missing, base.clone()]);
+        assert_eq!(found, Some(base.clone()));
+
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn returns_none_when_no_candidate_matches() {
+        let missing = std::env::temp_dir().join("wmqtt-approot-none");
+        assert_eq!(find_app_root(&[missing]), None);
+    }
 }

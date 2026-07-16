@@ -1,4 +1,4 @@
-const robot = require('robotjs');
+const robot = require('@hurdlegroup/robotjs');
 
 module.exports = async (mqtt, config, log) => {
 

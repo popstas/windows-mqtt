@@ -3,13 +3,20 @@ const { mqttInit } = require(isTauriBridge ? './mqtt-bridge' : './mqtt');
 const config = require('./config');
 const {log, getModulesEnabled, initModules} = require("./helpers");
 const stdinHandler = require('./stdin-handler');
+const { startMonitor } = require('./monitor');
 
 let mqtt; // global object
 let modules; // global object
 let messageHandler = null;
+let monitor = null;
 
 async function cleanup() {
   log('Cleaning up resources...');
+
+  if (monitor) {
+    monitor.stop();
+    monitor = null;
+  }
 
   // Stop all modules
   if (modules) {
@@ -59,6 +66,8 @@ async function start() {
 
   // Handle uncaught exceptions
   process.on('uncaughtException', function (err) {
+    // Logging a dead-pipe error writes to the same dead pipe and loops forever
+    if (err && (err.code === 'EPIPE' || err.code === 'ERR_STREAM_DESTROYED')) return;
     log('An uncaught error occurred!', 'error');
     log(err.stack, 'error');
   });
@@ -71,6 +80,16 @@ async function start() {
 
   try {
     mqtt = mqttInit({}); // global set
+
+    // Bridge mode: stdin closing means the parent Tauri process is gone.
+    // Without this the orphan keeps polling forever with no way to communicate.
+    if (isTauriBridge) {
+      mqtt.on('close', async () => {
+        log('stdin closed, parent process is gone — shutting down');
+        await cleanup();
+        process.exit(0);
+      });
+    }
 
     const modulesEnabled = getModulesEnabled();
 
@@ -99,11 +118,21 @@ async function start() {
         }
       });
     }
+    // Graceful shutdown requested by Tauri before it kills the child —
+    // lets module onStop handlers close watchers/intervals/sockets.
+    stdinHandler.register({
+      'app/shutdown': async () => {
+        await cleanup();
+        process.exit(0);
+      }
+    });
     stdinHandler.init(isTauriBridge ? mqtt : undefined);
 
     subscribeToModuleTopics(modules);
 
     listenModulesMQTT(modules);
+
+    monitor = startMonitor({ mqtt, log, config });
   }
   catch (e) {
     log(e.message, 'error');
