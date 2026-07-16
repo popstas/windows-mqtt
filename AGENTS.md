@@ -45,6 +45,56 @@ hot-patched: copy the changed file into `...\windows-mqtt\_up_\src\...` (and
 `bin\audio-watcher.exe` into `...\_up_\bin\`), then restart the app. An official
 rebuild+install overwrites such patches.
 
+## Release
+
+Order matters: the version must be bumped BEFORE the changelog (it reads
+`package.json`) and BEFORE the build (the installer name and the exe metadata
+are baked in at build time).
+
+1. **Merge to master and run the tests there** — `npm test` and
+   `cd src-tauri && TAURI_CONFIG='{"bundle":{"resources":[]}}' cargo test`.
+   Run them after the merge, not only on the branch.
+2. **Bump the version in THREE places — all must match:**
+   - `package.json` (+ `package-lock.json`) — `npm version X.Y.Z --no-git-tag-version`
+   - `src-tauri/tauri.conf.json` — drives the **installer filename**
+   - `src-tauri/Cargo.toml` — drives the exe's **VERSIONINFO**
+     (FileVersion/ProductVersion shown in Windows file properties).
+     `Cargo.lock` updates itself on the next build; commit it too.
+
+   Miss `Cargo.toml` and you ship `windows-mqtt_1.0.0_x64-setup.exe` whose
+   binary reports `0.0.1` — the installer name and the exe disagree, and
+   nothing warns you. This happened in v1.0.0.
+3. **Changelog**: `npm run changelog` (conventional-changelog, angular preset,
+   `-r 0` = regenerate all). It titles the section from `package.json`. Then
+   hand-write a short highlights section on top — the raw commit list alone is
+   poor release notes.
+4. **Commit**: `chore(release): X.Y.Z` (never `feat:`/`fix:` — see PR naming).
+5. **Tag**: `git tag -a vX.Y.Z -m "Release X.Y.Z"`.
+6. **Build**: `npm run build-installer`.
+7. **Verify no secrets shipped** (see below), then
+   `gh release create vX.Y.Z "<path-to-setup.exe>" --title ... --notes-file ...`
+8. **Push**: `git push origin master && git push origin vX.Y.Z`.
+
+### Never ship secrets in the installer
+
+`config.yml`, `commands.yml` and `data/` are gitignored and hold real
+credentials. They are NOT in `bundle.resources` and must stay out — installers
+before v1.0.0 bundled `"../config.yml"` and `"../data/**"` directly and shipped
+the developer's secrets to every user.
+
+Verify the built installer rather than trusting the config:
+
+```bash
+7z x -y windows-mqtt_X.Y.Z_x64-setup.exe -o<tmpdir>
+find <tmpdir> -iname 'config.yml' -o -iname 'commands.yml' -o -type d -iname data
+# then grep the tree AND the raw .exe for the real values from
+# %APPDATA%\windows-mqtt\config.yml (mqtt.password, obs.password, api keys)
+```
+
+Known and accepted: `mqtt.host` does appear in the bundle via
+`node_modules/windows11-manager/config.example.cjs`, which hardcodes it. That
+value is already public in the `popstas/windows11-manager` repo.
+
 ### Tauri v2 Gotchas
 - `devUrl` must be a proper URL (e.g. `http://localhost:1420`), not a relative path
 - Resource globs: use `"../src/*"` + `"../src/**/*"` instead of `"../src/**"` (v2 is stricter)

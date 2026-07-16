@@ -1,6 +1,6 @@
 [package]
 name = "pro-popstas-windows-mqtt"
-version = "0.0.1"
+version = "1.0.0"
 authors = ["Stanislav Popov"]
 edition = "2021"
 
