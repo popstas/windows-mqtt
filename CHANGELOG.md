@@ -1,5 +1,31 @@
 # 1.0.0 (2026-07-16)
 
+First tagged release. The app moved from Electron to **Tauri v2**, which is the
+reason this is 1.0.0 rather than another 0.0.1 patch.
+
+**Highlights**
+
+- **Tauri v2 desktop app** replaces the Electron shell. A Rust backend owns the
+  MQTT connection (rumqttc) and talks to the Node.js modules over JSON-lines IPC
+  on stdin/stdout. Tray icon, hotkeys and graceful shutdown live in Rust.
+- **Config and user data moved out of the app payload** into
+  `%APPDATA%\windows-mqtt\`. Installers no longer ship a `config.yml`, and a
+  missing config now falls back to the bundled example with a clear warning
+  instead of a dead tray.
+- **Volume/mute reporting** is event-driven via a native `audio-watcher`
+  sidecar, with a `loudness` polling fallback when the sidecar is absent.
+- **Logs persist to disk**: `windows-mqtt.log` (rotated at 5 MB) and
+  `sysstats.jsonl` telemetry, so a crash no longer takes the log with it.
+- **Node 24 support** via updated native forks (midi, robotjs, usb).
+
+**Known gaps**
+
+- Native-addon crashes are reported by exit code only, without a stack trace.
+  `segfault-handler` was removed because it reported benign Windows debug-print
+  exceptions as fake segfaults; `process.report` does not cover native crashes.
+
+Everything below is the full conventional-commit history, which had no prior
+tags to split on — so it spans the project's entire life, Electron era included.
 
 ### Bug Fixes
 
