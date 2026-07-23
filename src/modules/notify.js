@@ -2,6 +2,7 @@ const notifier = require('node-notifier');
 const path = require('path');
 const axios = require('axios');
 const { spawn } = require('child_process');
+const { pathToFileURL } = require('url');
 
 // Persistent toast via PowerShell (UWP Toast API) with scenario="reminder".
 // node-notifier / SnoreToast can't emit scenario, so it always auto-dismisses.
@@ -13,8 +14,10 @@ function xmlEscape(s) {
 function notifyPersistent(data) {
   const title = xmlEscape(data.title || '');
   const message = xmlEscape(data.message || '');
+  // WinRT needs a file:/// URI (not a raw Windows path) as the image src.
+  // Note: toasts render png/jpg/gif reliably; .webp is not supported.
   const image = data.icon
-    ? `<image placement="appLogoOverride" src="${xmlEscape(data.icon)}"/>`
+    ? `<image placement="appLogoOverride" src="${xmlEscape(pathToFileURL(data.icon).href)}"/>`
     : '';
   // scenario="reminder" keeps the toast on screen until dismissed,
   // but Windows requires at least one <action>.

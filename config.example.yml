@@ -151,18 +151,18 @@ modules:
   notify:
     title: 'Дом'
     appIcons:
-      'Сообщения': 'sms.webp'
-      'Messages': 'sms.webp'
-      'СберБанк': 'sber.webp'
-      'Заметки Google Keep': 'keep.webp'
-      'Тинькофф': 'tinkoff.webp'
-      'Tinkoff': 'tinkoff.webp'
+      'Сообщения': 'sms.png'
+      'Messages': 'sms.png'
+      'СберБанк': 'sber.png'
+      'Заметки Google Keep': 'keep.png'
+      'Тинькофф': 'tinkoff.png'
+      'Tinkoff': 'tinkoff.png'
       'Planfix': 'planfix.png'
-      'Castbox': 'castbox.webp'
-      'ГдеПосылка': 'gdeposylka.webp'
-      'PackageRadar': 'gdeposylka.webp'
-      'POLARIS': 'polaris.webp'
-      'Gmail': 'gmail.webp'
+      'Castbox': 'castbox.png'
+      'ГдеПосылка': 'gdeposylka.png'
+      'PackageRadar': 'gdeposylka.png'
+      'POLARIS': 'polaris.png'
+      'Gmail': 'gmail.png'
     appSounds: {}
       # 'Сообщения': false, # работает
       # 'СберБанк': 'Blow', # не работает
