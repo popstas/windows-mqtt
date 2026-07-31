@@ -109,6 +109,52 @@ test('bundle.resources never expands to a gitignored path outside the known node
   );
 });
 
+// The enumeration in bundle.resources (`../src/*` + one `../src/<subdir>/**/*`
+// per subdirectory) is correct today but brittle: it pins the *current* three
+// subdirectories (`daemon`, `modules`, `picker`) by nothing more than someone
+// having remembered to add a line. A future `src/newthing/` would ship no
+// files and fail silently until the installed app throws MODULE_NOT_FOUND at
+// runtime. This checks the property that actually matters — every file under
+// every non-gitignored src/ subdirectory is matched by *some* resources glob
+// — derived from git's own ignore rules (so `daemon` drops out because git
+// says it's ignored, not because a test hardcodes its name), rather than
+// pinning the glob strings themselves.
+test('every non-gitignored subdirectory of src/ is fully covered by bundle.resources', () => {
+  const base = readJson('tauri.conf.json');
+  const resources = base.bundle && base.bundle.resources;
+  assert.ok(Array.isArray(resources), 'bundle.resources must be an array');
+
+  const srcDir = path.join(repoRoot, 'src');
+  const subdirNames = fs.readdirSync(srcDir, { withFileTypes: true })
+    .filter(d => d.isDirectory())
+    .map(d => d.name);
+
+  const relDirs = subdirNames.map(name => `src/${name}`);
+  // gitIgnoredOf returns raw `git check-ignore -v` lines
+  // (`<source>:<line>:<pattern>\t<path>`), not bare paths — pull the path
+  // back out (the part after the last tab) to compare against relDirs.
+  const ignored = new Set(gitIgnoredOf(relDirs).map(line => line.slice(line.lastIndexOf('\t') + 1)));
+  const trackedDirNames = subdirNames.filter(name => !ignored.has(`src/${name}`));
+  assert.ok(
+    trackedDirNames.length > 0,
+    'expected at least one non-gitignored src/ subdirectory to exist (sanity check)'
+  );
+
+  const coveredFiles = new Set(resources.flatMap(expandResourceGlob));
+
+  for (const name of trackedDirNames) {
+    const filesInDir = fs.globSync(`src/${name}/**/*`, { cwd: repoRoot })
+      .filter(p => fs.statSync(path.join(repoRoot, p)).isFile());
+    const uncovered = filesInDir.filter(f => !coveredFiles.has(f));
+    assert.deepStrictEqual(
+      uncovered,
+      [],
+      `src/${name}/ has files bundle.resources does not match (would MODULE_NOT_FOUND at ` +
+      `runtime in the installed app):\n  ${uncovered.join('\n  ')}`
+    );
+  }
+});
+
 // The dev overlay empties resources (RFC 7396 merge replaces arrays), keeping
 // `dev` out of the slow node_modules/junction walk.
 test('dev overlay empties bundle.resources', () => {
