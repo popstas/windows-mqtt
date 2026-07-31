@@ -116,6 +116,26 @@ module.exports = async (mqtt, config, log) => {
     log(`claude-wt restored ${restored.length}, skipped ${skipped.length}`);
   }
 
+  // Focus fails silently unless Rust has granted this process the right to take
+  // the foreground first — see picker_send in main.rs.
+  async function claudeFocus(payload) {
+    const id = payload?.id;
+    if (!id) return;
+    const res = winMan.claudeWtSessions();
+    if (!res.ok) { log(`claude-wt: ${res.reason}`, 'warn'); return; }
+    const session = res.sessions.find(s => s.id === id);
+    if (!session) { log(`claude-wt: unknown session ${id}`, 'warn'); return; }
+    if (session.open && session.desktop) {
+      const current = await winMan.virtualDesktop.GetWindowDesktopNumber(session.windowId);
+      if (current !== undefined && Number(current) + 1 !== session.desktop) {
+        await winMan.virtualDesktop.GoToDesktopNumber(session.desktop);
+      }
+    }
+    if (!session.open || !winMan.focusWindowById(session.windowId)) {
+      log(`claude-wt: ${id} is not on screen`, 'warn');
+    }
+  }
+
   // win:active,x:0,y:0,width:mon1.thirdWidth,height:mon1.height
   async function place(topic, message) {
     log(`< ${topic}: ${message}`);
@@ -285,6 +305,15 @@ module.exports = async (mqtt, config, log) => {
       }
     },
     'windows/claude-restore': () => claudeRestore(),
+    'windows/claude-focus': (payload) => claudeFocus(payload),
+    'windows/claude-focus-probe': async () => {
+      const res = winMan.claudeWtSessions();
+      if (!res.ok) { log(`claude-wt: ${res.reason}`, 'warn'); return; }
+      const first = res.sessions.find(s => s.open);
+      if (!first) { log('claude-wt: no open sessions', 'warn'); return; }
+      log(`claude-wt: focusing ${first.title}`);
+      await claudeFocus({ id: first.id });
+    },
     'windows/restart_restore': () => { winMan.storeWindows(); restart(); },
     'windows/sleep': () => sleep(),
     'windows/restart': () => restart(),

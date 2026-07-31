@@ -44,7 +44,11 @@ enum IpcToJs {
     Message { topic: String, payload: String },
     Connected,
     Disconnected { reason: String },
-    Action { action: String },
+    Action {
+        action: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        payload: Option<serde_json::Value>,
+    },
 }
 
 // --- App state ---
@@ -71,11 +75,20 @@ struct CurrentShortcut(Mutex<Option<String>>);
 // --- Send command to JS child via IPC ---
 
 async fn send_command(app: &tauri::AppHandle, action: &str) {
+    send_command_with(app, action, None).await;
+}
+
+async fn send_command_with(
+    app: &tauri::AppHandle,
+    action: &str,
+    payload: Option<serde_json::Value>,
+) {
     let state = app.state::<ServerState>();
     let mut guard = state.0.lock().await;
     if let Some(ref mut child) = *guard {
         let msg = IpcToJs::Action {
             action: action.to_string(),
+            payload,
         };
         let line = match serde_json::to_string(&msg) {
             Ok(s) => s + "\n",
@@ -93,12 +106,34 @@ async fn send_command(app: &tauri::AppHandle, action: &str) {
     }
 }
 
+/// Hand the foreground right to the Node child.
+///
+/// Windows only lets the process that owns the foreground window (that is us,
+/// while the picker has focus) set it — or hand that right to another process
+/// explicitly. Without this the Node child's bringToTop() flashes the taskbar
+/// button instead of switching.
+#[cfg(windows)]
+async fn allow_node_foreground(app: &tauri::AppHandle) {
+    use windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow;
+    let state = app.state::<ServerState>();
+    let guard = state.0.lock().await;
+    if let Some(ref child) = *guard {
+        unsafe {
+            let _ = AllowSetForegroundWindow(child.pid());
+        }
+    }
+}
+
+#[cfg(not(windows))]
+async fn allow_node_foreground(_app: &tauri::AppHandle) {}
+
 async fn shutdown_node(app: &tauri::AppHandle) {
     let state = app.state::<ServerState>();
     let child = state.0.lock().await.take();
     if let Some(mut child) = child {
         let msg = IpcToJs::Action {
             action: "app/shutdown".to_string(),
+            payload: None,
         };
         if let Ok(line) = serde_json::to_string(&msg) {
             let _ = child.write((line + "\n").as_bytes());
@@ -599,6 +634,14 @@ fn build_tray_menu(
         None::<&str>,
     )
     .map_err(m)?;
+    let claude_focus_probe = MenuItem::with_id(
+        app,
+        "win_claude_focus_probe",
+        "TEMP: focus first claude session",
+        true,
+        None::<&str>,
+    )
+    .map_err(m)?;
 
     menu.append(&autoplace).map_err(m)?;
     menu.append(&store).map_err(m)?;
@@ -606,6 +649,7 @@ fn build_tray_menu(
     menu.append(&clear).map_err(m)?;
     menu.append(&open_default).map_err(m)?;
     menu.append(&claude_restore).map_err(m)?;
+    menu.append(&claude_focus_probe).map_err(m)?;
     menu.append(&PredefinedMenuItem::separator(app).map_err(m)?)
         .map_err(m)?;
 
@@ -876,6 +920,15 @@ fn main() {
             let tray = tray_builder
                 .on_menu_event(move |app, event| {
                     let id = event.id().as_ref().to_string();
+
+                    if id == "win_claude_focus_probe" {
+                        let app_handle = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            allow_node_foreground(&app_handle).await;
+                            send_command_with(&app_handle, "windows/claude-focus-probe", None).await;
+                        });
+                        return;
+                    }
 
                     // Window action commands
                     let action = match id.as_str() {
