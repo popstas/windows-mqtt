@@ -118,8 +118,19 @@ async fn allow_node_foreground(app: &tauri::AppHandle) {
     let state = app.state::<ServerState>();
     let guard = state.0.lock().await;
     if let Some(ref child) = *guard {
-        unsafe {
-            let _ = AllowSetForegroundWindow(child.pid());
+        let pid = child.pid();
+        let result = unsafe { AllowSetForegroundWindow(pid) };
+        if let Err(e) = result {
+            let _ = app.emit(
+                "server-log",
+                LogPayload {
+                    message: format!(
+                        "Failed to grant foreground rights to pid {}: {}",
+                        pid, e
+                    ),
+                    level: "error".into(),
+                },
+            );
         }
     }
 }

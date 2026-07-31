@@ -117,7 +117,7 @@ module.exports = async (mqtt, config, log) => {
   }
 
   // Focus fails silently unless Rust has granted this process the right to take
-  // the foreground first — see picker_send in main.rs.
+  // the foreground first — see allow_node_foreground and send_command_with in main.rs.
   async function claudeFocus(payload) {
     const id = payload?.id;
     if (!id) return;
