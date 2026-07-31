@@ -111,6 +111,53 @@ async fn send_command_with(
     }
 }
 
+/// Show the picker centred on the monitor the cursor is on.
+///
+/// The `center: true` window option centres on the primary monitor, which is
+/// the wrong one whenever the user is working somewhere else, so the position
+/// is computed at every show.
+fn show_picker(app: &tauri::AppHandle) {
+    let window = match app.get_webview_window("sessions") {
+        Some(w) => w,
+        None => return,
+    };
+    if let (Ok(cursor), Ok(size)) = (app.cursor_position(), window.outer_size()) {
+        if let Ok(Some(monitor)) = window.monitor_from_point(cursor.x, cursor.y) {
+            let mp = monitor.position();
+            let ms = monitor.size();
+            let x = mp.x + (ms.width as i32 - size.width as i32) / 2;
+            // A third of the way down reads as a palette; dead centre reads as a dialog.
+            let y = mp.y + (ms.height as i32 - size.height as i32) / 3;
+            let _ = window.set_position(tauri::PhysicalPosition { x, y });
+        }
+    }
+    let _ = window.show();
+    let _ = window.set_focus();
+    let _ = window.emit("picker-shown", ());
+}
+
+fn hide_picker_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("sessions") {
+        let _ = window.hide();
+        let _ = window.emit("picker-hidden", ());
+    }
+}
+
+#[tauri::command]
+async fn picker_send(
+    app: tauri::AppHandle,
+    action: String,
+    payload: Option<serde_json::Value>,
+) {
+    allow_node_foreground(&app).await;
+    send_command_with(&app, &action, payload).await;
+}
+
+#[tauri::command]
+fn hide_picker(app: tauri::AppHandle) {
+    hide_picker_window(&app);
+}
+
 /// Hand the foreground right to the Node child.
 ///
 /// Windows only lets the process that owns the foreground window (that is us,
@@ -506,6 +553,45 @@ fn read_enabled_modules(config_path: &PathBuf) -> Result<Vec<String>, String> {
     Ok(enabled)
 }
 
+#[derive(Debug, Clone)]
+struct PickerConfig {
+    hotkey: String,
+    tray_left_click_picker: bool,
+}
+
+const DEFAULT_PICKER_HOTKEY: &str = "Super+F10";
+
+/// Parsed separately from reading the file so the parsing has tests.
+fn parse_picker_config(content: &str) -> PickerConfig {
+    let value: serde_yaml::Value = match serde_yaml::from_str(content) {
+        Ok(v) => v,
+        Err(_) => serde_yaml::Value::Null,
+    };
+    let hotkey = value
+        .get("picker")
+        .and_then(|p| p.get("hotkey"))
+        .and_then(|h| h.as_str())
+        .unwrap_or(DEFAULT_PICKER_HOTKEY)
+        .to_string();
+    let tray_left_click_picker = value
+        .get("tray")
+        .and_then(|t| t.get("leftClick"))
+        .and_then(|v| v.as_str())
+        .map(|s| s == "picker")
+        .unwrap_or(false);
+    PickerConfig {
+        hotkey,
+        tray_left_click_picker,
+    }
+}
+
+fn read_picker_config(config_path: &PathBuf) -> PickerConfig {
+    match std::fs::read_to_string(config_path) {
+        Ok(content) => parse_picker_config(&content),
+        Err(_) => parse_picker_config(""),
+    }
+}
+
 fn find_app_root(candidates: &[PathBuf]) -> Option<PathBuf> {
     candidates
         .iter()
@@ -653,10 +739,10 @@ fn build_tray_menu(
         None::<&str>,
     )
     .map_err(m)?;
-    let claude_focus_probe = MenuItem::with_id(
+    let claude_picker = MenuItem::with_id(
         app,
-        "win_claude_focus_probe",
-        "TEMP: focus first claude session",
+        "win_claude_picker",
+        "Claude sessions…",
         true,
         None::<&str>,
     )
@@ -668,7 +754,7 @@ fn build_tray_menu(
     menu.append(&clear).map_err(m)?;
     menu.append(&open_default).map_err(m)?;
     menu.append(&claude_restore).map_err(m)?;
-    menu.append(&claude_focus_probe).map_err(m)?;
+    menu.append(&claude_picker).map_err(m)?;
     menu.append(&PredefinedMenuItem::separator(app).map_err(m)?)
         .map_err(m)?;
 
@@ -787,6 +873,20 @@ fn build_tray_menu(
 }
 
 fn register_shortcut(app: &tauri::AppHandle, shortcut_str: &str) -> Result<(), String> {
+    register_shortcut_action(app, shortcut_str, ShortcutAction::Autoplace)
+}
+
+#[derive(Clone, Copy)]
+enum ShortcutAction {
+    Autoplace,
+    ShowPicker,
+}
+
+fn register_shortcut_action(
+    app: &tauri::AppHandle,
+    shortcut_str: &str,
+    what: ShortcutAction,
+) -> Result<(), String> {
     if shortcut_str.is_empty() {
         return Ok(());
     }
@@ -794,9 +894,14 @@ fn register_shortcut(app: &tauri::AppHandle, shortcut_str: &str) -> Result<(), S
     app.global_shortcut()
         .on_shortcut(shortcut_str, move |_app, _shortcut, _event| {
             let app_handle = app_clone.clone();
-            tauri::async_runtime::spawn(async move {
-                send_command(&app_handle, "windows/autoplace").await;
-            });
+            match what {
+                ShortcutAction::Autoplace => {
+                    tauri::async_runtime::spawn(async move {
+                        send_command(&app_handle, "windows/autoplace").await;
+                    });
+                }
+                ShortcutAction::ShowPicker => show_picker(&app_handle),
+            }
         })
         .map_err(|e| e.to_string())
 }
@@ -821,13 +926,21 @@ fn main() {
         ))))
         .invoke_handler(tauri::generate_handler![
             start_mqtt_server,
-            get_enabled_modules
+            get_enabled_modules,
+            picker_send,
+            hide_picker
         ])
-        .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
+        .on_window_event(|window, event| match event {
+            WindowEvent::CloseRequested { api, .. } => {
                 let _ = window.hide();
                 api.prevent_close();
             }
+            // The palette is modal by habit: clicking elsewhere dismisses it.
+            WindowEvent::Focused(false) if window.label() == "sessions" => {
+                let _ = window.hide();
+                let _ = window.emit("picker-hidden", ());
+            }
+            _ => {}
         })
         .setup(|app| {
             // Hide main window on startup
@@ -896,6 +1009,26 @@ fn main() {
                 }
             });
 
+            let app_root = resolve_app_root(&app.handle())?;
+            let picker_cfg = read_picker_config(&resolve_config_path(&app.handle(), &app_root));
+            if let Err(e) = register_shortcut_action(
+                &app.handle(),
+                &picker_cfg.hotkey,
+                ShortcutAction::ShowPicker,
+            ) {
+                let _ = app.handle().emit(
+                    "server-log",
+                    LogPayload {
+                        message: format!(
+                            "Picker hotkey '{}' not registered: {}",
+                            picker_cfg.hotkey, e
+                        ),
+                        level: "warn".into(),
+                    },
+                );
+            }
+            app.manage(picker_cfg);
+
             let (menu, hotkey_items, interval_items) =
                 build_tray_menu(&app_handle).expect("failed to build tray menu");
 
@@ -940,12 +1073,8 @@ fn main() {
                 .on_menu_event(move |app, event| {
                     let id = event.id().as_ref().to_string();
 
-                    if id == "win_claude_focus_probe" {
-                        let app_handle = app.clone();
-                        tauri::async_runtime::spawn(async move {
-                            allow_node_foreground(&app_handle).await;
-                            send_command_with(&app_handle, "windows/claude-focus-probe", None).await;
-                        });
+                    if id == "win_claude_picker" {
+                        show_picker(app);
                         return;
                     }
 
@@ -1089,7 +1218,21 @@ fn main() {
                     } = event
                     {
                         let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
+                        let opens_picker = app
+                            .try_state::<PickerConfig>()
+                            .map(|cfg| cfg.tray_left_click_picker)
+                            .unwrap_or(false);
+                        if opens_picker {
+                            let visible = app
+                                .get_webview_window("sessions")
+                                .and_then(|w| w.is_visible().ok())
+                                .unwrap_or(false);
+                            if visible {
+                                hide_picker_window(app);
+                            } else {
+                                show_picker(app);
+                            }
+                        } else if let Some(window) = app.get_webview_window("main") {
                             let is_visible = window.is_visible().unwrap_or(false);
                             if is_visible {
                                 let _ = window.hide();
@@ -1114,6 +1257,33 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{describe_child_exit, find_app_root};
+    use super::parse_picker_config;
+
+    #[test]
+    fn picker_config_falls_back_to_defaults() {
+        let cfg = parse_picker_config("modules:\n  windows:\n    claudeWt: true\n");
+        assert_eq!(cfg.hotkey, "Super+F10");
+        assert!(!cfg.tray_left_click_picker);
+    }
+
+    #[test]
+    fn picker_config_reads_hotkey_and_tray_choice() {
+        let cfg = parse_picker_config("picker:\n  hotkey: 'Ctrl+Alt+J'\ntray:\n  leftClick: picker\n");
+        assert_eq!(cfg.hotkey, "Ctrl+Alt+J");
+        assert!(cfg.tray_left_click_picker);
+    }
+
+    #[test]
+    fn picker_config_treats_any_other_tray_choice_as_log() {
+        let cfg = parse_picker_config("tray:\n  leftClick: log\n");
+        assert!(!cfg.tray_left_click_picker);
+    }
+
+    #[test]
+    fn picker_config_survives_broken_yaml() {
+        let cfg = parse_picker_config("\t\tnot: [valid");
+        assert_eq!(cfg.hotkey, "Super+F10");
+    }
 
     #[test]
     fn reports_access_violation_as_a_native_crash_error() {

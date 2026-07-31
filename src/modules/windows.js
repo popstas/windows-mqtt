@@ -357,14 +357,6 @@ module.exports = async (mqtt, config, log) => {
     },
     'windows/claude-restore': () => claudeRestore(),
     'windows/claude-focus': (payload) => claudeFocus(payload),
-    'windows/claude-focus-probe': async () => {
-      const res = winMan.claudeWtSessions();
-      if (!res.ok) { log(`claude-wt: ${res.reason}`, 'warn'); return; }
-      const first = res.sessions.find(s => s.open);
-      if (!first) { log('claude-wt: no open sessions', 'warn'); return; }
-      log(`claude-wt: focusing ${first.title}`);
-      await claudeFocus({ id: first.id });
-    },
     'windows/claude-sessions-start': () => startSessionsFeed(),
     'windows/claude-sessions-stop': () => stopSessionsFeed(),
     'windows/claude-restore-one': (payload) => claudeRestoreOne(payload),

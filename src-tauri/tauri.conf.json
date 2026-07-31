@@ -44,6 +44,18 @@
         "resizable": true,
         "fullscreen": false,
         "visible": false
+      },
+      {
+        "label": "sessions",
+        "url": "sessions.html",
+        "title": "claude sessions",
+        "width": 720,
+        "height": 480,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "visible": false
       }
     ]
   }

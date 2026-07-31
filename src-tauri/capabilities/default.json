@@ -1,6 +1,6 @@
 {
   "identifier": "default",
-  "windows": ["main"],
+  "windows": ["main", "sessions"],
   "permissions": [
     "core:default",
     "shell:allow-spawn",

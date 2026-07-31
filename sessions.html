@@ -164,7 +164,10 @@
     }, 2000);
 
     search.focus();
-    invoke('picker_send', { action: 'windows/claude-sessions-start' });
+    // The feed is started by the 'picker-shown' listener above, which Rust
+    // fires every time the window is actually shown (window starts hidden
+    // per tauri.conf.json). Starting it again here would double-fire on the
+    // very first show.
   }
 
   window.addEventListener('DOMContentLoaded', () => { start(); });

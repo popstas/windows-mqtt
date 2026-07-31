@@ -19,6 +19,14 @@ mqtt:
   password: 'your_password'
   base: 'home/room/pc'
 
+picker:
+  # Global hotkey for the claude session picker. Windows swallows some Win+
+  # combinations before they reach the app; change this if it never fires.
+  hotkey: 'Super+F10'
+tray:
+  # What a left click on the tray icon opens: picker | log
+  leftClick: log
+
 modules:
   audio:
     interval: 5   # loudness fallback polling period (seconds), used only when
