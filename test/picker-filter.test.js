@@ -49,3 +49,9 @@ test('does not mutate the input', () => {
   filterSessions(input, 'ccf');
   assert.strictEqual(input[0].sessions.length, 2);
 });
+
+test('matches the session label independently of cwd', () => {
+  const out = filterSessions(groups(), 'b2b');
+  assert.strictEqual(out[0].sessions.length, 1);
+  assert.deepStrictEqual(out[0].sessions.map(s => s.id), ['b']);
+});
