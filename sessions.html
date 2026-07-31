@@ -127,9 +127,32 @@
     choose();
   });
 
+  // Reset the palette for a show and (re)start the feed. Called both from the
+  // 'picker-shown' listener (every show after the window has finished
+  // loading) and, once, directly from start() to cover the show that raced
+  // ahead of this webview finishing DOMContentLoaded (see start()).
+  function beginShow() {
+    search.value = '';
+    active = 0;
+    search.focus();
+    search.select();
+    // Reset the watchdog's target state on every show, not just once at page
+    // load: a stale 'Backend not responding.' from a previous show must not
+    // linger into the next one, and a fresh 2s window is what actually
+    // reflects "the backend hasn't answered since the picker last opened".
+    message.textContent = 'Loading…';
+    invoke('picker_send', { action: 'windows/claude-sessions-start' });
+    setTimeout(() => {
+      if (!groups.length && message.textContent === 'Loading…') {
+        message.textContent = 'Backend not responding.';
+      }
+    }, 2000);
+  }
+
   async function start() {
     if (!window.__TAURI__) { message.textContent = 'No backend detected.'; return; }
     const { listen } = window.__TAURI__.event;
+    const { getCurrentWindow } = window.__TAURI__.window;
 
     await listen('claude-wt-sessions', (event) => {
       const data = event.payload || {};
@@ -145,29 +168,25 @@
     });
 
     // Fired by Rust every time the window is shown.
-    await listen('picker-shown', () => {
-      search.value = '';
-      active = 0;
-      search.focus();
-      search.select();
-      invoke('picker_send', { action: 'windows/claude-sessions-start' });
-    });
+    await listen('picker-shown', beginShow);
 
     await listen('picker-hidden', () => {
       invoke('picker_send', { action: 'windows/claude-sessions-stop' });
     });
 
-    setTimeout(() => {
-      if (!groups.length && message.textContent === 'Loading…') {
-        message.textContent = 'Backend not responding.';
-      }
-    }, 2000);
-
     search.focus();
-    // The feed is started by the 'picker-shown' listener above, which Rust
-    // fires every time the window is actually shown (window starts hidden
-    // per tauri.conf.json). Starting it again here would double-fire on the
-    // very first show.
+
+    // The hotkey is live from Rust's setup(), before this webview has
+    // necessarily finished loading — a press in that window shows the
+    // picker without a 'picker-shown' event ever reaching a listener that
+    // didn't exist yet. Cover that first-show race by checking whether the
+    // window is already visible right now; if so, this is that race and the
+    // feed needs to be started here instead of waiting for an event that
+    // already fired.
+    const alreadyVisible = await getCurrentWindow().isVisible().catch(() => false);
+    if (alreadyVisible) {
+      beginShow();
+    }
   }
 
   window.addEventListener('DOMContentLoaded', () => { start(); });
