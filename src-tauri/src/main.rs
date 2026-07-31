@@ -186,7 +186,7 @@ fn show_picker(app: &tauri::AppHandle) {
     if let Err(e) = window.set_focus() {
         log(format!("Picker show: set_focus() failed: {e}"));
     }
-    let _ = window.emit("picker-shown", ());
+    let _ = window.emit_to("sessions", "picker-shown", ());
 }
 
 /// Hide the picker. Idempotent: only emits `picker-hidden` if the window was
@@ -203,7 +203,7 @@ fn hide_picker_window(app: &tauri::AppHandle) {
     let was_visible = window.is_visible().unwrap_or(true);
     let _ = window.hide();
     if was_visible {
-        let _ = window.emit("picker-hidden", ());
+        let _ = window.emit_to("sessions", "picker-hidden", ());
     }
     if let Some(state) = app.try_state::<LastHidden>() {
         *state.0.lock().unwrap() = Some(std::time::Instant::now());
@@ -227,9 +227,14 @@ fn hide_picker(app: tauri::AppHandle) {
 
 /// Hand the foreground right to the Node child.
 ///
-/// Windows only lets the process that owns the foreground window (that is us,
-/// while the picker has focus) set it — or hand that right to another process
-/// explicitly. Without this the Node child's bringToTop() flashes the taskbar
+/// Windows only lets the process that owns the foreground window set it (or
+/// hand that right to another process explicitly). By the time this runs the
+/// picker itself is usually already hidden — `sessions.html` awaits
+/// `hide_picker` before calling `picker_send` — so it is not "us, because the
+/// picker has focus" that grants this. Windows also lets the process that
+/// received the *most recent input event* call AllowSetForegroundWindow, and
+/// that is still us at this point (the click/keypress that triggered the
+/// pick). Without this the Node child's bringToTop() flashes the taskbar
 /// button instead of switching.
 #[cfg(windows)]
 async fn allow_node_foreground(app: &tauri::AppHandle) {
@@ -1042,6 +1047,16 @@ fn main() {
             hide_picker
         ])
         .on_window_event(|window, event| match event {
+            // The frameless "sessions" window has no close button, but Alt+F4
+            // (or any other close request) must still go through
+            // hide_picker_window so picker-hidden is emitted and LastHidden
+            // is stamped — otherwise the webview never learns it was hidden,
+            // never sends windows/claude-sessions-stop, and the 1 Hz session
+            // scan keeps running until the next open/close cycle.
+            WindowEvent::CloseRequested { api, .. } if window.label() == "sessions" => {
+                hide_picker_window(window.app_handle());
+                api.prevent_close();
+            }
             WindowEvent::CloseRequested { api, .. } => {
                 let _ = window.hide();
                 api.prevent_close();
