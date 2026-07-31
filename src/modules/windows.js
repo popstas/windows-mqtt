@@ -172,7 +172,8 @@ module.exports = async (mqtt, config, log) => {
   async function focus(topic, message) {
     log(`< ${topic}: ${message}`);
     const rules = JSON.parse(`${message}`);
-    await winMan.focusWindow(rules);
+    const focused = await winMan.focusWindow(rules);
+    if (!focused) log(`focus: no window matched ${message}`, 'warn');
   }
 
   async function reload() {
