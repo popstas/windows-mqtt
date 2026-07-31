@@ -67,4 +67,15 @@ function buildSessionsPayload(res) {
     : { ok: false, reason: res.reason };
 }
 
-module.exports = { labelSessions, groupSessions, buildSessionsPayload };
+/**
+ * Which way to go for the session the user just picked.
+ *
+ * The window could have been closed while the list sat on screen, so the handle
+ * is checked at the moment of the action rather than kept fresh by polling.
+ */
+function chooseAction(session, isAlive) {
+  if (session.open && session.windowId && isAlive(session.windowId)) return 'focus';
+  return 'restore';
+}
+
+module.exports = { labelSessions, groupSessions, buildSessionsPayload, chooseAction };

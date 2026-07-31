@@ -1,7 +1,7 @@
 const winMan = require('windows11-manager');
 const globalConfig = require('../config.js');
 const {exec} = require('child_process');
-const {buildSessionsPayload} = require('../picker/session-groups');
+const {buildSessionsPayload, chooseAction} = require('../picker/session-groups');
 
 module.exports = async (mqtt, config, log) => {
   let lastStats = {};
@@ -127,15 +127,20 @@ module.exports = async (mqtt, config, log) => {
     if (!res.ok) { log(`claude-wt: ${res.reason}`, 'warn'); return; }
     const session = res.sessions.find(s => s.id === id);
     if (!session) { log(`claude-wt: unknown session ${id}`, 'warn'); return; }
-    if (session.open && session.desktop) {
+
+    const action = chooseAction(session, (windowId) => !!winMan.getWindowById(windowId));
+    if (action === 'restore') {
+      await claudeRestoreOne({id});
+      return;
+    }
+
+    if (session.desktop) {
       const current = await winMan.virtualDesktop.GetWindowDesktopNumber(session.windowId);
       if (current !== undefined && Number(current) + 1 !== session.desktop) {
         await winMan.virtualDesktop.GoToDesktopNumber(session.desktop);
       }
     }
-    if (!session.open || !winMan.focusWindowById(session.windowId)) {
-      log(`claude-wt: ${id} is not on screen`, 'warn');
-    }
+    winMan.focusWindowById(session.windowId);
   }
 
   let sessionsTimerId = null;

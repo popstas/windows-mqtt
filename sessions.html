@@ -136,6 +136,13 @@
     active = 0;
     search.focus();
     search.select();
+    // Clear the previous show's session list before anything else. Without
+    // this, two things go wrong: the '!groups.length' watchdog guard below
+    // stays permanently false once any show ever received data (so it can
+    // never fire again), and the palette renders seconds-old rows the user
+    // could click before the fresh 'claude-wt-sessions' event arrives.
+    groups = [];
+    render();
     // Reset the watchdog's target state on every show, not just once at page
     // load: a stale 'Backend not responding.' from a previous show must not
     // linger into the next one, and a fresh 2s window is what actually

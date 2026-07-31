@@ -1151,6 +1151,32 @@ fn main() {
                     parse_picker_config("")
                 }
             };
+
+            // The picker gets its data exclusively from the `windows` module's
+            // claude-wt session feed. If the tray is wired to open the picker
+            // but that module is off, the picker will show "Backend not
+            // responding" forever with nothing in the log to explain why —
+            // warn at startup instead of leaving that a silent mystery.
+            if picker_cfg.tray_left_click_picker {
+                let modules = app_root_result
+                    .as_ref()
+                    .ok()
+                    .map(|root| {
+                        read_enabled_modules(&resolve_config_path(&app.handle(), root))
+                            .unwrap_or_default()
+                    })
+                    .unwrap_or_default();
+                if !modules.iter().any(|m| m == "windows") {
+                    let _ = app.handle().emit(
+                        "server-log",
+                        LogPayload {
+                            message: "tray.leftClick is 'picker' but the windows module is disabled — the picker will have no data".into(),
+                            level: "warn".into(),
+                        },
+                    );
+                }
+            }
+
             register_shortcut_with_retry(
                 app.handle().clone(),
                 picker_cfg.hotkey.clone(),

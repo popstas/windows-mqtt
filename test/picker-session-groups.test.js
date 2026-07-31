@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { labelSessions, groupSessions, buildSessionsPayload } = require('../src/picker/session-groups');
+const { labelSessions, groupSessions, buildSessionsPayload, chooseAction } = require('../src/picker/session-groups');
 
 const s = (over) => ({
   id: 'x', title: 't', cwd: '/p', bounds: { x: 0, y: 0, width: 10, height: 10 },
@@ -107,4 +107,33 @@ test('buildSessionsPayload labels and groups sessions on the ok path', () => {
 test('buildSessionsPayload carries the reason through unchanged on the failure path', () => {
   const payload = buildSessionsPayload({ ok: false, reason: 'claudeWt.enabled is false in config' });
   assert.deepStrictEqual(payload, { ok: false, reason: 'claudeWt.enabled is false in config' });
+});
+
+test('chooseAction focuses a session that is open', () => {
+  assert.strictEqual(chooseAction({ open: true, windowId: 5 }, () => true), 'focus');
+});
+
+test('chooseAction restores a session that is closed', () => {
+  assert.strictEqual(chooseAction({ open: false, windowId: null }, () => true), 'restore');
+});
+
+test('chooseAction restores when the handle died since the list was drawn', () => {
+  assert.strictEqual(chooseAction({ open: true, windowId: 5 }, () => false), 'restore');
+});
+
+test('chooseAction restores a closed session even when isAlive would say no', () => {
+  // Completes the 2x2 matrix: open=false, isAlive=false. Same outcome as the
+  // open=false/isAlive=true case, but only a distinct isAlive call proves the
+  // 'open' check, not the liveness check, is what drove the 'restore' result.
+  assert.strictEqual(chooseAction({ open: false, windowId: null }, () => false), 'restore');
+});
+
+test('chooseAction never calls isAlive for a closed session', () => {
+  let called = false;
+  chooseAction({ open: false, windowId: null }, () => { called = true; return true; });
+  assert.strictEqual(called, false);
+});
+
+test('chooseAction restores an open session with no window id without checking liveness', () => {
+  assert.strictEqual(chooseAction({ open: true, windowId: null }, () => true), 'restore');
 });
