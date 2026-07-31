@@ -2,11 +2,57 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+const yaml = require('js-yaml');
 
-const srcTauri = path.join(__dirname, '..', 'src-tauri');
+const repoRoot = path.join(__dirname, '..');
+const srcTauri = path.join(repoRoot, 'src-tauri');
 
 function readJson(file) {
   return JSON.parse(fs.readFileSync(path.join(srcTauri, file), 'utf8'));
+}
+
+// Resource entries whose expansion is *expected* to include gitignored files:
+// node_modules holds installed dependencies and bin/ holds built binaries
+// (audio-watcher.exe), neither committed to git but both required at runtime.
+// See AGENTS.md "Never ship secrets in the installer" / "Known and accepted".
+const RESOURCE_GLOBS_ALLOWED_TO_BE_GITIGNORED = ['../node_modules/**/*', '../bin/*'];
+
+// Expands a bundle.resources entry (relative to src-tauri) to the paths it
+// actually matches on disk, relative to the repo root. Mirrors tauri-utils'
+// own resource resolution (crates/tauri-utils/src/resources.rs) closely
+// enough for this check: entries without a `*` are exact files; entries with
+// a `*` are expanded with fs.globSync and then filtered down to files only,
+// because tauri's glob iterator *skips* any directory a glob pattern matches
+// (see `next_current_path`: hitting a directory mid-glob-iteration recurses
+// into `self.next()` without emitting a resource for it or walking it) —
+// only its individually-matched file entries end up in the bundle.
+function expandResourceGlob(glob) {
+  const rel = glob.replace(/^\.\.\//, '');
+  if (!glob.includes('*')) {
+    return fs.existsSync(path.join(repoRoot, rel)) ? [rel] : [];
+  }
+  return fs.globSync(rel, { cwd: repoRoot })
+    .filter(p => fs.statSync(path.join(repoRoot, p)).isFile());
+}
+
+// Asks git which of the given (repo-root-relative) paths are gitignored,
+// using git's own ignore rules rather than a hardcoded list of names.
+function gitIgnoredOf(paths) {
+  if (paths.length === 0) return [];
+  let stdout;
+  try {
+    stdout = execFileSync('git', ['check-ignore', '--stdin', '-v'], {
+      cwd: repoRoot,
+      input: paths.join('\n') + '\n',
+      encoding: 'utf8',
+    });
+  } catch (e) {
+    // Exit code 1 means none of the fed paths are ignored.
+    if (e.status === 1) return [];
+    throw e;
+  }
+  return stdout.split('\n').filter(Boolean);
 }
 
 // The full resource list must live in the base config so a plain
@@ -20,7 +66,8 @@ test('base tauri.conf.json bundles the full resource list', () => {
     '../commands.example.yml',
     '../bin/*',
     '../src/*',
-    '../src/**/*',
+    '../src/modules/**/*',
+    '../src/picker/**/*',
     '../node_modules/**/*',
   ];
   for (const glob of required) {
@@ -31,30 +78,35 @@ test('base tauri.conf.json bundles the full resource list', () => {
   }
 });
 
-// config.yml, commands.yml, and data/ are gitignored and hold the developer's
-// real credentials (mqtt.password, obs.password, api keys, etc.). Installers
-// before v1.0.0 bundled them directly and shipped those secrets to every
-// user — see AGENTS.md's "Never ship secrets in the installer". Precise
-// enough not to false-positive on the legitimate config.example.yml /
-// commands.example.yml entries (which end in "example.yml", not "config.yml"
-// / "commands.yml").
-test('base tauri.conf.json never bundles the gitignored credential files', () => {
+// config.yml, commands.yml, data/, and (as of the src/daemon leak) any other
+// gitignored path are never supposed to reach the installed bundle — see
+// AGENTS.md's "Never ship secrets in the installer". The previous version of
+// this test only string-matched three hardcoded filenames against the raw
+// config, which gave false assurance: it never actually looked at what the
+// globs expand to on disk, so `../src/**/*` sweeping in the gitignored
+// `src/daemon/` (a local service-wrapper dir containing logs with absolute
+// developer paths) went uncaught. This resolves every resource entry to the
+// real files it matches and asks git — not a hardcoded name list — whether
+// any of them are ignored, so a future wildcard entry can't slip past it
+// either.
+test('bundle.resources never expands to a gitignored path outside the known node_modules/bin exceptions', () => {
   const base = readJson('tauri.conf.json');
   const resources = base.bundle && base.bundle.resources;
   assert.ok(Array.isArray(resources), 'bundle.resources must be an array');
-  const forbidden = [
-    { name: 'config.yml', pattern: /(^|\/)config\.yml$/ },
-    { name: 'commands.yml', pattern: /(^|\/)commands\.yml$/ },
-    { name: 'data/', pattern: /(^|\/)data(\/|$)/ },
-  ];
+
+  const offenders = [];
   for (const glob of resources) {
-    for (const { name, pattern } of forbidden) {
-      assert.ok(
-        !pattern.test(glob),
-        `bundle.resources must not include ${name} (found matching entry "${glob}")`
-      );
-    }
+    if (RESOURCE_GLOBS_ALLOWED_TO_BE_GITIGNORED.includes(glob)) continue;
+    const expanded = expandResourceGlob(glob);
+    const ignored = gitIgnoredOf(expanded);
+    if (ignored.length > 0) offenders.push(`  ${glob} ->\n    ${ignored.join('\n    ')}`);
   }
+
+  assert.deepStrictEqual(
+    offenders,
+    [],
+    `bundle.resources must not ship gitignored files:\n${offenders.join('\n')}`
+  );
 });
 
 // The dev overlay empties resources (RFC 7396 merge replaces arrays), keeping
@@ -93,11 +145,45 @@ test('legacy tauri.bundle.conf.json is removed', () => {
   );
 });
 
-test('prepare-frontend copies both pages and the picker filter', () => {
-  const fs = require('node:fs');
-  const path = require('node:path');
-  const src = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'prepare-frontend.js'), 'utf8');
-  for (const file of ['index.html', 'sessions.html', 'picker-filter.js', 'session-glyph.js']) {
-    assert.ok(src.includes(file), `prepare-frontend.js must copy ${file}`);
+// A plain `src.includes('sessions.html')` would still pass if that copy line
+// were commented out, or if the file were copied to the wrong destination
+// (e.g. a stray edit sending it to frontend/index.html). Assert the actual
+// (source, destination) pairs the script passes to copyFileSync instead.
+test('prepare-frontend copies both pages and the picker filter to the right destinations', () => {
+  const src = fs.readFileSync(path.join(repoRoot, 'scripts', 'prepare-frontend.js'), 'utf8');
+  const calls = [...src.matchAll(/copyFileSync\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\)/g)]
+    .map(m => ({ from: m[1], to: m[2] }));
+
+  const required = [
+    { from: 'index.html', to: 'frontend/index.html' },
+    { from: 'sessions.html', to: 'frontend/sessions.html' },
+    { from: 'frontend-src/picker-filter.js', to: 'frontend/picker-filter.js' },
+    { from: 'frontend-src/session-glyph.js', to: 'frontend/session-glyph.js' },
+  ];
+  for (const pair of required) {
+    assert.ok(
+      calls.some(c => c.from === pair.from && c.to === pair.to),
+      `prepare-frontend.js must copyFileSync('${pair.from}', '${pair.to}')`
+    );
   }
+});
+
+// The picker hotkey default is duplicated across two languages: main.rs'
+// DEFAULT_PICKER_HOTKEY (used when picker.hotkey is absent from config.yml)
+// and config.example.yml's documented default. Nothing else catches these
+// drifting apart.
+test('DEFAULT_PICKER_HOTKEY in main.rs matches config.example.yml picker.hotkey', () => {
+  const mainRs = fs.readFileSync(path.join(srcTauri, 'src', 'main.rs'), 'utf8');
+  const m = mainRs.match(/const\s+DEFAULT_PICKER_HOTKEY\s*:\s*&str\s*=\s*"([^"]+)"/);
+  assert.ok(m, 'could not find `const DEFAULT_PICKER_HOTKEY: &str = "..."` in main.rs');
+  const rustDefault = m[1];
+
+  const config = yaml.load(fs.readFileSync(path.join(repoRoot, 'config.example.yml'), 'utf8'));
+  const configHotkey = config && config.picker && config.picker.hotkey;
+
+  assert.strictEqual(
+    configHotkey,
+    rustDefault,
+    'config.example.yml picker.hotkey must match DEFAULT_PICKER_HOTKEY in main.rs'
+  );
 });
