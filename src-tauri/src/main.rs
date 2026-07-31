@@ -77,6 +77,13 @@ struct HotkeyMenuItems(Vec<CheckMenuItem<tauri::Wry>>);
 struct IntervalMenuItems(Vec<CheckMenuItem<tauri::Wry>>);
 struct CurrentShortcut(Mutex<Option<String>>);
 
+// Timestamp of the last time the picker was hidden (by any path: Esc, click-
+// away blur, or an explicit hide). Read from the tray left-click handler,
+// which runs synchronously on the tray's event loop, so a std (non-async)
+// mutex is used rather than the tokio one the rest of the app favors for
+// IPC-guarded state.
+struct LastHidden(std::sync::Mutex<Option<std::time::Instant>>);
+
 // --- Send command to JS child via IPC ---
 
 async fn send_command(app: &tauri::AppHandle, action: &str) {
@@ -111,6 +118,23 @@ async fn send_command_with(
     }
 }
 
+/// Centre `window` on `monitor`, a third of the way down (a palette reads
+/// that way; dead centre reads as a dialog). Reads `window.outer_size()`
+/// itself rather than taking a cached size, so callers can invoke it twice
+/// around a move and pick up Windows' post-move DPI rescale (see
+/// `show_picker`).
+fn position_on_monitor<R: tauri::Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    monitor: &tauri::window::Monitor,
+) -> Result<(), tauri::Error> {
+    let size = window.outer_size()?;
+    let mp = monitor.position();
+    let ms = monitor.size();
+    let x = mp.x + (ms.width as i32 - size.width as i32) / 2;
+    let y = mp.y + (ms.height as i32 - size.height as i32) / 3;
+    window.set_position(tauri::PhysicalPosition { x, y })
+}
+
 /// Show the picker centred on the monitor the cursor is on.
 ///
 /// The `center: true` window option centres on the primary monitor, which is
@@ -121,25 +145,68 @@ fn show_picker(app: &tauri::AppHandle) {
         Some(w) => w,
         None => return,
     };
-    if let (Ok(cursor), Ok(size)) = (app.cursor_position(), window.outer_size()) {
-        if let Ok(Some(monitor)) = window.monitor_from_point(cursor.x, cursor.y) {
-            let mp = monitor.position();
-            let ms = monitor.size();
-            let x = mp.x + (ms.width as i32 - size.width as i32) / 2;
-            // A third of the way down reads as a palette; dead centre reads as a dialog.
-            let y = mp.y + (ms.height as i32 - size.height as i32) / 3;
-            let _ = window.set_position(tauri::PhysicalPosition { x, y });
-        }
+
+    let log = |message: String| {
+        let _ = app.emit(
+            "server-log",
+            LogPayload {
+                message,
+                level: "warn".into(),
+            },
+        );
+    };
+
+    match app.cursor_position() {
+        Ok(cursor) => match window.monitor_from_point(cursor.x, cursor.y) {
+            Ok(Some(monitor)) => {
+                // Windows rescales a per-monitor-DPI-aware window's physical
+                // size to the target monitor right after a cross-monitor
+                // move, so `outer_size()` read before the move can be stale
+                // on a mixed-DPI multi-monitor setup. Position once to land
+                // on the right monitor (triggering the rescale), then
+                // re-read the now-current size and centre again with it.
+                if let Err(e) = position_on_monitor(&window, &monitor) {
+                    log(format!("Picker show: failed to position window: {e}"));
+                }
+                if let Err(e) = position_on_monitor(&window, &monitor) {
+                    log(format!(
+                        "Picker show: failed to re-position window after DPI rescale: {e}"
+                    ));
+                }
+            }
+            Ok(None) => log("Picker show: no monitor found at cursor position".into()),
+            Err(e) => log(format!("Picker show: monitor_from_point failed: {e}")),
+        },
+        Err(e) => log(format!("Picker show: failed to read cursor position: {e}")),
     }
-    let _ = window.show();
-    let _ = window.set_focus();
+
+    if let Err(e) = window.show() {
+        log(format!("Picker show: window.show() failed: {e}"));
+    }
+    if let Err(e) = window.set_focus() {
+        log(format!("Picker show: set_focus() failed: {e}"));
+    }
     let _ = window.emit("picker-shown", ());
 }
 
+/// Hide the picker. Idempotent: only emits `picker-hidden` if the window was
+/// actually visible, so re-entering via the `Focused(false)` handler after an
+/// explicit `hide_picker` (Esc) does not double-emit — Esc hides the window,
+/// which then loses focus and re-enters this function via the blur handler.
+/// Also stamps `LastHidden` so the tray left-click handler can distinguish a
+/// fresh hide (this click just closed it) from a stale one.
 fn hide_picker_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("sessions") {
-        let _ = window.hide();
+    let window = match app.get_webview_window("sessions") {
+        Some(w) => w,
+        None => return,
+    };
+    let was_visible = window.is_visible().unwrap_or(true);
+    let _ = window.hide();
+    if was_visible {
         let _ = window.emit("picker-hidden", ());
+    }
+    if let Some(state) = app.try_state::<LastHidden>() {
+        *state.0.lock().unwrap() = Some(std::time::Instant::now());
     }
 }
 
@@ -913,6 +980,49 @@ fn unregister_shortcut(app: &tauri::AppHandle, shortcut_str: &str) {
     let _ = app.global_shortcut().unregister(shortcut_str);
 }
 
+/// Register a global shortcut off-thread, retrying on failure.
+///
+/// On `tauri dev` hot-reload (and any relaunch while a previous tray-resident
+/// instance is still tearing down, e.g. `npm run deploy-local`'s kill →
+/// install → relaunch) the old process briefly still owns the shortcut, so a
+/// single attempt can lose it for the whole session. Retry until the old
+/// owner releases it, without blocking startup. Shared by both the autoplace
+/// hotkey and the picker hotkey so they get identical treatment.
+fn register_shortcut_with_retry(
+    app: tauri::AppHandle,
+    shortcut_str: String,
+    action: ShortcutAction,
+    log_label: &'static str,
+) {
+    if shortcut_str.is_empty() {
+        return;
+    }
+    std::thread::spawn(move || {
+        const ATTEMPTS: u32 = 10;
+        for attempt in 1..=ATTEMPTS {
+            // Clear any stale registration owned by this process first.
+            unregister_shortcut(&app, &shortcut_str);
+            match register_shortcut_action(&app, &shortcut_str, action) {
+                Ok(()) => return,
+                Err(e) if attempt == ATTEMPTS => {
+                    let message = format!(
+                        "Failed to register {log_label} hotkey '{shortcut_str}' after {ATTEMPTS} attempts: {e}"
+                    );
+                    eprintln!("{message}");
+                    let _ = app.emit(
+                        "server-log",
+                        LogPayload {
+                            message,
+                            level: "warn".into(),
+                        },
+                    );
+                }
+                Err(_) => std::thread::sleep(Duration::from_millis(300)),
+            }
+        }
+    });
+}
+
 // --- Main ---
 
 fn main() {
@@ -924,6 +1034,7 @@ fn main() {
         .manage(CurrentShortcut(Mutex::new(Some(
             "ctrl+alt+shift+p".to_string(),
         ))))
+        .manage(LastHidden(std::sync::Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             start_mqtt_server,
             get_enabled_modules,
@@ -936,9 +1047,12 @@ fn main() {
                 api.prevent_close();
             }
             // The palette is modal by habit: clicking elsewhere dismisses it.
+            // Routed through hide_picker_window so an explicit hide (Esc)
+            // that re-enters here via the resulting focus loss doesn't
+            // double-emit picker-hidden, and so this hide is recorded in
+            // LastHidden for the tray left-click toggle race below.
             WindowEvent::Focused(false) if window.label() == "sessions" => {
-                let _ = window.hide();
-                let _ = window.emit("picker-hidden", ());
+                hide_picker_window(window.app_handle());
             }
             _ => {}
         })
@@ -950,8 +1064,15 @@ fn main() {
 
             let app_handle = app.handle().clone();
 
+            // Resolved once and reused below (picker config path) instead of
+            // calling resolve_app_root twice. Kept as a Result rather than
+            // unwrapped here so each downstream use can degrade on its own
+            // terms instead of one failure aborting the other.
+            let app_root_result = resolve_app_root(&app_handle);
+
             // Read MQTT config and create bridge
-            let mqtt_config = resolve_app_root(&app_handle)
+            let mqtt_config = app_root_result
+                .clone()
                 .and_then(|root| {
                     let config_path = resolve_config_path(&app_handle, &root);
                     read_mqtt_config(&config_path)
@@ -1009,24 +1130,33 @@ fn main() {
                 }
             });
 
-            let app_root = resolve_app_root(&app.handle())?;
-            let picker_cfg = read_picker_config(&resolve_config_path(&app.handle(), &app_root));
-            if let Err(e) = register_shortcut_action(
-                &app.handle(),
-                &picker_cfg.hotkey,
+            // A missing/corrupt install (src/index.js not found under either
+            // resource_dir or resource_dir/_up_) must not turn a diagnosable
+            // degraded launch into a silent startup crash — fall back to the
+            // picker config's own defaults (what parse_picker_config("")
+            // yields) and log it, the same way the MQTT config above
+            // degrades instead of propagating.
+            let picker_cfg = match &app_root_result {
+                Ok(root) => read_picker_config(&resolve_config_path(&app.handle(), root)),
+                Err(e) => {
+                    let _ = app.handle().emit(
+                        "server-log",
+                        LogPayload {
+                            message: format!(
+                                "App root error (picker config falls back to defaults): {e}"
+                            ),
+                            level: "warn".into(),
+                        },
+                    );
+                    parse_picker_config("")
+                }
+            };
+            register_shortcut_with_retry(
+                app.handle().clone(),
+                picker_cfg.hotkey.clone(),
                 ShortcutAction::ShowPicker,
-            ) {
-                let _ = app.handle().emit(
-                    "server-log",
-                    LogPayload {
-                        message: format!(
-                            "Picker hotkey '{}' not registered: {}",
-                            picker_cfg.hotkey, e
-                        ),
-                        level: "warn".into(),
-                    },
-                );
-            }
+                "picker",
+            );
             app.manage(picker_cfg);
 
             let (menu, hotkey_items, interval_items) =
@@ -1036,29 +1166,15 @@ fn main() {
             app.manage(HotkeyMenuItems(hotkey_items));
             app.manage(IntervalMenuItems(interval_items));
 
-            // Register default hotkey. On `tauri dev` hot-reload (and any relaunch
-            // while a previous tray-resident instance is still tearing down) the old
-            // process briefly still owns the global shortcut, so a single attempt
-            // loses it for the whole session. Retry off-thread until the old owner
-            // releases it, without blocking startup.
-            let hotkey_handle = app_handle.clone();
-            std::thread::spawn(move || {
-                const SHORTCUT: &str = "ctrl+alt+shift+p";
-                const ATTEMPTS: u32 = 10;
-                for attempt in 1..=ATTEMPTS {
-                    // Clear any stale registration owned by this process first.
-                    unregister_shortcut(&hotkey_handle, SHORTCUT);
-                    match register_shortcut(&hotkey_handle, SHORTCUT) {
-                        Ok(()) => return,
-                        Err(e) if attempt == ATTEMPTS => {
-                            eprintln!(
-                                "Failed to register default hotkey after {ATTEMPTS} attempts: {e}"
-                            );
-                        }
-                        Err(_) => std::thread::sleep(Duration::from_millis(300)),
-                    }
-                }
-            });
+            // Register default (autoplace) hotkey with the same retry
+            // treatment as the picker hotkey above — see
+            // register_shortcut_with_retry's doc comment for why.
+            register_shortcut_with_retry(
+                app_handle.clone(),
+                "ctrl+alt+shift+p".to_string(),
+                ShortcutAction::Autoplace,
+                "autoplace",
+            );
 
             let mut tray_builder = TrayIconBuilder::new()
                 .menu(&menu)
@@ -1227,9 +1343,25 @@ fn main() {
                                 .get_webview_window("sessions")
                                 .and_then(|w| w.is_visible().ok())
                                 .unwrap_or(false);
+                            // Clicking the tray icon activates the shell's
+                            // notification area, which blurs the picker and
+                            // queues a Focused(false)-driven hide at
+                            // button-DOWN — before this Up-edge handler runs.
+                            // By the time `visible` is read above the window
+                            // may already be hidden by that race, which would
+                            // otherwise make this branch re-show it (a
+                            // hide/show flicker) instead of leaving it closed
+                            // as the click visually did. Treat a show request
+                            // arriving within the race window as the
+                            // toggle-close it actually was.
+                            let recently_hidden = app
+                                .try_state::<LastHidden>()
+                                .and_then(|state| *state.0.lock().unwrap())
+                                .map(|t| t.elapsed() < Duration::from_millis(300))
+                                .unwrap_or(false);
                             if visible {
                                 hide_picker_window(app);
-                            } else {
+                            } else if !recently_hidden {
                                 show_picker(app);
                             }
                         } else if let Some(window) = app.get_webview_window("main") {
