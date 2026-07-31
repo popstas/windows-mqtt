@@ -31,6 +31,32 @@ test('base tauri.conf.json bundles the full resource list', () => {
   }
 });
 
+// config.yml, commands.yml, and data/ are gitignored and hold the developer's
+// real credentials (mqtt.password, obs.password, api keys, etc.). Installers
+// before v1.0.0 bundled them directly and shipped those secrets to every
+// user — see AGENTS.md's "Never ship secrets in the installer". Precise
+// enough not to false-positive on the legitimate config.example.yml /
+// commands.example.yml entries (which end in "example.yml", not "config.yml"
+// / "commands.yml").
+test('base tauri.conf.json never bundles the gitignored credential files', () => {
+  const base = readJson('tauri.conf.json');
+  const resources = base.bundle && base.bundle.resources;
+  assert.ok(Array.isArray(resources), 'bundle.resources must be an array');
+  const forbidden = [
+    { name: 'config.yml', pattern: /(^|\/)config\.yml$/ },
+    { name: 'commands.yml', pattern: /(^|\/)commands\.yml$/ },
+    { name: 'data/', pattern: /(^|\/)data(\/|$)/ },
+  ];
+  for (const glob of resources) {
+    for (const { name, pattern } of forbidden) {
+      assert.ok(
+        !pattern.test(glob),
+        `bundle.resources must not include ${name} (found matching entry "${glob}")`
+      );
+    }
+  }
+});
+
 // The dev overlay empties resources (RFC 7396 merge replaces arrays), keeping
 // `dev` out of the slow node_modules/junction walk.
 test('dev overlay empties bundle.resources', () => {
