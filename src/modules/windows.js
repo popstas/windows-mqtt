@@ -19,6 +19,10 @@ module.exports = async (mqtt, config, log) => {
     await winMan.placeWindowOnOpen();
   }
 
+  if (config.claudeWt) {
+    winMan.startClaudeWt();
+  }
+
   if (config.placeWindowOnStart) {
     await winMan.placeWindows();
   }
@@ -37,6 +41,8 @@ module.exports = async (mqtt, config, log) => {
       clearTimeout(restoreTimeoutId);
       restoreTimeoutId = null;
     }
+    if (config.placeWindowOnOpen) winMan.stopPlaceNewWindows();
+    if (config.claudeWt) winMan.stopClaudeWt();
   }
 
   function onStart() {
@@ -100,6 +106,14 @@ module.exports = async (mqtt, config, log) => {
       const topic = globalConfig.mqtt.base + '/notify/notify';
       mqtt.publish(topic, msg);
     }
+  }
+
+  // Opens a terminal window per stored claude session, ~2s apart, so it takes
+  // tens of seconds and gives no feedback until done. Refuses to run when any
+  // planned session is already on screen.
+  async function claudeRestore() {
+    const {restored, skipped} = await winMan.restoreClaudeSessions();
+    log(`claude-wt restored ${restored.length}, skipped ${skipped.length}`);
   }
 
   // win:active,x:0,y:0,width:mon1.thirdWidth,height:mon1.height
@@ -270,6 +284,7 @@ module.exports = async (mqtt, config, log) => {
         winMan.openStore(s);
       }
     },
+    'windows/claude-restore': () => claudeRestore(),
     'windows/restart_restore': () => { winMan.storeWindows(); restart(); },
     'windows/sleep': () => sleep(),
     'windows/restart': () => restart(),

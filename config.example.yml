@@ -206,6 +206,9 @@ modules:
   windows:
     # enabled: false
     placeWindowOnOpen: true
+    # start the claude-wt window position watcher (needs a claudeWt block with
+    # statePath in %APPDATA%\windows-mqtt\windows11-manager.config.js)
+    claudeWt: false
     placeWindowOnStart: false
     notifyPlaced: true
     restoreOnStart: true

@@ -591,12 +591,21 @@ fn build_tray_menu(
     let open_default =
         MenuItem::with_id(app, "win_open_default", "Open default apps", true, None::<&str>)
             .map_err(m)?;
+    let claude_restore = MenuItem::with_id(
+        app,
+        "win_claude_restore",
+        "Restore claude terminals",
+        true,
+        None::<&str>,
+    )
+    .map_err(m)?;
 
     menu.append(&autoplace).map_err(m)?;
     menu.append(&store).map_err(m)?;
     menu.append(&restore).map_err(m)?;
     menu.append(&clear).map_err(m)?;
     menu.append(&open_default).map_err(m)?;
+    menu.append(&claude_restore).map_err(m)?;
     menu.append(&PredefinedMenuItem::separator(app).map_err(m)?)
         .map_err(m)?;
 
@@ -875,6 +884,7 @@ fn main() {
                         "win_restore" => Some("windows/restore"),
                         "win_clear" => Some("windows/clear"),
                         "win_open_default" => Some("windows/open_default"),
+                        "win_claude_restore" => Some("windows/claude-restore"),
                         "win_restart_restore" => Some("windows/restart_restore"),
                         "win_sleep" => Some("windows/sleep"),
                         "win_restart" => Some("windows/restart"),
