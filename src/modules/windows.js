@@ -1,6 +1,7 @@
 const winMan = require('windows11-manager');
 const globalConfig = require('../config.js');
 const {exec} = require('child_process');
+const {labelSessions, groupSessions} = require('../picker/session-groups');
 
 module.exports = async (mqtt, config, log) => {
   let lastStats = {};
@@ -43,6 +44,7 @@ module.exports = async (mqtt, config, log) => {
     }
     if (config.placeWindowOnOpen) winMan.stopPlaceNewWindows();
     if (config.claudeWt) winMan.stopClaudeWt();
+    stopSessionsFeed();
   }
 
   function onStart() {
@@ -134,6 +136,54 @@ module.exports = async (mqtt, config, log) => {
     if (!session.open || !winMan.focusWindowById(session.windowId)) {
       log(`claude-wt: ${id} is not on screen`, 'warn');
     }
+  }
+
+  let sessionsTimerId = null;
+
+  function sendSessions() {
+    if (typeof mqtt.sendEvent !== 'function') return;
+    const res = winMan.claudeWtSessions();
+    if (!res.ok) {
+      mqtt.sendEvent('claude-wt-sessions', {ok: false, reason: res.reason});
+      return;
+    }
+    mqtt.sendEvent('claude-wt-sessions', {
+      ok: true,
+      groups: groupSessions(labelSessions(res.sessions)),
+    });
+  }
+
+  // Only runs while the picker window is open: it scans every terminal window
+  // once a second, which is not something to do in the background forever.
+  function startSessionsFeed() {
+    sendSessions();
+    if (sessionsTimerId === null) sessionsTimerId = setInterval(sendSessions, 1000);
+  }
+
+  function stopSessionsFeed() {
+    if (sessionsTimerId !== null) {
+      clearInterval(sessionsTimerId);
+      sessionsTimerId = null;
+    }
+  }
+
+  async function claudeRestoreOne(payload) {
+    const id = payload?.id;
+    if (!id) return;
+    try {
+      const {restored, skipped} = await winMan.restoreClaudeSessions({sessionIds: [id]});
+      log(`claude-wt restored ${restored.length}, skipped ${skipped.length}`);
+      if (!restored.length) notifyPicker(`claude-wt: не удалось поднять сессию ${id}`);
+    } catch (e) {
+      log(`claude-wt restore failed: ${e.message}`, 'error');
+      notifyPicker(`claude-wt: ошибка восстановления — ${e.message}`);
+    }
+  }
+
+  // A silent failure is worse than one extra toast: the picker is already gone
+  // by the time restore finishes, so the log is the only other channel.
+  function notifyPicker(message) {
+    mqtt.publish(globalConfig.mqtt.base + '/notify/notify', message);
   }
 
   // win:active,x:0,y:0,width:mon1.thirdWidth,height:mon1.height
@@ -315,6 +365,9 @@ module.exports = async (mqtt, config, log) => {
       log(`claude-wt: focusing ${first.title}`);
       await claudeFocus({ id: first.id });
     },
+    'windows/claude-sessions-start': () => startSessionsFeed(),
+    'windows/claude-sessions-stop': () => stopSessionsFeed(),
+    'windows/claude-restore-one': (payload) => claudeRestoreOne(payload),
     'windows/restart_restore': () => { winMan.storeWindows(); restart(); },
     'windows/sleep': () => sleep(),
     'windows/restart': () => restart(),

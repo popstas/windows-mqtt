@@ -64,6 +64,11 @@ class MqttBridge extends EventEmitter {
     this._send(msg);
   }
 
+  /** Push arbitrary data to the Tauri webview. Rust re-emits it as an event. */
+  sendEvent(name, payload) {
+    this._send({ type: 'event', name, payload });
+  }
+
   end() {
     // No-op: Rust owns the MQTT connection
   }

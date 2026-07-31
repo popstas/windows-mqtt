@@ -28,6 +28,11 @@ enum IpcFromJs {
         #[serde(default)]
         options: PublishOptions,
     },
+    Event {
+        name: String,
+        #[serde(default)]
+        payload: serde_json::Value,
+    },
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -321,6 +326,9 @@ fn spawn_node_server(
                                 bridge
                                     .publish(&topic, &payload, options.retain, qos)
                                     .await;
+                            }
+                            IpcFromJs::Event { name, payload } => {
+                                let _ = app_handle.emit_to("sessions", &name, payload);
                             }
                         },
                         Err(_) => {
