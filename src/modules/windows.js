@@ -145,12 +145,10 @@ module.exports = async (mqtt, config, log) => {
       return;
     }
 
-    if (session.desktop) {
-      const current = await winMan.virtualDesktop.GetWindowDesktopNumber(session.windowId);
-      const target = resolveDesktopSwitch(session, current);
-      if (target !== null) {
-        await winMan.virtualDesktop.GoToDesktopNumber(target);
-      }
+    const current = await winMan.virtualDesktop.GetWindowDesktopNumber(session.windowId);
+    const target = resolveDesktopSwitch(current);
+    if (target !== null) {
+      await winMan.virtualDesktop.GoToDesktopNumber(target);
     }
     if (!winMan.focusWindowById(session.windowId)) {
       log(`claude-wt: ${id} is not on screen`, 'warn');

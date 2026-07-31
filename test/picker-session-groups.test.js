@@ -138,27 +138,39 @@ test('chooseAction restores an open session with no window id without checking l
   assert.strictEqual(chooseAction({ open: true, windowId: null }, () => true), 'restore');
 });
 
-test('resolveDesktopSwitch targets the live desktop when it differs from the stored one', () => {
-  // stored=2 (1-based) would be desktop index 1 if it were live; live is
-  // actually 5 (0-based). The fix must go to the live desktop, not the
-  // stored one, and must not add/subtract 1 on the way.
-  assert.strictEqual(resolveDesktopSwitch({ desktop: 2 }, 5), 5);
+test('resolveDesktopSwitch targets the live desktop', () => {
+  assert.strictEqual(resolveDesktopSwitch(5), 5);
 });
 
-test('resolveDesktopSwitch still targets the live desktop when it already matches the stored one', () => {
-  // live=2 (0-based) is consistent with stored=3 (1-based: 2+1). Switching to
-  // the live desktop here is a harmless no-op, but the numeric result must
-  // still be the live, 0-based value (2), not the stored, 1-based one (3).
-  assert.strictEqual(resolveDesktopSwitch({ desktop: 3 }, 2), 2);
+test('resolveDesktopSwitch returns null when the live desktop is undefined', () => {
+  assert.strictEqual(resolveDesktopSwitch(undefined), null);
 });
 
-test('resolveDesktopSwitch returns null when the live desktop is unknown', () => {
-  assert.strictEqual(resolveDesktopSwitch({ desktop: 3 }, undefined), null);
+test('resolveDesktopSwitch returns null when the live desktop is null', () => {
+  assert.strictEqual(resolveDesktopSwitch(null), null);
 });
 
-test('resolveDesktopSwitch converts the live number as-is rather than reusing the 1-based stored one', () => {
-  // Pins the exact off-by-one bug: GoToDesktopNumber is 0-based. Live desktop
-  // 0 (the very first desktop) with a stored value of 1 (1-based, consistent
-  // with live 0) must resolve to 0, never to the stored 1.
-  assert.strictEqual(resolveDesktopSwitch({ desktop: 1 }, 0), 0);
+test('resolveDesktopSwitch converts the live number as-is, no off-by-one', () => {
+  // Pins the exact off-by-one bug: GoToDesktopNumber is 0-based. Desktop 0
+  // (the very first desktop) must resolve to 0, not be treated as falsy/unknown.
+  assert.strictEqual(resolveDesktopSwitch(0), 0);
+});
+
+// windows11-manager's GetWindowDesktopNumber (virtual-desktop.js) regex-matches
+// "desktop number (\d+)" out of CLI text output and returns the capture group
+// unconverted — a string, not a number. This is the real-world shape the
+// helper's Number() coercion exists to handle; nothing above pins it.
+test('resolveDesktopSwitch coerces a string desktop number to a number', () => {
+  const result = resolveDesktopSwitch('3');
+  assert.strictEqual(result, 3);
+  assert.strictEqual(typeof result, 'number');
+});
+
+test('resolveDesktopSwitch coerces the string "0" to numeric 0, not "unknown"', () => {
+  // '0' is truthy as a string but must resolve to the number 0, and must NOT
+  // be confused with the null/undefined "unknown" sentinels.
+  const result = resolveDesktopSwitch('0');
+  assert.strictEqual(result, 0);
+  assert.strictEqual(typeof result, 'number');
+  assert.notStrictEqual(result, null);
 });

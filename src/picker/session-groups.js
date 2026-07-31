@@ -84,19 +84,25 @@ function chooseAction(session, isAlive) {
  * `winMan.virtualDesktop.GetWindowDesktopNumber` and `GoToDesktopNumber` both
  * use 0-based desktop numbers (see http-server.js/ws-client.js in
  * windows11-manager, which subtract 1 from their 1-based input before
- * calling GoToDesktopNumber). `session.desktop` is stored 1-based
- * (claude-wt/index.js stores `Number(num) + 1`). The window's *live* desktop
- * — read fresh, right before this call — is authoritative: the stored value
- * can be stale if the window moved desktops since the last snapshot. So the
- * target is always the live desktop, converted back to the 0-based number
- * GoToDesktopNumber expects; that is a harmless no-op when the app is
- * already showing that desktop, so no comparison against the stored value is
- * needed.
+ * calling GoToDesktopNumber). The stored session desktop is 1-based
+ * (claude-wt/index.js stores `Number(num) + 1`), but it is never consulted
+ * here: the window's *live* desktop — read fresh, right before this call —
+ * is authoritative, since the stored value can be stale if the window moved
+ * desktops since the last snapshot. So the target is always the live
+ * desktop, converted back to the 0-based number GoToDesktopNumber expects;
+ * that is a harmless no-op when the app is already showing that desktop, so
+ * no comparison against the stored value is needed.
+ *
+ * `liveDesktop` commonly arrives as a *string*: the native call it comes
+ * from, `windows11-manager`'s `GetWindowDesktopNumber`, regex-matches
+ * `"desktop number (\d+)"` out of a CLI tool's text output and returns the
+ * capture group as-is, never converting it to a number. `Number()` on that
+ * string is this function's only real work.
  *
  * Returns the 0-based desktop number to pass to GoToDesktopNumber, or `null`
  * when the live desktop could not be determined (nothing to switch to).
  */
-function resolveDesktopSwitch(session, liveDesktop) {
+function resolveDesktopSwitch(liveDesktop) {
   if (liveDesktop === undefined || liveDesktop === null) return null;
   return Number(liveDesktop);
 }
