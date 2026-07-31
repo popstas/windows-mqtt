@@ -55,4 +55,16 @@ function groupSessions(sessions) {
   return list;
 }
 
-module.exports = { labelSessions, groupSessions };
+/**
+ * Shape the result of the native claudeWtSessions() call into the
+ * claude-wt-sessions event payload the picker UI consumes.
+ *
+ * Pure: takes the already-fetched `res`, does no I/O of its own.
+ */
+function buildSessionsPayload(res) {
+  return res.ok
+    ? { ok: true, groups: groupSessions(labelSessions(res.sessions)) }
+    : { ok: false, reason: res.reason };
+}
+
+module.exports = { labelSessions, groupSessions, buildSessionsPayload };

@@ -1,7 +1,7 @@
 const winMan = require('windows11-manager');
 const globalConfig = require('../config.js');
 const {exec} = require('child_process');
-const {labelSessions, groupSessions} = require('../picker/session-groups');
+const {buildSessionsPayload} = require('../picker/session-groups');
 
 module.exports = async (mqtt, config, log) => {
   let lastStats = {};
@@ -142,15 +142,15 @@ module.exports = async (mqtt, config, log) => {
 
   function sendSessions() {
     if (typeof mqtt.sendEvent !== 'function') return;
-    const res = winMan.claudeWtSessions();
-    if (!res.ok) {
-      mqtt.sendEvent('claude-wt-sessions', {ok: false, reason: res.reason});
+    let res;
+    try {
+      res = winMan.claudeWtSessions();
+    } catch (e) {
+      log(`claude-wt sessions failed: ${e.message}`, 'error');
+      mqtt.sendEvent('claude-wt-sessions', {ok: false, reason: e.message});
       return;
     }
-    mqtt.sendEvent('claude-wt-sessions', {
-      ok: true,
-      groups: groupSessions(labelSessions(res.sessions)),
-    });
+    mqtt.sendEvent('claude-wt-sessions', buildSessionsPayload(res));
   }
 
   // Only runs while the picker window is open: it scans every terminal window

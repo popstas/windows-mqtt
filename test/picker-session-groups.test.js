@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { labelSessions, groupSessions } = require('../src/picker/session-groups');
+const { labelSessions, groupSessions, buildSessionsPayload } = require('../src/picker/session-groups');
 
 const s = (over) => ({
   id: 'x', title: 't', cwd: '/p', bounds: { x: 0, y: 0, width: 10, height: 10 },
@@ -82,4 +82,29 @@ test('groupSessions sorts null bounds correctly when comparing with multiple ses
 test('groupSessions returns an empty list for an empty input', () => {
   const groups = groupSessions([]);
   assert.deepStrictEqual(groups, []);
+});
+
+test('buildSessionsPayload labels and groups sessions on the ok path', () => {
+  const sessions = [
+    s({ id: 'aaaa1111', title: 'agent', cwd: '/p/agent', desktop: 2, monitor: 1 }),
+    s({ id: 'bbbb2222', title: 'agent', cwd: '/p/agent', desktop: 1, monitor: 1 }),
+  ];
+  const payload = buildSessionsPayload({ ok: true, sessions });
+
+  assert.strictEqual(payload.ok, true);
+  // groupSessions ran: two distinct (desktop, monitor) pairs became two groups,
+  // sorted by desktop ascending (2 before 1 in the input, 1 before 2 in output).
+  assert.deepStrictEqual(payload.groups.map(g => g.label), [
+    'Desktop 1 · Monitor 1',
+    'Desktop 2 · Monitor 1',
+  ]);
+  // labelSessions ran: the duplicate title+cwd pair got disambiguated with an id
+  // prefix rather than passing the raw sessions through untouched.
+  assert.strictEqual(payload.groups[0].sessions[0].label, 'agent (bbbb)');
+  assert.strictEqual(payload.groups[1].sessions[0].label, 'agent (aaaa)');
+});
+
+test('buildSessionsPayload carries the reason through unchanged on the failure path', () => {
+  const payload = buildSessionsPayload({ ok: false, reason: 'claudeWt.enabled is false in config' });
+  assert.deepStrictEqual(payload, { ok: false, reason: 'claudeWt.enabled is false in config' });
 });
