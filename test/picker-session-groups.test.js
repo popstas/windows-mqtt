@@ -41,9 +41,9 @@ test('groupSessions sorts by x, then by y', () => {
 
 test('groupSessions splits by desktop and monitor and labels each group', () => {
   const groups = groupSessions([
-    s({ id: 'a', desktop: 1, monitor: 1 }),
-    s({ id: 'b', desktop: 1, monitor: 2 }),
     s({ id: 'c', desktop: 2, monitor: 1 }),
+    s({ id: 'b', desktop: 1, monitor: 2 }),
+    s({ id: 'a', desktop: 1, monitor: 1 }),
   ]);
   assert.deepStrictEqual(groups.map(g => g.label), [
     'Desktop 1 · Monitor 1',
@@ -68,4 +68,18 @@ test('groupSessions puts an unknown desktop first and an unknown monitor last', 
 test('groupSessions tolerates a session with no bounds', () => {
   const [group] = groupSessions([s({ id: 'a', bounds: null })]);
   assert.deepStrictEqual(group.sessions.map(x => x.id), ['a']);
+});
+
+test('groupSessions sorts null bounds correctly when comparing with multiple sessions', () => {
+  const [group] = groupSessions([
+    s({ id: 'c', bounds: { x: 200, y: 50, width: 10, height: 10 } }),
+    s({ id: 'a', bounds: null }),
+    s({ id: 'b', bounds: { x: 100, y: 100, width: 10, height: 10 } }),
+  ]);
+  assert.deepStrictEqual(group.sessions.map(x => x.id), ['a', 'b', 'c']);
+});
+
+test('groupSessions returns an empty list for an empty input', () => {
+  const groups = groupSessions([]);
+  assert.deepStrictEqual(groups, []);
 });
