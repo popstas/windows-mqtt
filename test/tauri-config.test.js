@@ -66,3 +66,12 @@ test('legacy tauri.bundle.conf.json is removed', () => {
     'tauri.bundle.conf.json should no longer exist'
   );
 });
+
+test('prepare-frontend copies both pages and the picker filter', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'prepare-frontend.js'), 'utf8');
+  for (const file of ['index.html', 'sessions.html', 'picker-filter.js']) {
+    assert.ok(src.includes(file), `prepare-frontend.js must copy ${file}`);
+  }
+});
