@@ -152,7 +152,7 @@ npm run install-windows
 
 3. For TTS setup you should install `gTTS` (Python) and `mpg123`, see [popstas/mqtt2tts](https://github.com/popstas/mqtt2tts#requirements).
 
-4. When building desktop apps, make sure `config.yml` is present in the project root. Both Electron and Tauri builds package this file so the tray apps read the same configuration as the headless server.
+4. When building desktop apps, make sure `config.yml` is present in the project root so the tray apps can read it at runtime. It is **not** bundled into the installer (it's gitignored and holds real credentials — see "Never ship secrets in the installer" in AGENTS.md); both Electron and Tauri builds read it from disk next to the running app instead.
 
 ## Extend
 1. Copy [src/modules/_module.js](src/modules/_module.js) to `src/modules/yourModuleName.js`
@@ -188,6 +188,23 @@ The project includes both Electron and Tauri tray launchers. Both keep the main 
 - Requires `libwebkit2gtk-4.1-dev` on Linux (Ubuntu 24.04+ ships this; older `4.0` is not supported).
 - Run the Tauri development tray with `npm run start-tauri` (or `cargo tauri dev` from `src-tauri/`) to launch the native system tray while keeping the window hidden unless explicitly shown.
 - Build release bundles with `npm run build:tauri`; Tauri outputs installers and executables under `src-tauri/target/release/bundle/` (for example, `.msi` and `.exe` files on Windows).
-- Extra files are bundled from `src-tauri/tauri.conf.json` under `bundle.resources`. The current configuration includes `config.yml`, `config.example.yml`, `commands.example.yml`, `data/**`, and `src/**`. Add new paths there to ship additional assets with the Tauri build.
+- Extra files are bundled from `src-tauri/tauri.conf.json` under `bundle.resources`. The current configuration includes `config.example.yml`, `commands.example.yml`, `bin/*`, the `src/` module tree, `assets/`, and `node_modules/` - deliberately **not** `config.yml`, `commands.yml`, or `data/**`, which are gitignored and hold real credentials (see "Never ship secrets in the installer" in AGENTS.md). Add new paths there to ship additional assets with the Tauri build, and make sure any addition can't sweep in gitignored files.
 - Shell permissions (spawning/killing the Node server) are defined in `src-tauri/capabilities/default.json`.
 - Tauri uses the native system tray instead of the custom HTML popover used by Electron, so tray menus and balloon behaviors follow the host OS conventions.
+
+### Session picker
+A Raycast-style palette window listing the terminal sessions tracked by the
+`windows` module's `claudeWt` feature (see `windows11-manager`'s claude-wt
+tracker). It groups sessions by virtual desktop and monitor; picking one
+focuses its window if it's still open, or restores it if the window is gone.
+- Open it with the global hotkey (`picker.hotkey` in `config.yml`, default
+  `Super+F10`), or by left-clicking the tray icon when `tray.leftClick` is set
+  to `picker` (see below).
+- Type to filter by session name or project path; Escape or clicking away
+  dismisses it.
+- Config keys (top-level in `config.yml`, see `config.example.yml`):
+  - `picker.hotkey` - the global hotkey that opens the picker. Windows
+    swallows some `Win+`/`Super+` combinations before they reach the app;
+    change this if it never fires.
+  - `tray.leftClick` - what a left click on the tray icon opens: `picker` or
+    `log` (default `log`).
