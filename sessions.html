@@ -105,8 +105,17 @@
     const session = rows[active];
     if (!session) return;
     await invoke('hide_picker');
+    // Always go through claude-focus rather than picking the action here from
+    // this ~1s-stale snapshot. claudeFocus() re-fetches live session state and
+    // runs it through chooseAction() (src/picker/session-groups.js), which is
+    // the single place that decides focus-vs-restore against the current
+    // handle. Deciding it here too would leave two decision points that must
+    // agree — and this one, working off a stale snapshot, previously routed a
+    // session that had actually opened since the last snapshot into
+    // claude-restore-one, which correctly refused to double-spawn it but then
+    // reported a bogus "failed to restore" instead of focusing the live window.
     await invoke('picker_send', {
-      action: session.open ? 'windows/claude-focus' : 'windows/claude-restore-one',
+      action: 'windows/claude-focus',
       payload: { id: session.id },
     });
   }
