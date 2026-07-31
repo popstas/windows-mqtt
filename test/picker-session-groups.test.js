@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { labelSessions, groupSessions, buildSessionsPayload, chooseAction } = require('../src/picker/session-groups');
+const { labelSessions, groupSessions, buildSessionsPayload, chooseAction, resolveDesktopSwitch } = require('../src/picker/session-groups');
 
 const s = (over) => ({
   id: 'x', title: 't', cwd: '/p', bounds: { x: 0, y: 0, width: 10, height: 10 },
@@ -136,4 +136,29 @@ test('chooseAction never calls isAlive for a closed session', () => {
 
 test('chooseAction restores an open session with no window id without checking liveness', () => {
   assert.strictEqual(chooseAction({ open: true, windowId: null }, () => true), 'restore');
+});
+
+test('resolveDesktopSwitch targets the live desktop when it differs from the stored one', () => {
+  // stored=2 (1-based) would be desktop index 1 if it were live; live is
+  // actually 5 (0-based). The fix must go to the live desktop, not the
+  // stored one, and must not add/subtract 1 on the way.
+  assert.strictEqual(resolveDesktopSwitch({ desktop: 2 }, 5), 5);
+});
+
+test('resolveDesktopSwitch still targets the live desktop when it already matches the stored one', () => {
+  // live=2 (0-based) is consistent with stored=3 (1-based: 2+1). Switching to
+  // the live desktop here is a harmless no-op, but the numeric result must
+  // still be the live, 0-based value (2), not the stored, 1-based one (3).
+  assert.strictEqual(resolveDesktopSwitch({ desktop: 3 }, 2), 2);
+});
+
+test('resolveDesktopSwitch returns null when the live desktop is unknown', () => {
+  assert.strictEqual(resolveDesktopSwitch({ desktop: 3 }, undefined), null);
+});
+
+test('resolveDesktopSwitch converts the live number as-is rather than reusing the 1-based stored one', () => {
+  // Pins the exact off-by-one bug: GoToDesktopNumber is 0-based. Live desktop
+  // 0 (the very first desktop) with a stored value of 1 (1-based, consistent
+  // with live 0) must resolve to 0, never to the stored 1.
+  assert.strictEqual(resolveDesktopSwitch({ desktop: 1 }, 0), 0);
 });

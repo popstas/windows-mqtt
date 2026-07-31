@@ -78,4 +78,33 @@ function chooseAction(session, isAlive) {
   return 'restore';
 }
 
-module.exports = { labelSessions, groupSessions, buildSessionsPayload, chooseAction };
+/**
+ * Which virtual desktop (if any) to switch to after picking a session.
+ *
+ * `winMan.virtualDesktop.GetWindowDesktopNumber` and `GoToDesktopNumber` both
+ * use 0-based desktop numbers (see http-server.js/ws-client.js in
+ * windows11-manager, which subtract 1 from their 1-based input before
+ * calling GoToDesktopNumber). `session.desktop` is stored 1-based
+ * (claude-wt/index.js stores `Number(num) + 1`). The window's *live* desktop
+ * — read fresh, right before this call — is authoritative: the stored value
+ * can be stale if the window moved desktops since the last snapshot. So the
+ * target is always the live desktop, converted back to the 0-based number
+ * GoToDesktopNumber expects; that is a harmless no-op when the app is
+ * already showing that desktop, so no comparison against the stored value is
+ * needed.
+ *
+ * Returns the 0-based desktop number to pass to GoToDesktopNumber, or `null`
+ * when the live desktop could not be determined (nothing to switch to).
+ */
+function resolveDesktopSwitch(session, liveDesktop) {
+  if (liveDesktop === undefined || liveDesktop === null) return null;
+  return Number(liveDesktop);
+}
+
+module.exports = {
+  labelSessions,
+  groupSessions,
+  buildSessionsPayload,
+  chooseAction,
+  resolveDesktopSwitch,
+};
