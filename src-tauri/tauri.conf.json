@@ -16,7 +16,8 @@
       "../commands.example.yml",
       "../bin/*",
       "../src/*",
-      "../src/**/*",
+      "../src/modules/**/*",
+      "../src/picker/**/*",
       "../assets/**/*",
       "../node_modules/**/*"
     ],
