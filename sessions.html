@@ -48,6 +48,7 @@
 <div id="list"></div>
 <div id="message">Loading…</div>
 <script src="picker-filter.js"></script>
+<script src="session-glyph.js"></script>
 <script>
   let groups = [];
   let rows = [];
@@ -62,23 +63,7 @@
     return window.__TAURI__.core.invoke(cmd, args);
   }
 
-  // The window is a rectangle of the monitor scaled to fit the glyph; the
-  // filled part is where the window sits on it.
-  function glyphHtml(session) {
-    const mb = session.monitorBounds;
-    const b = session.bounds;
-    if (!mb || !b || !mb.width || !mb.height) return '<div class="glyph"></div>';
-    const left = Math.max(0, Math.min(100, ((b.x - mb.x) / mb.width) * 100));
-    const top = Math.max(0, Math.min(100, ((b.y - mb.y) / mb.height) * 100));
-    const width = Math.max(4, Math.min(100 - left, (b.width / mb.width) * 100));
-    const height = Math.max(4, Math.min(100 - top, (b.height / mb.height) * 100));
-    return `<div class="glyph"><i style="left:${left}%;top:${top}%;width:${width}%;height:${height}%"></i></div>`;
-  }
-
-  function escapeHtml(text) {
-    return String(text).replace(/[&<>"]/g, (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-  }
+  const { glyphHtml, escapeHtml } = window.SessionGlyph;
 
   function render() {
     const visible = window.PickerFilter.filterSessions(groups, search.value);
