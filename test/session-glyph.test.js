@@ -1,8 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { escapeHtml, glyphHtml } = require('../frontend-src/session-glyph');
-
-const monitor = { x: 0, y: 0, width: 1000, height: 500 };
+const { escapeHtml, statusDotHtml } = require('../frontend-src/session-glyph');
 
 test('escapeHtml escapes ampersand, angle brackets, and double quotes', () => {
   assert.strictEqual(
@@ -30,63 +28,31 @@ test('escapeHtml coerces non-string input to a string first', () => {
   assert.strictEqual(escapeHtml(123), '123');
 });
 
-test('glyphHtml places the inner rectangle using percentages of the monitor rect', () => {
-  const session = { monitorBounds: monitor, bounds: { x: 100, y: 50, width: 200, height: 100 } };
+test('statusDotHtml marks a live session open', () => {
   assert.strictEqual(
-    glyphHtml(session),
-    '<div class="glyph"><i style="left:10%;top:10%;width:20%;height:20%"></i></div>'
+    statusDotHtml({ open: true }),
+    '<div class="dot open"></div>'
   );
 });
 
-test('glyphHtml renders an empty glyph when bounds is null', () => {
-  const session = { monitorBounds: monitor, bounds: null };
-  assert.strictEqual(glyphHtml(session), '<div class="glyph"></div>');
+test('statusDotHtml marks a remembered-but-closed session closed', () => {
+  assert.strictEqual(
+    statusDotHtml({ open: false }),
+    '<div class="dot closed"></div>'
+  );
 });
 
-test('glyphHtml renders an empty glyph when monitorBounds is missing', () => {
-  const session = { bounds: { x: 100, y: 50, width: 200, height: 100 } };
-  assert.strictEqual(glyphHtml(session), '<div class="glyph"></div>');
+test('statusDotHtml treats a missing open flag as closed rather than open', () => {
+  // Defaulting the other way would paint a dead slot green, which is the one
+  // thing the dot exists to tell apart.
+  assert.strictEqual(statusDotHtml({}), '<div class="dot closed"></div>');
 });
 
-test('glyphHtml renders an empty glyph when the monitor rect has zero width', () => {
+test('statusDotHtml ignores the geometry fields the row no longer draws', () => {
   const session = {
-    monitorBounds: { x: 0, y: 0, width: 0, height: 500 },
+    open: true,
     bounds: { x: 100, y: 50, width: 200, height: 100 },
+    monitorBounds: { x: 0, y: 0, width: 1000, height: 500 },
   };
-  assert.strictEqual(glyphHtml(session), '<div class="glyph"></div>');
-});
-
-test('glyphHtml places a window flush against the monitor far edge exactly at the edge', () => {
-  const session = { monitorBounds: monitor, bounds: { x: 900, y: 450, width: 100, height: 50 } };
-  assert.strictEqual(
-    glyphHtml(session),
-    '<div class="glyph"><i style="left:90%;top:90%;width:10%;height:10%"></i></div>'
-  );
-});
-
-test('glyphHtml caps width/height so an oversized window cannot overflow past the frame edge', () => {
-  // bounds extends 300 units past the monitor's right edge; raw width% would be 50,
-  // but only 20% of room remains to the right of left:80%, so it must be capped there.
-  const session = { monitorBounds: monitor, bounds: { x: 800, y: 100, width: 500, height: 100 } };
-  const html = glyphHtml(session);
-  assert.strictEqual(
-    html,
-    '<div class="glyph"><i style="left:80%;top:20%;width:20%;height:20%"></i></div>'
-  );
-});
-
-test('glyphHtml floors width/height to a minimum visible size for a tiny window', () => {
-  const session = { monitorBounds: monitor, bounds: { x: 100, y: 100, width: 5, height: 2 } };
-  assert.strictEqual(
-    glyphHtml(session),
-    '<div class="glyph"><i style="left:10%;top:20%;width:4%;height:4%"></i></div>'
-  );
-});
-
-test('glyphHtml clamps a window positioned above/left of the monitor origin to 0', () => {
-  const session = { monitorBounds: monitor, bounds: { x: -50, y: -50, width: 200, height: 100 } };
-  assert.strictEqual(
-    glyphHtml(session),
-    '<div class="glyph"><i style="left:0%;top:0%;width:20%;height:20%"></i></div>'
-  );
+  assert.strictEqual(statusDotHtml(session), '<div class="dot open"></div>');
 });
