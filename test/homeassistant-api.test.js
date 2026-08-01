@@ -109,12 +109,12 @@ test('slotText prefixes the title with an ASCII status glyph', () => {
   assert.strictEqual(slotText({ status: 'review', title: 'agent' }), '! agent');
 });
 
-test('slotText marks an empty slot with a dash', () => {
-  // An empty string collapses the object on the panel and the list starts
-  // jumping; a blank row is also indistinguishable from one that failed to
-  // draw. A dash says 'nothing here' out loud.
-  assert.strictEqual(slotText({ status: 'empty', title: '' }), '-');
-  assert.strictEqual(slotText(undefined), '-');
+test('slotText leaves an empty slot blank', () => {
+  // The dash was there from when a blank text collapsed the object and the
+  // list jumped on every change of composition; the rows now carry explicit
+  // w and h, so there is nothing left to collapse.
+  assert.strictEqual(slotText({ status: 'empty', title: '' }), '');
+  assert.strictEqual(slotText(undefined), '');
 });
 
 test('buildSessionEntities pins each entity to a row, not to a session', () => {
@@ -168,7 +168,7 @@ test('a session turns the entity on only when it wants you', () => {
 test('an empty slot is off and carries no text', () => {
   const [, empty] = buildSessionEntities([s({ id: 'a' })], 2);
   assert.strictEqual(empty.state, 'off');
-  assert.strictEqual(empty.attributes.text, '-');
+  assert.strictEqual(empty.attributes.text, '');
 });
 
 test('the display text lives in an attribute, since the state holds the on/off flag', () => {
