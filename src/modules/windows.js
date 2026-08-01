@@ -4,7 +4,9 @@ const {exec} = require('child_process');
 const {buildSessionsPayload, chooseAction, resolveDesktopSwitch} = require('../picker/session-groups');
 const {labelSessions} = require('../picker/session-groups');
 const {buildSlots, sessionIdForSlot} = require('../picker/session-slots');
-const {discoveryMessages, stateMessages, topics: haTopics} = require('../homeassistant/discovery');
+const {
+  discoveryMessages, namesFingerprint, stateMessages, topics: haTopics,
+} = require('../homeassistant/discovery');
 const {buildSessionEntities, buildSummaryEntity} = require('../homeassistant/claude-sessions');
 
 module.exports = async (mqtt, config, log) => {
@@ -173,7 +175,7 @@ module.exports = async (mqtt, config, log) => {
     enabled: config?.homeassistant?.enabled !== false,
   };
   let haTimerId = null;
-  let haAnnounced = false;
+  let haAnnounced = null;
   // Последняя разложенная по слотам картина: фокус с панели приходит номером
   // строки, а не id сессии — кнопка прибита к строке, и что в ней лежит, знает
   // только эта сторона.
@@ -198,13 +200,16 @@ module.exports = async (mqtt, config, log) => {
       log(`claude-wt sessions failed: ${e.message}`, 'error');
       return;
     }
-    // Конфиги — один раз за жизнь процесса: HA держит их у себя retained, и
-    // повторять их каждые пятнадцать секунд значит гонять килобайты впустую.
-    if (!haAnnounced) {
-      publishAll(discoveryMessages(config.base, haCfg.slots));
-      haAnnounced = true;
-    }
     lastSlots = buildSlots(sessions, haCfg.slots);
+    // Конфиги переиздаются только когда меняются имена: HA держит их retained,
+    // и гонять десяток сообщений каждые пятнадцать секунд ради тех же
+    // заголовков незачем.
+    const names = lastSlots.map(s => s.title);
+    const fingerprint = namesFingerprint(names);
+    if (fingerprint !== haAnnounced) {
+      publishAll(discoveryMessages(config.base, haCfg.slots, names));
+      haAnnounced = fingerprint;
+    }
     publishAll(stateMessages(config.base, [
       buildSummaryEntity(sessions),
       ...buildSessionEntities(sessions, haCfg.slots),
