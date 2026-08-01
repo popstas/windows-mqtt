@@ -222,6 +222,22 @@ module.exports = async (mqtt, config, log) => {
    * Раскладка берётся из последнего экспорта, чтобы номер значил ровно то, что
    * человек видел на экране в момент нажатия.
    */
+  async function claudeSnapshotRestore(topic, message) {
+    // Пустое сообщение означает самый свежий снимок. Снимок, а не lastLayout:
+    // последний обнуляется через секунду после закрытия окон, потому что демон
+    // переписывает его тем, что видит на экране.
+    const id = String(message ?? '').trim() || 'last';
+    log(`< ${topic}: ${id}`);
+    try {
+      const {restored, skipped} = await winMan.restoreSnapshot({id});
+      log(`claude-wt snapshot ${id}: restored ${restored.length}, skipped ${skipped.length}`);
+      if (!restored.length && !skipped.length) notifyPicker('claude-wt: нечего восстанавливать');
+    } catch (e) {
+      log(`claude-wt snapshot restore failed: ${e.message}`, 'error');
+      notifyPicker(`claude-wt: ошибка восстановления — ${e.message}`);
+    }
+  }
+
   async function claudeFocusSlot(topic, message) {
     // Обработчики подписок получают сырое сообщение: с панели прилетает просто
     // номер строки, но JSON-вида {slot: N} тоже принимаем — так удобнее звать
@@ -481,6 +497,10 @@ module.exports = async (mqtt, config, log) => {
         // Панель openHASP шлёт сюда номер строки; см. claudeFocusSlot().
         topics: [config.base + '/claude-focus-slot'],
         handler: claudeFocusSlot
+      },
+      {
+        topics: [config.base + '/claude-snapshot-restore'],
+        handler: claudeSnapshotRestore
       },
       {
         topics: [config.base + '/autoplace'],
