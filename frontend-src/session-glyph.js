@@ -65,6 +65,28 @@
     return `${Math.floor(delta / 86400)}d`;
   }
 
+  /**
+   * Текстовый статус рядом с возрастом.
+   *
+   * Состояние и событие показываются вместе, потому что по отдельности они
+   * недоговаривают: `review` бывает и от `stop`, и от `fail`, а `attention`
+   * приходит и на вопрос, и на простой. Пара читается однозначно.
+   *
+   * Событие опускается, когда совпадает с состоянием, — дублировать слово ради
+   * симметрии незачем.
+   */
+  function stateText(session) {
+    if (!session || !session.open || !session.agentState) return '';
+    const { agentState, agentEvent } = session;
+    if (!agentEvent || agentEvent === agentState) return agentState;
+    return `${agentState} · ${agentEvent}`;
+  }
+
+  function stateHtml(session) {
+    const text = stateText(session);
+    return `<div class="state">${escapeHtml(text)}</div>`;
+  }
+
   /** Пустой элемент вместо пропуска: колонка возраста не должна прыгать. */
   function ageHtml(session, nowSec) {
     const age = formatAge(session && session.lastActivity, nowSec);
@@ -101,5 +123,8 @@
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
   }
 
-  return { statusDotHtml, formatAge, ageHtml, rowTitle, titleAttr, escapeHtml };
+  return {
+    statusDotHtml, formatAge, ageHtml, stateText, stateHtml,
+    rowTitle, titleAttr, escapeHtml,
+  };
 });

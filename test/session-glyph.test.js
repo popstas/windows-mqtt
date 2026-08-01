@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const {
-  escapeHtml, statusDotHtml, formatAge, ageHtml, rowTitle, titleAttr,
+  escapeHtml, statusDotHtml, formatAge, ageHtml, stateText, stateHtml, rowTitle, titleAttr,
 } = require('../frontend-src/session-glyph');
 
 test('escapeHtml escapes ampersand, angle brackets, and double quotes', () => {
@@ -198,4 +198,41 @@ test('ageHtml always emits the element so the column cannot jump', () => {
   assert.strictEqual(ageHtml({ lastActivity: NOW - 7200 }, NOW), '<div class="age">2h</div>');
   assert.strictEqual(ageHtml({}, NOW), '<div class="age"></div>');
   assert.strictEqual(ageHtml(undefined, NOW), '<div class="age"></div>');
+});
+
+test('stateText shows the state and the event that produced it', () => {
+  // Neither half is enough on its own: review comes from both stop and fail,
+  // and attention arrives for both a question and an idle notice.
+  assert.strictEqual(
+    stateText({ open: true, agentState: 'idle', agentEvent: 'attention' }),
+    'idle · attention'
+  );
+  assert.strictEqual(
+    stateText({ open: true, agentState: 'review', agentEvent: 'stop' }),
+    'review · stop'
+  );
+});
+
+test('stateText drops the event when it just repeats the state', () => {
+  assert.strictEqual(stateText({ open: true, agentState: 'active', agentEvent: 'active' }), 'active');
+  assert.strictEqual(stateText({ open: true, agentState: 'active' }), 'active');
+});
+
+test('stateText says nothing for a closed session or one with no state', () => {
+  assert.strictEqual(stateText({ open: false, agentState: 'active', agentEvent: 'tool-done' }), '');
+  assert.strictEqual(stateText({ open: true }), '');
+  assert.strictEqual(stateText(undefined), '');
+});
+
+test('stateHtml always emits the element so the age column cannot jump', () => {
+  assert.strictEqual(
+    stateHtml({ open: true, agentState: 'active', agentEvent: 'tool-done' }),
+    '<div class="state">active · tool-done</div>'
+  );
+  assert.strictEqual(stateHtml({ open: false }), '<div class="state"></div>');
+});
+
+test('stateHtml escapes an event string it did not choose', () => {
+  const out = stateHtml({ open: true, agentState: 'idle', agentEvent: '<script>alert(1)</script>' });
+  assert.ok(!out.includes('<script>'), 'must not leave an openable script tag');
 });

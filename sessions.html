@@ -48,9 +48,14 @@
         .name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .cwd { font-size: 11px; color: #868c95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .badge { margin-left: 6px; font-size: 10px; color: #868c95; }
-        /* Возраст последней активности, прижат к правому краю строки. */
-        .age {
+        /* Текстовый статус агента, прижат вправо вместе с возрастом. */
+        .state {
             flex: 0 0 auto; margin-left: auto; padding-left: 10px;
+            font-size: 11px; color: #7d838c; white-space: nowrap;
+        }
+        /* Возраст последней активности, крайняя правая колонка. */
+        .age {
+            flex: 0 0 auto; padding-left: 10px; min-width: 34px; text-align: right;
             font-size: 11px; color: #7d838c; font-variant-numeric: tabular-nums;
         }
         #message { padding: 24px 18px; color: #868c95; font-size: 13px; }
@@ -76,7 +81,7 @@
     return window.__TAURI__.core.invoke(cmd, args);
   }
 
-  const { statusDotHtml, ageHtml, titleAttr, escapeHtml } = window.SessionGlyph;
+  const { statusDotHtml, ageHtml, stateHtml, titleAttr, escapeHtml } = window.SessionGlyph;
 
   function render() {
     const visible = window.PickerFilter.filterSessions(groups, search.value);
@@ -95,7 +100,7 @@
           `<div class="text"><div class="name">${escapeHtml(session.label)}` +
           `${session.open ? '' : '<span class="badge">closed</span>'}</div>` +
           `<div class="cwd">${escapeHtml(session.cwd)}</div></div>` +
-          ageHtml(session, nowSec) + `</div>`;
+          stateHtml(session) + ageHtml(session, nowSec) + `</div>`;
       }
     }
     list.innerHTML = html;
