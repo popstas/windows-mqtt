@@ -1,8 +1,17 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const {
-  escapeHtml, statusDotHtml, formatAge, ageHtml, stateText, stateHtml, rowTitle, titleAttr,
+  escapeHtml, statusDotHtml, formatAge, ageHtml, stateText, stateHtml,
+  shortPath, rowTitle, titleAttr,
 } = require('../frontend-src/session-glyph');
+
+test('shortPath collapses the agent home directory, and survives a missing path', () => {
+  // The list shows it too, not just the tooltip, so the rule lives in one place.
+  assert.strictEqual(shortPath('/home/popstas/projects/x'), '~/projects/x');
+  assert.strictEqual(shortPath('/home/other'), '~');
+  assert.strictEqual(shortPath('/opt/home/x'), '/opt/home/x');
+  assert.strictEqual(shortPath(undefined), '');
+});
 
 test('escapeHtml escapes ampersand, angle brackets, and double quotes', () => {
   assert.strictEqual(

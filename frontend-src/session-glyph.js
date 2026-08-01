@@ -111,6 +111,11 @@
   // ради чего в подсказку и смотрят.
   const IDLE_NOTICE = 'waiting for your input';
 
+  /** Путь агента без домашнего каталога. */
+  function shortPath(cwd) {
+    return String(cwd ?? '').replace(HOME_PREFIX, '~');
+  }
+
   /**
    * Подсказка при наведении на строку.
    *
@@ -123,7 +128,7 @@
   function rowTitle(session) {
     if (!session) return '';
     const lines = [];
-    if (session.cwd) lines.push(session.cwd.replace(HOME_PREFIX, '~'));
+    if (session.cwd) lines.push(shortPath(session.cwd));
     // Первая строка последнего ответа агента. Отвечает на вопрос «чем эта
     // сессия закончила», на который ни кружок, ни заголовок окна не отвечают:
     // «Закоммитил — ea527f0, рабочее дерево чистое» против «Дизайн, секция 1
@@ -151,6 +156,6 @@
 
   return {
     statusDotHtml, formatAge, ageHtml, stateText, stateHtml,
-    rowTitle, titleAttr, escapeHtml,
+    shortPath, rowTitle, titleAttr, escapeHtml,
   };
 });

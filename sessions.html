@@ -47,6 +47,9 @@
         .text { min-width: 0; }
         .name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .cwd { font-size: 11px; color: #868c95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        /* Чем сессия закончила. Тусклее пути: это подсказка, а не опознание —
+           строку ищут глазами по названию и каталогу. */
+        .summary { font-size: 11px; color: #6f757e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .badge { margin-left: 6px; font-size: 10px; color: #868c95; }
         /* Текстовый статус агента, прижат вправо вместе с возрастом. */
         .state {
@@ -81,7 +84,7 @@
     return window.__TAURI__.core.invoke(cmd, args);
   }
 
-  const { statusDotHtml, ageHtml, stateHtml, titleAttr, escapeHtml } = window.SessionGlyph;
+  const { statusDotHtml, ageHtml, stateHtml, shortPath, titleAttr, escapeHtml } = window.SessionGlyph;
 
   function render() {
     const visible = window.PickerFilter.filterSessions(groups, search.value);
@@ -99,7 +102,12 @@
           statusDotHtml(session) +
           `<div class="text"><div class="name">${escapeHtml(session.label)}` +
           `${session.open ? '' : '<span class="badge">closed</span>'}</div>` +
-          `<div class="cwd">${escapeHtml(session.cwd)}</div></div>` +
+          `<div class="cwd">${escapeHtml(shortPath(session.cwd))}</div>` +
+          // Третья строка появляется только когда есть что сказать: пустой div
+          // всё равно занял бы высоту, и строки без сводки стали бы выше.
+          (session.agentSummary
+            ? `<div class="summary">${escapeHtml(session.agentSummary)}</div>` : '') +
+          `</div>` +
           stateHtml(session) + ageHtml(session, nowSec) + `</div>`;
       }
     }
