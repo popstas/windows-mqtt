@@ -149,6 +149,7 @@ module.exports = async (mqtt, config, log) => {
     const action = chooseAction(session, (windowId) => !!winMan.getWindowById(windowId));
     if (action === 'restore') {
       await claudeRestoreOne({id});
+      scheduleHaRefresh();
       return;
     }
 
@@ -160,6 +161,7 @@ module.exports = async (mqtt, config, log) => {
     if (!winMan.focusWindowById(session.windowId)) {
       log(`claude-wt: ${id} is not on screen`, 'warn');
     }
+    scheduleHaRefresh();
   }
 
   // Экспорт сессий в Home Assistant. Живёт своим таймером, а не фидом пикера:
@@ -223,7 +225,37 @@ module.exports = async (mqtt, config, log) => {
     haTimerId = setInterval(exportToHomeAssistant, haCfg.interval);
   }
 
+  // Внеочередной экспорт после того, как мы сами перевели фокус.
+  //
+  // Отметку «просмотрено» ставит демон claude-wt на своём тике, а не мы в
+  // момент вызова: переключиться на окно можно и руками, поэтому признак живёт
+  // там, где видно любой переход фокуса. Значит сразу после focusWindowById()
+  // состояние на диске ещё прежнее, и экспорт по горячим следам опубликовал бы
+  // ровно тот статус, от которого человек только что ушёл. Ждём тик демона с
+  // запасом и публикуем один раз; периодический таймер остаётся страховкой.
+  //
+  // Две секунды — это два тика демона (у него интервал 1000 мс). Одного хватило
+  // бы в среднем, но тик, пришедшийся сразу после нашего таймера, оставил бы
+  // панель с прежним статусом до следующего периодического экспорта.
+  const HA_REFRESH_DELAY = 2000;
+  let haRefreshId = null;
+
+  function scheduleHaRefresh(delay = HA_REFRESH_DELAY) {
+    // Один отложенный экспорт на серию нажатий: пока прошлый не отработал,
+    // новый таймер не нужен — публиковать он будет то же самое.
+    if (!haCfg.enabled || haRefreshId !== null) return;
+    haRefreshId = setTimeout(() => {
+      haRefreshId = null;
+      exportToHomeAssistant();
+    }, delay);
+    haRefreshId.unref?.();
+  }
+
   function stopHomeAssistantExport() {
+    if (haRefreshId !== null) {
+      clearTimeout(haRefreshId);
+      haRefreshId = null;
+    }
     if (haTimerId === null) return;
     clearInterval(haTimerId);
     haTimerId = null;

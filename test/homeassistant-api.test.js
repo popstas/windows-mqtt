@@ -96,9 +96,10 @@ test('setStates counts the entities that made it', async (t) => {
   assert.strictEqual(ok, 1);
 });
 
-test('slotText leaves a working session unmarked', () => {
-  // The tile does not light up for it either: a running agent needs nothing.
-  assert.strictEqual(slotText({ status: 'active', title: 'agent' }), 'agent');
+test('slotText marks a working session too', () => {
+  // Every occupied slot gets a glyph, so the titles line up down the column.
+  // The tile still does not light up for it: a running agent needs nothing.
+  assert.strictEqual(slotText({ status: 'active', title: 'agent' }), '> agent');
 });
 
 test('slotText prefixes the title with an ASCII status glyph', () => {
