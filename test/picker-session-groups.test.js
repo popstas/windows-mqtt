@@ -39,30 +39,49 @@ test('groupSessions sorts by x, then by y', () => {
   assert.deepStrictEqual(group.sessions.map(x => x.id), ['b', 'a', 'c']);
 });
 
-test('groupSessions splits by desktop and monitor and labels each group', () => {
+test('groupSessions puts every live session in one group above the closed ones', () => {
   const groups = groupSessions([
-    s({ id: 'c', desktop: 2, monitor: 1 }),
-    s({ id: 'b', desktop: 1, monitor: 2 }),
-    s({ id: 'a', desktop: 1, monitor: 1 }),
+    s({ id: 'closed1', open: false, desktop: 2 }),
+    s({ id: 'live2', open: true, desktop: 2, bounds: { x: 200, y: 0, width: 10, height: 10 } }),
+    s({ id: 'closed2', open: false, desktop: 1 }),
+    s({ id: 'live1', open: true, desktop: 1, bounds: { x: 100, y: 0, width: 10, height: 10 } }),
   ]);
-  assert.deepStrictEqual(groups.map(g => g.label), [
-    'Desktop 1 · Monitor 1',
-    'Desktop 1 · Monitor 2',
-    'Desktop 2 · Monitor 1',
-  ]);
+  assert.deepStrictEqual(groups.map(g => g.label), ['Active sessions', 'Desktop 1', 'Desktop 2']);
+  // Live sessions are not split by desktop: 'live1' and 'live2' sit on
+  // different desktops and still share the top group.
+  assert.deepStrictEqual(groups[0].sessions.map(x => x.id), ['live1', 'live2']);
+  assert.deepStrictEqual(groups[1].sessions.map(x => x.id), ['closed2']);
+  assert.deepStrictEqual(groups[2].sessions.map(x => x.id), ['closed1']);
 });
 
-test('groupSessions puts an unknown desktop first and an unknown monitor last', () => {
+test('groupSessions omits the active group entirely when nothing is open', () => {
+  const groups = groupSessions([s({ id: 'a', open: false, desktop: 1 })]);
+  assert.deepStrictEqual(groups.map(g => g.label), ['Desktop 1']);
+});
+
+test('groupSessions omits the desktop groups when everything is open', () => {
+  const groups = groupSessions([s({ id: 'a', open: true, desktop: 1 })]);
+  assert.deepStrictEqual(groups.map(g => g.label), ['Active sessions']);
+});
+
+test('groupSessions ignores the monitor when splitting closed sessions', () => {
+  // Monitors get switched far more often than slots live, so a monitor number
+  // on a closed session says little — and splitting by it scattered the past
+  // across twice as many groups.
   const groups = groupSessions([
-    s({ id: 'a', desktop: 1, monitor: null }),
-    s({ id: 'b', desktop: 1, monitor: 2 }),
-    s({ id: 'c', desktop: null, monitor: 1 }),
+    s({ id: 'a', open: false, desktop: 1, monitor: 1 }),
+    s({ id: 'b', open: false, desktop: 1, monitor: 2 }),
   ]);
-  assert.deepStrictEqual(groups.map(g => g.label), [
-    'Desktop — · Monitor 1',
-    'Desktop 1 · Monitor 2',
-    'Desktop 1 · Unknown monitor',
+  assert.deepStrictEqual(groups.map(g => g.label), ['Desktop 1']);
+  assert.strictEqual(groups[0].sessions.length, 2);
+});
+
+test('groupSessions puts an unknown desktop before the real ones', () => {
+  const groups = groupSessions([
+    s({ id: 'a', open: false, desktop: 1 }),
+    s({ id: 'c', open: false, desktop: null }),
   ]);
+  assert.deepStrictEqual(groups.map(g => g.label), ['Desktop —', 'Desktop 1']);
 });
 
 test('groupSessions tolerates a session with no bounds', () => {
@@ -86,18 +105,15 @@ test('groupSessions returns an empty list for an empty input', () => {
 
 test('buildSessionsPayload labels and groups sessions on the ok path', () => {
   const sessions = [
-    s({ id: 'aaaa1111', title: 'agent', cwd: '/p/agent', desktop: 2, monitor: 1 }),
-    s({ id: 'bbbb2222', title: 'agent', cwd: '/p/agent', desktop: 1, monitor: 1 }),
+    s({ id: 'aaaa1111', title: 'agent', cwd: '/p/agent', desktop: 2, monitor: 1, open: false }),
+    s({ id: 'bbbb2222', title: 'agent', cwd: '/p/agent', desktop: 1, monitor: 1, open: false }),
   ];
   const payload = buildSessionsPayload({ ok: true, sessions });
 
   assert.strictEqual(payload.ok, true);
-  // groupSessions ran: two distinct (desktop, monitor) pairs became two groups,
-  // sorted by desktop ascending (2 before 1 in the input, 1 before 2 in output).
-  assert.deepStrictEqual(payload.groups.map(g => g.label), [
-    'Desktop 1 · Monitor 1',
-    'Desktop 2 · Monitor 1',
-  ]);
+  // groupSessions ran: two closed sessions on different desktops became two
+  // groups, sorted ascending (2 before 1 in the input, 1 before 2 in output).
+  assert.deepStrictEqual(payload.groups.map(g => g.label), ['Desktop 1', 'Desktop 2']);
   // labelSessions ran: the duplicate title+cwd pair got disambiguated with an id
   // prefix rather than passing the raw sessions through untouched.
   assert.strictEqual(payload.groups[0].sessions[0].label, 'agent (bbbb)');

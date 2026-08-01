@@ -39,6 +39,27 @@ test('statusDotHtml paints each agent state its own colour class', () => {
   }
 });
 
+test('statusDotHtml paints "waiting for your input" as needing review, not as idle', () => {
+  // The hook records the event; what it means is decided here. That
+  // notification arrives a minute after the agent stopped, so the work is
+  // finished and unread — the same thing a stop means.
+  assert.strictEqual(
+    statusDotHtml({ open: true, agentState: 'idle', agentEvent: 'attention' }),
+    '<div class="dot review"></div>'
+  );
+});
+
+test('statusDotHtml leaves idle grey when it did not come from a notification', () => {
+  assert.strictEqual(
+    statusDotHtml({ open: true, agentState: 'idle', agentEvent: 'tool-done' }),
+    '<div class="dot idle"></div>'
+  );
+  assert.strictEqual(
+    statusDotHtml({ open: true, agentState: 'idle' }),
+    '<div class="dot idle"></div>'
+  );
+});
+
 test('statusDotHtml falls back to idle for a live session with no agent state', () => {
   // The hook may not be installed, or may not have fired yet. Green would
   // claim the agent is working right now, which is exactly what is unknown.

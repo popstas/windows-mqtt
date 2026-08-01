@@ -2,10 +2,8 @@
 
 const SEP = '\u0000';
 
-// Sorting keys for the two "unknown" cases: an unknown desktop sorts before
-// every real one, an unknown monitor after.
+// Сессия с неизвестным столом сортируется перед всеми настоящими.
 const DESKTOP_UNKNOWN = -1;
-const MONITOR_UNKNOWN = Number.MAX_SAFE_INTEGER;
 
 /**
  * Disambiguate rows that would read identically.
@@ -27,32 +25,46 @@ function labelSessions(sessions) {
   });
 }
 
-function groupLabel(desktop, monitor) {
-  const d = desktop === null ? 'Desktop —' : `Desktop ${desktop}`;
-  const m = monitor === null ? 'Unknown monitor' : `Monitor ${monitor}`;
-  return `${d} · ${m}`;
+function desktopLabel(desktop) {
+  return desktop === null ? 'Desktop —' : `Desktop ${desktop}`;
 }
 
+function byPosition(a, b) {
+  return (a.bounds?.x ?? 0) - (b.bounds?.x ?? 0) ||
+    (a.bounds?.y ?? 0) - (b.bounds?.y ?? 0);
+}
+
+/**
+ * Живые сессии — одной группой сверху, закрытые — по виртуальным столам.
+ *
+ * Раньше и те и другие лежали вперемешку в группах «стол · монитор», и три
+ * работающие сессии терялись среди двух десятков вчерашних слотов.
+ *
+ * Живые не делятся по столам намеренно: их несколько, ищут их глазами, и
+ * «где оно открыто» тут менее важно, чем «что из этого работает прямо сейчас».
+ * Закрытые же режутся только по столу — монитор для закрытой сессии не значит
+ * почти ничего, потому что мониторы переключаются чаще, чем живут слоты.
+ */
 function groupSessions(sessions) {
+  const open = [];
   const groups = new Map();
   for (const s of sessions) {
+    if (s.open) { open.push(s); continue; }
     const desktop = s.desktop ?? null;
-    const monitor = s.monitor ?? null;
-    const key = `${desktop}${SEP}${monitor}`;
-    if (!groups.has(key)) groups.set(key, { desktop, monitor, label: groupLabel(desktop, monitor), sessions: [] });
+    const key = `${desktop}`;
+    if (!groups.has(key)) {
+      groups.set(key, { desktop, monitor: null, label: desktopLabel(desktop), sessions: [] });
+    }
     groups.get(key).sessions.push(s);
   }
 
-  const list = [...groups.values()];
-  for (const g of list) {
-    g.sessions.sort((a, b) =>
-      (a.bounds?.x ?? 0) - (b.bounds?.x ?? 0) ||
-      (a.bounds?.y ?? 0) - (b.bounds?.y ?? 0));
-  }
-  list.sort((a, b) =>
-    (a.desktop ?? DESKTOP_UNKNOWN) - (b.desktop ?? DESKTOP_UNKNOWN) ||
-    (a.monitor ?? MONITOR_UNKNOWN) - (b.monitor ?? MONITOR_UNKNOWN));
-  return list;
+  const past = [...groups.values()];
+  for (const g of past) g.sessions.sort(byPosition);
+  past.sort((a, b) => (a.desktop ?? DESKTOP_UNKNOWN) - (b.desktop ?? DESKTOP_UNKNOWN));
+
+  if (!open.length) return past;
+  open.sort(byPosition);
+  return [{ desktop: null, monitor: null, label: 'Active sessions', sessions: open }, ...past];
 }
 
 /**

@@ -27,10 +27,19 @@
    * раньше красили любую живую, теперь нельзя: зелёный стал означать «агент
    * прямо сейчас работает», и врать им не стоит.
    */
+  function dotState(session) {
+    // «Claude is waiting for your input» — не простой, а «агент закончил и ждёт
+    // тебя»: это уведомление приходит через минуту после остановки, то есть
+    // работа встала и результат никто не смотрел. Цвет тот же, что у stop.
+    // Хук пишет тут idle, потому что описывает событие, а не его смысл;
+    // решение, каким это показать, принимается здесь.
+    if (session.agentState === 'idle' && session.agentEvent === 'attention') return 'review';
+    return AGENT_DOT[session.agentState] || 'idle';
+  }
+
   function statusDotHtml(session) {
     if (!session || !session.open) return '<div class="dot closed"></div>';
-    const state = AGENT_DOT[session.agentState] || 'idle';
-    return `<div class="dot ${state}"></div>`;
+    return `<div class="dot ${dotState(session)}"></div>`;
   }
 
   /**
