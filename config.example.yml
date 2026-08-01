@@ -233,6 +233,10 @@ modules:
     homeassistant:
       slots: 9
       interval: 15
+      # Только живые сессии. Строк на панели единицы, и каждая, занятая давно
+      # закрытой сессией, вытесняет работающую. Закрытые остаются в пикере —
+      # там места хватает, и восстановить их можно только оттуда.
+      openOnly: true
     placeWindowOnStart: false
     notifyPlaced: true
     restoreOnStart: true

@@ -175,6 +175,10 @@ module.exports = async (mqtt, config, log) => {
     slots: config?.homeassistant?.slots ?? 9,
     interval: (config?.homeassistant?.interval ?? 15) * 1000,
     enabled: config?.homeassistant?.enabled !== false,
+    // Закрытые сессии на панели только мешают: строк там единицы, и каждая,
+    // занятая давно закрытой сессией, вытесняет живую. В пикере они по-прежнему
+    // видны — там места хватает, и восстановить закрытую можно только оттуда.
+    openOnly: config?.homeassistant?.openOnly !== false,
   };
   let haTimerId = null;
   let haAnnounced = null;
@@ -202,7 +206,10 @@ module.exports = async (mqtt, config, log) => {
       log(`claude-wt sessions failed: ${e.message}`, 'error');
       return;
     }
-    lastSlots = buildSlots(sessions, haCfg.slots);
+    // Сводка считается по всем сессиям, слоты — только по живым: total в
+    // сводке должен оставаться total.
+    const slotSessions = haCfg.openOnly ? sessions.filter(s => s.open) : sessions;
+    lastSlots = buildSlots(slotSessions, haCfg.slots);
     // Конфиги переиздаются только когда меняются имена: HA держит их retained,
     // и гонять десяток сообщений каждые пятнадцать секунд ради тех же
     // заголовков незачем.
@@ -214,7 +221,7 @@ module.exports = async (mqtt, config, log) => {
     }
     publishAll(stateMessages(config.base, [
       buildSummaryEntity(sessions),
-      ...buildSessionEntities(sessions, haCfg.slots),
+      ...buildSessionEntities(slotSessions, haCfg.slots),
     ]));
   }
 
