@@ -58,9 +58,16 @@ test('slotStatus clears review once the window has been looked at', () => {
     slotStatus(s({ agentState: 'idle', agentEvent: 'attention', agentSeen: true })), 'idle');
 });
 
-test('slotStatus does not let being seen mute a pending question', () => {
+test('slotStatus lets being seen mute a pending question', () => {
+  // The agent is still blocked, but a tile that keeps calling after you have
+  // already been to the session stops meaning anything.
   assert.strictEqual(
-    slotStatus(s({ agentState: 'question', agentEvent: 'attention', agentSeen: true })), 'question');
+    slotStatus(s({ agentState: 'question', agentEvent: 'attention', agentSeen: true })), 'idle');
+});
+
+test('slotStatus keeps an unseen question calling', () => {
+  assert.strictEqual(
+    slotStatus(s({ agentState: 'question', agentEvent: 'attention', agentSeen: false })), 'question');
 });
 
 test('slotStatus marks a closed session closed whatever state lingers', () => {

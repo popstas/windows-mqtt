@@ -86,9 +86,11 @@ function buildSessionEntities(sessions, count) {
 function buildSummaryEntity(sessions) {
   const list = sessions ?? [];
   const open = list.filter(s => s.open);
-  const waiting = open.filter(s => s.agentState === 'question'
-    || (!s.agentSeen && (s.agentState === 'review'
-      || (s.agentState === 'idle' && s.agentEvent === 'attention'))));
+  // Просмотренное не считается ждущим — иначе сводка расходилась бы со
+  // слотами, где фокус гасит и вопрос, и «посмотри результат».
+  const waiting = open.filter(s => !s.agentSeen && (s.agentState === 'question'
+    || s.agentState === 'review'
+    || (s.agentState === 'idle' && s.agentEvent === 'attention')));
   return {
     entityId: 'sensor.claude_sessions',
     state: open.length,

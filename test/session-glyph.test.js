@@ -65,11 +65,19 @@ test('statusDotHtml keeps a waiting session orange while it is unseen', () => {
   );
 });
 
-test('statusDotHtml does not let being seen mute a pending question', () => {
-  // Looking at the window does not answer the question; the agent is still
-  // blocked on it.
+test('statusDotHtml lets being seen mute a pending question', () => {
+  // Looking at the window does not answer the question — the agent stays
+  // blocked — but a list that keeps calling after you have been there stops
+  // meaning anything, so focus wins here too.
   assert.strictEqual(
     statusDotHtml({ open: true, agentState: 'question', agentEvent: 'attention', agentSeen: true }),
+    '<div class="dot idle"></div>'
+  );
+});
+
+test('statusDotHtml keeps an unseen question yellow', () => {
+  assert.strictEqual(
+    statusDotHtml({ open: true, agentState: 'question', agentEvent: 'attention', agentSeen: false }),
     '<div class="dot question"></div>'
   );
 });

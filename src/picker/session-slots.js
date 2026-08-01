@@ -32,14 +32,21 @@ function orderSessions(sessions) {
  * `review` здесь — это «работа встала, посмотри»: и stop/fail, и уведомление
  * «waiting for your input», которое хук пишет как idle. Фокус на окно гасит
  * оба, поэтому agentSeen проверяется до всего остального.
+ *
+ * Вопрос гаснет так же. Агент при этом остаётся заблокированным, и это
+ * осознанный размен: панель, которая продолжает звать после того, как на
+ * сессию сходили, перестаёт что-либо значить — на неё просто не смотрят.
  */
 function slotStatus(session) {
   if (!session) return 'empty';
   if (!session.open) return 'closed';
-  if (session.agentState === 'question') return 'question';
-  const needsReview = session.agentState === 'review'
+  const needsAttention = session.agentState === 'question'
+    || session.agentState === 'review'
     || (session.agentState === 'idle' && session.agentEvent === 'attention');
-  if (needsReview) return session.agentSeen ? 'idle' : 'review';
+  if (needsAttention) {
+    if (session.agentSeen) return 'idle';
+    return session.agentState === 'question' ? 'question' : 'review';
+  }
   return session.agentState === 'active' ? 'active' : 'idle';
 }
 

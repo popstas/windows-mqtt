@@ -37,9 +37,16 @@
     // выходило на передний план уже после этой записи. Ровно так ведёт себя и
     // сам Windows с подсветкой кнопки на таскбаре, и ожидание от списка такое
     // же — перешёл и посмотрел, значит больше не висит.
-    const needsReview = session.agentState === 'review'
+    // Вопрос гаснет по тому же правилу. Агент при этом остаётся заблокированным,
+    // и это осознанный размен: список, который продолжает звать после того, как
+    // на сессию уже сходили, быстро перестаёт что-либо значить.
+    const needsAttention = session.agentState === 'question'
+      || session.agentState === 'review'
       || (session.agentState === 'idle' && session.agentEvent === 'attention');
-    if (needsReview) return session.agentSeen ? 'idle' : 'review';
+    if (needsAttention) {
+      if (session.agentSeen) return 'idle';
+      return session.agentState === 'question' ? 'question' : 'review';
+    }
     return AGENT_DOT[session.agentState] || 'idle';
   }
 
