@@ -19,6 +19,16 @@ mqtt:
   password: 'your_password'
   base: 'home/room/pc'
 
+# Export state to Home Assistant over its REST API. Entities pushed this way
+# live until Home Assistant restarts and come back with the next export, so the
+# exporter runs on a timer rather than once at startup.
+homeassistant:
+  enabled: false
+  url: 'http://homeassistant.local:8123'
+  # Long-lived access token: Home Assistant profile page, bottom of the list.
+  token: ''
+  timeoutMs: 5000
+
 picker:
   # Global hotkey for the claude session picker. Windows swallows some Win+
   # combinations before they reach the app; change this if it never fires.
@@ -217,6 +227,12 @@ modules:
     # start the claude-wt window position watcher (needs a claudeWt block with
     # statePath in %APPDATA%\windows-mqtt\windows11-manager.config.js)
     claudeWt: false
+    # Сколько строк отдавать в Home Assistant и как часто. Строк постоянное
+    # число: кнопка на панели прибита к строке, а не к сессии. Интервал редкий —
+    # опрос окон недёшев, а панель не требует секундной точности.
+    homeassistant:
+      slots: 9
+      interval: 15
     placeWindowOnStart: false
     notifyPlaced: true
     restoreOnStart: true

@@ -2,6 +2,10 @@ const winMan = require('windows11-manager');
 const globalConfig = require('../config.js');
 const {exec} = require('child_process');
 const {buildSessionsPayload, chooseAction, resolveDesktopSwitch} = require('../picker/session-groups');
+const {labelSessions} = require('../picker/session-groups');
+const {buildSlots, sessionIdForSlot} = require('../picker/session-slots');
+const {HomeAssistantApi} = require('../homeassistant/api');
+const {buildSessionEntities, buildSummaryEntity} = require('../homeassistant/claude-sessions');
 
 module.exports = async (mqtt, config, log) => {
   let lastStats = {};
@@ -45,6 +49,7 @@ module.exports = async (mqtt, config, log) => {
     if (config.placeWindowOnOpen) winMan.stopPlaceNewWindows();
     if (config.claudeWt) winMan.stopClaudeWt();
     stopSessionsFeed();
+    stopHomeAssistantExport();
   }
 
   function onStart() {
@@ -153,6 +158,87 @@ module.exports = async (mqtt, config, log) => {
     if (!winMan.focusWindowById(session.windowId)) {
       log(`claude-wt: ${id} is not on screen`, 'warn');
     }
+  }
+
+  // Экспорт сессий в Home Assistant. Живёт своим таймером, а не фидом пикера:
+  // панель показывает список постоянно, а фид крутится только пока открыто окно
+  // выбора. Интервал редкий — claudeWtSessions() сканирует окна через
+  // getWindows(), и раз в секунду в фоне ему тут делать нечего.
+  // Ленивая инициализация, а не const: startHomeAssistantExport() вызывается
+  // выше по файлу, при запуске модуля, и const в этом месте попал бы в
+  // временную мёртвую зону.
+  let ha = null;
+  const homeAssistant = () => (ha ??= new HomeAssistantApi(globalConfig.homeassistant, log));
+  const haCfg = {
+    slots: config?.homeassistant?.slots ?? 9,
+    interval: (config?.homeassistant?.interval ?? 15) * 1000,
+  };
+  let haTimerId = null;
+  // Последняя разложенная по слотам картина: фокус с панели приходит номером
+  // строки, а не id сессии — кнопка прибита к строке, и что в ней лежит, знает
+  // только эта сторона.
+  let lastSlots = [];
+
+  function currentSessions() {
+    const res = winMan.claudeWtSessions();
+    if (!res.ok) throw new Error(res.reason);
+    return labelSessions(res.sessions);
+  }
+
+  async function exportToHomeAssistant() {
+    if (!homeAssistant().enabled) return;
+    let sessions;
+    try {
+      sessions = currentSessions();
+    } catch (e) {
+      log(`claude-wt sessions failed: ${e.message}`, 'error');
+      return;
+    }
+    lastSlots = buildSlots(sessions, haCfg.slots);
+    await homeAssistant().setStates([
+      buildSummaryEntity(sessions),
+      ...buildSessionEntities(sessions, haCfg.slots),
+    ]);
+  }
+
+  function startHomeAssistantExport() {
+    if (!homeAssistant().enabled || haTimerId !== null) return;
+    log(`home assistant: exporting ${haCfg.slots} session slots every ${haCfg.interval / 1000}s`);
+    exportToHomeAssistant();
+    haTimerId = setInterval(exportToHomeAssistant, haCfg.interval);
+  }
+
+  function stopHomeAssistantExport() {
+    if (haTimerId === null) return;
+    clearInterval(haTimerId);
+    haTimerId = null;
+  }
+
+  /**
+   * Фокус по номеру строки на панели.
+   *
+   * Панель шлёт номер, а не id: топик в openhasp_buttons.yaml — фиксированная
+   * строка, он не может зависеть от того, какая сессия сейчас в этой строке.
+   * Раскладка берётся из последнего экспорта, чтобы номер значил ровно то, что
+   * человек видел на экране в момент нажатия.
+   */
+  async function claudeFocusSlot(topic, message) {
+    // Обработчики подписок получают сырое сообщение: с панели прилетает просто
+    // номер строки, но JSON-вида {slot: N} тоже принимаем — так удобнее звать
+    // руками из автоматизаций.
+    const raw = String(message ?? '').trim();
+    let slot = raw;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && parsed.slot !== undefined) slot = parsed.slot;
+    } catch { /* обычный номер, не JSON */ }
+    log(`< ${topic}: ${raw}`);
+    const id = sessionIdForSlot(lastSlots, slot);
+    if (!id) {
+      log(`claude-wt: slot ${slot} is empty`, 'warn');
+      return;
+    }
+    await claudeFocus({id});
   }
 
   let sessionsTimerId = null;
@@ -384,8 +470,18 @@ module.exports = async (mqtt, config, log) => {
     'windows/reload': () => reload(),
   };
 
+  // Экспорт стартует здесь, а не рядом со startClaudeWt() выше: он опирается
+  // на const-объявления ниже по файлу, и вызов оттуда попал бы во временную
+  // мёртвую зону.
+  if (config.claudeWt) startHomeAssistantExport();
+
   return {
     subscriptions: [
+      {
+        // Панель openHASP шлёт сюда номер строки; см. claudeFocusSlot().
+        topics: [config.base + '/claude-focus-slot'],
+        handler: claudeFocusSlot
+      },
       {
         topics: [config.base + '/autoplace'],
         handler: autoplace

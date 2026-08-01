@@ -16,6 +16,7 @@
       "../commands.example.yml",
       "../bin/*",
       "../src/*",
+      "../src/homeassistant/**/*",
       "../src/modules/**/*",
       "../src/picker/**/*",
       "../assets/**/*",
