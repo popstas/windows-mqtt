@@ -96,8 +96,10 @@ test('setStates counts the entities that made it', async (t) => {
   assert.strictEqual(ok, 1);
 });
 
-test('slotText prefixes the title with a status glyph', () => {
-  assert.strictEqual(slotText({ status: 'active', title: 'agent' }), '▶ agent');
+test('slotText prefixes the title with an ASCII status glyph', () => {
+  // openHASP's built-in font has no ▶/·/×: the panel draws empty squares for
+  // them. Icons there are MDI codepoints, not unicode symbols.
+  assert.strictEqual(slotText({ status: 'active', title: 'agent' }), '> agent');
   assert.strictEqual(slotText({ status: 'question', title: 'agent' }), '? agent');
   assert.strictEqual(slotText({ status: 'review', title: 'agent' }), '! agent');
 });
