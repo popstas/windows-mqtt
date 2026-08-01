@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { escapeHtml, statusDotHtml } = require('../frontend-src/session-glyph');
+const { escapeHtml, statusDotHtml, formatAge, ageHtml } = require('../frontend-src/session-glyph');
 
 test('escapeHtml escapes ampersand, angle brackets, and double quotes', () => {
   assert.strictEqual(
@@ -28,10 +28,30 @@ test('escapeHtml coerces non-string input to a string first', () => {
   assert.strictEqual(escapeHtml(123), '123');
 });
 
-test('statusDotHtml marks a live session open', () => {
+test('statusDotHtml paints each agent state its own colour class', () => {
+  for (const state of ['active', 'question', 'review', 'idle']) {
+    assert.strictEqual(
+      statusDotHtml({ open: true, agentState: state }),
+      `<div class="dot ${state}"></div>`
+    );
+  }
+});
+
+test('statusDotHtml falls back to idle for a live session with no agent state', () => {
+  // The hook may not be installed, or may not have fired yet. Green would
+  // claim the agent is working right now, which is exactly what is unknown.
   assert.strictEqual(
     statusDotHtml({ open: true }),
-    '<div class="dot open"></div>'
+    '<div class="dot idle"></div>'
+  );
+});
+
+test('statusDotHtml ignores an agent state it does not know', () => {
+  // The state file is written by another process on another machine; an
+  // unknown string must not become a CSS class of its own.
+  assert.strictEqual(
+    statusDotHtml({ open: true, agentState: 'exploded' }),
+    '<div class="dot idle"></div>'
   );
 });
 
@@ -42,17 +62,62 @@ test('statusDotHtml marks a remembered-but-closed session closed', () => {
   );
 });
 
+test('statusDotHtml keeps a closed session closed even when a state lingers', () => {
+  // The window is gone; the last state the agent wrote before it went says
+  // nothing about now.
+  assert.strictEqual(
+    statusDotHtml({ open: false, agentState: 'active' }),
+    '<div class="dot closed"></div>'
+  );
+});
+
 test('statusDotHtml treats a missing open flag as closed rather than open', () => {
   // Defaulting the other way would paint a dead slot green, which is the one
   // thing the dot exists to tell apart.
   assert.strictEqual(statusDotHtml({}), '<div class="dot closed"></div>');
 });
 
+test('statusDotHtml survives a missing session object', () => {
+  assert.strictEqual(statusDotHtml(undefined), '<div class="dot closed"></div>');
+});
+
 test('statusDotHtml ignores the geometry fields the row no longer draws', () => {
   const session = {
     open: true,
+    agentState: 'active',
     bounds: { x: 100, y: 50, width: 200, height: 100 },
     monitorBounds: { x: 0, y: 0, width: 1000, height: 500 },
   };
-  assert.strictEqual(statusDotHtml(session), '<div class="dot open"></div>');
+  assert.strictEqual(statusDotHtml(session), '<div class="dot active"></div>');
+});
+
+const NOW = 1785600000;
+
+test('formatAge steps through now, minutes, hours and days', () => {
+  assert.strictEqual(formatAge(NOW, NOW), 'now');
+  assert.strictEqual(formatAge(NOW - 59, NOW), 'now');
+  assert.strictEqual(formatAge(NOW - 60, NOW), '1m');
+  assert.strictEqual(formatAge(NOW - 59 * 60, NOW), '59m');
+  assert.strictEqual(formatAge(NOW - 3600, NOW), '1h');
+  assert.strictEqual(formatAge(NOW - 23 * 3600, NOW), '23h');
+  assert.strictEqual(formatAge(NOW - 86400, NOW), '1d');
+  assert.strictEqual(formatAge(NOW - 3 * 86400, NOW), '3d');
+});
+
+test('formatAge returns nothing for a session that never reported activity', () => {
+  assert.strictEqual(formatAge(null, NOW), '');
+  assert.strictEqual(formatAge(0, NOW), '');
+  assert.strictEqual(formatAge(undefined, NOW), '');
+});
+
+test('formatAge clamps a timestamp from the future to now', () => {
+  // Clocks on the two machines need not agree, and a negative age would
+  // render as "-1m".
+  assert.strictEqual(formatAge(NOW + 120, NOW), 'now');
+});
+
+test('ageHtml always emits the element so the column cannot jump', () => {
+  assert.strictEqual(ageHtml({ lastActivity: NOW - 7200 }, NOW), '<div class="age">2h</div>');
+  assert.strictEqual(ageHtml({}, NOW), '<div class="age"></div>');
+  assert.strictEqual(ageHtml(undefined, NOW), '<div class="age"></div>');
 });

@@ -32,12 +32,27 @@
             flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%;
             background: #6e7681;
         }
-        .dot.open { background: #3fb950; }
+        /* Агент работает. */
+        .dot.active { background: #3fb950; }
+        /* Агент спрашивает — ждёт ответа человека. */
+        .dot.question { background: #d29922; }
+        /* Агент закончил, результат ещё не смотрели. */
+        .dot.review { background: #db6d28; }
+        /* Простаивает: закончил и постоял, считается проверенным. */
+        .dot.idle { background: #6e7681; }
+        /* Закрытая сессия — кружка нет, но место под него остаётся,
+           иначе текст закрытых строк съезжает относительно живых. */
+        .dot.closed { background: transparent; }
         .row.closed .name { color: #a8adb5; }
         .text { min-width: 0; }
         .name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .cwd { font-size: 11px; color: #868c95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .badge { margin-left: 6px; font-size: 10px; color: #868c95; }
+        /* Возраст последней активности, прижат к правому краю строки. */
+        .age {
+            flex: 0 0 auto; margin-left: auto; padding-left: 10px;
+            font-size: 11px; color: #7d838c; font-variant-numeric: tabular-nums;
+        }
         #message { padding: 24px 18px; color: #868c95; font-size: 13px; }
     </style>
 </head>
@@ -61,10 +76,13 @@
     return window.__TAURI__.core.invoke(cmd, args);
   }
 
-  const { statusDotHtml, escapeHtml } = window.SessionGlyph;
+  const { statusDotHtml, ageHtml, escapeHtml } = window.SessionGlyph;
 
   function render() {
     const visible = window.PickerFilter.filterSessions(groups, search.value);
+    // Одна отметка времени на всю отрисовку: иначе строки одного и того же
+    // списка считали бы возраст от чуть разных «сейчас».
+    const nowSec = Math.floor(Date.now() / 1000);
     rows = [];
     let html = '';
     for (const group of visible) {
@@ -76,7 +94,8 @@
           statusDotHtml(session) +
           `<div class="text"><div class="name">${escapeHtml(session.label)}` +
           `${session.open ? '' : '<span class="badge">closed</span>'}</div>` +
-          `<div class="cwd">${escapeHtml(session.cwd)}</div></div></div>`;
+          `<div class="cwd">${escapeHtml(session.cwd)}</div></div>` +
+          ageHtml(session, nowSec) + `</div>`;
       }
     }
     list.innerHTML = html;
