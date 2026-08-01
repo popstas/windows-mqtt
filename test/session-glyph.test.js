@@ -172,25 +172,39 @@ test('formatAge clamps a timestamp from the future to now', () => {
   assert.strictEqual(formatAge(NOW + 120, NOW), 'now');
 });
 
-test('rowTitle puts the full cwd and the agent message on separate lines', () => {
+test('rowTitle shortens the agent home directory to a tilde', () => {
+  // It is the same for every session and eats a third of the line.
   assert.strictEqual(
-    rowTitle({ cwd: '/home/popstas/projects/python/telegram-assistant', agentMessage: 'Claude needs your permission' }),
-    '/home/popstas/projects/python/telegram-assistant\nClaude needs your permission'
+    rowTitle({ cwd: '/home/popstas/projects/python/telegram-assistant' }),
+    '~/projects/python/telegram-assistant'
+  );
+  // The user name is not hard-coded: agents live on other machines too.
+  assert.strictEqual(rowTitle({ cwd: '/home/other/x' }), '~/x');
+  // Anything that is not a home directory is left alone.
+  assert.strictEqual(rowTitle({ cwd: '/opt/home/x' }), '/opt/home/x');
+});
+
+test('rowTitle separates the path from what the agent last said with a blank line', () => {
+  assert.strictEqual(
+    rowTitle({ cwd: '/home/popstas', agentSummary: 'Закоммитил — ea527f0', agentMessage: 'Claude needs your permission' }),
+    '~\n\nЗакоммитил — ea527f0\nClaude needs your permission'
   );
 });
 
-test('rowTitle puts what the agent last said between the path and the notification', () => {
-  // The summary answers 'what did this session end on', which neither the dot
-  // nor the window title answers.
+test('rowTitle drops the idle notification', () => {
+  // 'waiting for your input' rides on every rested session and pushes out the
+  // thing the tooltip is opened for. What it used to disambiguate — yellow dot
+  // versus grey — the status says on its own now.
   assert.strictEqual(
-    rowTitle({ cwd: '/home/popstas', agentSummary: 'Закоммитил — ea527f0', agentMessage: 'waiting' }),
-    '/home/popstas\nЗакоммитил — ea527f0\nwaiting'
+    rowTitle({ cwd: '/home/popstas', agentMessage: 'Claude is waiting for your input' }),
+    '~'
   );
 });
 
 test('rowTitle drops whichever part is missing', () => {
-  assert.strictEqual(rowTitle({ cwd: '/home/popstas' }), '/home/popstas');
-  assert.strictEqual(rowTitle({ agentMessage: 'waiting' }), 'waiting');
+  assert.strictEqual(rowTitle({ cwd: '/home/popstas' }), '~');
+  assert.strictEqual(rowTitle({ agentMessage: 'Claude needs your permission' }), 'Claude needs your permission');
+  // Без пути пустая строка впереди не нужна — отбивать не от чего.
   assert.strictEqual(rowTitle({ agentSummary: 'Оба сделано.' }), 'Оба сделано.');
   assert.strictEqual(rowTitle({}), '');
   assert.strictEqual(rowTitle(undefined), '');
