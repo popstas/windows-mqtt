@@ -49,6 +49,31 @@ test('statusDotHtml paints "waiting for your input" as needing review, not as id
   );
 });
 
+test('statusDotHtml greys out a waiting session once its window was focused', () => {
+  // Focus is the only honest "I looked at it" signal there is — the same one
+  // Windows itself uses to drop the taskbar highlight.
+  assert.strictEqual(
+    statusDotHtml({ open: true, agentState: 'idle', agentEvent: 'attention', agentSeen: true }),
+    '<div class="dot idle"></div>'
+  );
+});
+
+test('statusDotHtml keeps a waiting session orange while it is unseen', () => {
+  assert.strictEqual(
+    statusDotHtml({ open: true, agentState: 'idle', agentEvent: 'attention', agentSeen: false }),
+    '<div class="dot review"></div>'
+  );
+});
+
+test('statusDotHtml does not let being seen mute a pending question', () => {
+  // Looking at the window does not answer the question; the agent is still
+  // blocked on it.
+  assert.strictEqual(
+    statusDotHtml({ open: true, agentState: 'question', agentEvent: 'attention', agentSeen: true }),
+    '<div class="dot question"></div>'
+  );
+});
+
 test('statusDotHtml leaves idle grey when it did not come from a notification', () => {
   assert.strictEqual(
     statusDotHtml({ open: true, agentState: 'idle', agentEvent: 'tool-done' }),

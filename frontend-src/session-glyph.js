@@ -33,7 +33,14 @@
     // работа встала и результат никто не смотрел. Цвет тот же, что у stop.
     // Хук пишет тут idle, потому что описывает событие, а не его смысл;
     // решение, каким это показать, принимается здесь.
-    if (session.agentState === 'idle' && session.agentEvent === 'attention') return 'review';
+    //
+    // Гаснет оно по фокусу, а не по времени: agentSeen означает, что окно
+    // выходило на передний план уже после этой записи. Ровно так ведёт себя и
+    // сам Windows с подсветкой кнопки на таскбаре, и ожидание от списка такое
+    // же — перешёл и посмотрел, значит больше не висит.
+    if (session.agentState === 'idle' && session.agentEvent === 'attention') {
+      return session.agentSeen ? 'idle' : 'review';
+    }
     return AGENT_DOT[session.agentState] || 'idle';
   }
 
