@@ -81,6 +81,7 @@ function buildSessionEntities(sessions, count) {
       // Чем сессия закончила. В строку панели не влезает — там уже значок и
       // заголовок, — но доступна автоматизациям и нижней строке состояния.
       summary: slot.summary,
+      last_summary: slot.lastSummary,
     },
   }));
 }

@@ -134,9 +134,14 @@
     // «Закоммитил — ea527f0, рабочее дерево чистое» против «Дизайн, секция 1
     // из 5». Отбита пустой строкой от пути — это разные вещи, и глазом их
     // проще разделить, чем прочитать подряд.
-    if (session.agentSummary) {
+    //
+    // У работающей сессии свежей сводки нет — она отвечает за текущий ход, а он
+    // ещё идёт. Тогда показывается последняя известная: в строке её нет, а в
+    // подсказке она к месту, там и спрашивают «на чём эта сессия встала».
+    const summary = session.agentSummary || session.agentLastSummary;
+    if (summary) {
       if (lines.length) lines.push('');
-      lines.push(session.agentSummary);
+      lines.push(summary);
     }
     const message = session.agentMessage ?? '';
     if (message && !message.includes(IDLE_NOTICE)) lines.push(message);

@@ -64,6 +64,7 @@ function emptySlot(index) {
     lastActivity: null,
     message: '',
     summary: '',
+    lastSummary: '',
   };
 }
 
@@ -86,6 +87,9 @@ function buildSlots(sessions, count = DEFAULT_SLOTS) {
       // Чем сессия закончила: первая строка последнего ответа агента. В строку
       // панели не влезает, но годится в подсказку и в нижнюю строку состояния.
       summary: s.agentSummary ?? '',
+      // Не стирается у работающей сессии, в отличие от summary: «на чём
+      // остановилась в прошлый раз» — вопрос отдельный от «что говорит сейчас».
+      lastSummary: s.agentLastSummary ?? '',
     };
   });
 }

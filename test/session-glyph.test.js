@@ -200,6 +200,16 @@ test('rowTitle separates the path from what the agent last said with a blank lin
   );
 });
 
+test('rowTitle falls back to the last known summary while the agent is working', () => {
+  // A busy session has no fresh summary: the current turn is not finished. The
+  // row shows nothing, but the tooltip is exactly where 'what did it stop on'
+  // gets asked.
+  assert.strictEqual(
+    rowTitle({ cwd: '/home/popstas', agentSummary: '', agentLastSummary: 'Оба сделано.' }),
+    '~\n\nОба сделано.'
+  );
+});
+
 test('rowTitle drops the idle notification', () => {
   // 'waiting for your input' rides on every rested session and pushes out the
   // thing the tooltip is opened for. What it used to disambiguate — yellow dot
