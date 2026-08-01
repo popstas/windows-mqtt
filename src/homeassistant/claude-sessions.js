@@ -2,7 +2,16 @@
 
 const { buildSlots } = require('../picker/session-slots');
 
-const SLOT_PREFIX = 'sensor.claude_session_';
+// binary_sensor, а не switch: сущность, созданная через /api/states, ничем не
+// управляется — switch выглядел бы в HA переключателем, который при нажатии
+// откатывается обратно. Здесь это именно состояние: включено — значит сессия
+// ждёт человека.
+const SLOT_PREFIX = 'binary_sensor.claude_session_';
+
+// Состояния, при которых сессия требует внимания. Плитка на панели горит
+// ровно тогда, когда к сессии надо вернуться: агент спрашивает или закончил и
+// результат ещё не смотрели. Работающая сессия не горит — она сама по себе.
+const ATTENTION = new Set(['question', 'review']);
 
 // Значок состояния прямо в тексте: openHASP рисует строку как есть, а
 // раскрашивать её по атрибуту — это шаблон в каждой кнопке. Один символ в
@@ -11,8 +20,11 @@ const SLOT_PREFIX = 'sensor.claude_session_';
 // Только ASCII. Во встроенном шрифте openHASP нет ни ▶, ни ·, ни × — вместо
 // них панель рисует пустые квадраты; иконки там задаются кодами MDI ( и
 // подобными), а не юникодными символами.
+// Работающая сессия — без значка: она и так самая обычная, а плитка её не
+// подсвечивает. Значок остаётся у тех состояний, которые надо различать
+// глазами: два вида «требует внимания», простой и закрытая.
 const STATUS_GLYPH = {
-  active: '>',
+  active: '',
   question: '?',
   review: '!',
   idle: '-',
@@ -44,12 +56,18 @@ function buildSessionEntities(sessions, count) {
   const slots = buildSlots(sessions, count);
   return slots.map(slot => ({
     entityId: `${SLOT_PREFIX}${slot.slot}`,
-    state: slotText(slot),
+    // Состояние — это «нужен ли я тебе», а не «жива ли сессия». Панель
+    // подсвечивает включённые плитки, и подсвечивать работающую сессию значит
+    // звать к ней без повода.
+    state: ATTENTION.has(slot.status) ? 'on' : 'off',
     attributes: {
       friendly_name: `Claude session ${slot.slot}`,
       icon: 'mdi:console',
       slot: slot.slot,
       session_id: slot.id,
+      // Готовая строка для панели: состояние сущности занято признаком
+      // внимания, поэтому текст живёт в атрибуте.
+      text: slotText(slot),
       title: slot.title,
       cwd: slot.cwd,
       status: slot.status,

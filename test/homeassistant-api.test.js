@@ -96,10 +96,14 @@ test('setStates counts the entities that made it', async (t) => {
   assert.strictEqual(ok, 1);
 });
 
+test('slotText leaves a working session unmarked', () => {
+  // The tile does not light up for it either: a running agent needs nothing.
+  assert.strictEqual(slotText({ status: 'active', title: 'agent' }), 'agent');
+});
+
 test('slotText prefixes the title with an ASCII status glyph', () => {
   // openHASP's built-in font has no ▶/·/×: the panel draws empty squares for
   // them. Icons there are MDI codepoints, not unicode symbols.
-  assert.strictEqual(slotText({ status: 'active', title: 'agent' }), '> agent');
   assert.strictEqual(slotText({ status: 'question', title: 'agent' }), '? agent');
   assert.strictEqual(slotText({ status: 'review', title: 'agent' }), '! agent');
 });
@@ -116,7 +120,9 @@ test('buildSessionEntities pins each entity to a row, not to a session', () => {
   // every change of composition would mean rewriting the panel config.
   const entities = buildSessionEntities([s({ id: 'a', title: 'one' })], 3);
   assert.deepStrictEqual(entities.map(e => e.entityId), [
-    'sensor.claude_session_1', 'sensor.claude_session_2', 'sensor.claude_session_3',
+    'binary_sensor.claude_session_1',
+    'binary_sensor.claude_session_2',
+    'binary_sensor.claude_session_3',
   ]);
   assert.strictEqual(entities[0].attributes.session_id, 'a');
   assert.strictEqual(entities[2].attributes.session_id, '');
@@ -142,4 +148,29 @@ test('buildSummaryEntity counts live sessions and the ones waiting on you', () =
   assert.strictEqual(summary.attributes.working, 1);
   // b asks a question, c stopped and was not looked at; d was looked at.
   assert.strictEqual(summary.attributes.waiting, 2);
+});
+
+test('a session turns the entity on only when it wants you', () => {
+  // On means "come back to me": the agent asked something, or it stopped and
+  // nobody has looked. A working session is off — it needs nothing.
+  const on = st => buildSessionEntities([s({ id: 'a', ...st })], 1)[0].state;
+  assert.strictEqual(on({ agentState: 'question' }), 'on');
+  assert.strictEqual(on({ agentState: 'review', agentEvent: 'stop' }), 'on');
+  assert.strictEqual(on({ agentState: 'idle', agentEvent: 'attention' }), 'on');
+  assert.strictEqual(on({ agentState: 'active' }), 'off');
+  assert.strictEqual(on({ agentState: 'idle', agentEvent: 'tool-done' }), 'off');
+  assert.strictEqual(on({ agentState: 'review', agentEvent: 'stop', agentSeen: true }), 'off');
+  assert.strictEqual(on({ open: false }), 'off');
+});
+
+test('an empty slot is off and carries no text', () => {
+  const [, empty] = buildSessionEntities([s({ id: 'a' })], 2);
+  assert.strictEqual(empty.state, 'off');
+  assert.strictEqual(empty.attributes.text, '');
+});
+
+test('the display text lives in an attribute, since the state holds the on/off flag', () => {
+  const [entity] = buildSessionEntities([s({ id: 'a', title: 'one', agentState: 'question' })], 1);
+  assert.strictEqual(entity.attributes.text, '? one');
+  assert.strictEqual(entity.state, 'on');
 });
