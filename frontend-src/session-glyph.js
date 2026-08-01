@@ -28,19 +28,18 @@
    * прямо сейчас работает», и врать им не стоит.
    */
   function dotState(session) {
-    // «Claude is waiting for your input» — не простой, а «агент закончил и ждёт
-    // тебя»: это уведомление приходит через минуту после остановки, то есть
-    // работа встала и результат никто не смотрел. Цвет тот же, что у stop.
-    // Хук пишет тут idle, потому что описывает событие, а не его смысл;
-    // решение, каким это показать, принимается здесь.
+    // «Работа встала, посмотри» приходит двумя путями: stop и fail пишут
+    // review сразу, а «Claude is waiting for your input» — через минуту после
+    // остановки, и хук записывает его как idle, потому что описывает событие,
+    // а не его смысл. Смысл у них один, и цвет должен быть один.
     //
     // Гаснет оно по фокусу, а не по времени: agentSeen означает, что окно
     // выходило на передний план уже после этой записи. Ровно так ведёт себя и
     // сам Windows с подсветкой кнопки на таскбаре, и ожидание от списка такое
     // же — перешёл и посмотрел, значит больше не висит.
-    if (session.agentState === 'idle' && session.agentEvent === 'attention') {
-      return session.agentSeen ? 'idle' : 'review';
-    }
+    const needsReview = session.agentState === 'review'
+      || (session.agentState === 'idle' && session.agentEvent === 'attention');
+    if (needsReview) return session.agentSeen ? 'idle' : 'review';
     return AGENT_DOT[session.agentState] || 'idle';
   }
 

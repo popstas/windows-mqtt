@@ -31,7 +31,7 @@ test('escapeHtml coerces non-string input to a string first', () => {
 });
 
 test('statusDotHtml paints each agent state its own colour class', () => {
-  for (const state of ['active', 'question', 'review', 'idle']) {
+  for (const state of ['active', 'question', 'idle']) {
     assert.strictEqual(
       statusDotHtml({ open: true, agentState: state }),
       `<div class="dot ${state}"></div>`
@@ -235,4 +235,18 @@ test('stateHtml always emits the element so the age column cannot jump', () => {
 test('stateHtml escapes an event string it did not choose', () => {
   const out = stateHtml({ open: true, agentState: 'idle', agentEvent: '<script>alert(1)</script>' });
   assert.ok(!out.includes('<script>'), 'must not leave an openable script tag');
+});
+
+test('statusDotHtml keeps a stopped session orange until its window is focused', () => {
+  // stop and fail write review straight away; the "waiting for your input"
+  // notice says the same thing a minute later. One meaning, one colour, and
+  // both are cleared by the same thing — looking at the window.
+  assert.strictEqual(
+    statusDotHtml({ open: true, agentState: 'review', agentEvent: 'stop' }),
+    '<div class="dot review"></div>'
+  );
+  assert.strictEqual(
+    statusDotHtml({ open: true, agentState: 'review', agentEvent: 'stop', agentSeen: true }),
+    '<div class="dot idle"></div>'
+  );
 });
