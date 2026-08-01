@@ -1,6 +1,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { escapeHtml, statusDotHtml, formatAge, ageHtml } = require('../frontend-src/session-glyph');
+const {
+  escapeHtml, statusDotHtml, formatAge, ageHtml, rowTitle, titleAttr,
+} = require('../frontend-src/session-glyph');
 
 test('escapeHtml escapes ampersand, angle brackets, and double quotes', () => {
   assert.strictEqual(
@@ -114,6 +116,36 @@ test('formatAge clamps a timestamp from the future to now', () => {
   // Clocks on the two machines need not agree, and a negative age would
   // render as "-1m".
   assert.strictEqual(formatAge(NOW + 120, NOW), 'now');
+});
+
+test('rowTitle puts the full cwd and the agent message on separate lines', () => {
+  assert.strictEqual(
+    rowTitle({ cwd: '/home/popstas/projects/python/telegram-assistant', agentMessage: 'Claude needs your permission' }),
+    '/home/popstas/projects/python/telegram-assistant\nClaude needs your permission'
+  );
+});
+
+test('rowTitle drops whichever part is missing', () => {
+  assert.strictEqual(rowTitle({ cwd: '/home/popstas' }), '/home/popstas');
+  assert.strictEqual(rowTitle({ agentMessage: 'waiting' }), 'waiting');
+  assert.strictEqual(rowTitle({}), '');
+  assert.strictEqual(rowTitle(undefined), '');
+});
+
+test('titleAttr omits the attribute entirely when there is nothing to say', () => {
+  // An empty title= paints a blank tooltip box on hover, which is worse than
+  // no tooltip at all.
+  assert.strictEqual(titleAttr({}), '');
+  assert.strictEqual(titleAttr(undefined), '');
+});
+
+test('titleAttr escapes a message that would break out of the attribute', () => {
+  const out = titleAttr({ agentMessage: 'say "hi" <script>alert(1)</script>' });
+  assert.strictEqual(
+    out,
+    ' title="say &quot;hi&quot; &lt;script&gt;alert(1)&lt;/script&gt;"'
+  );
+  assert.ok(!out.includes('<script>'), 'must not leave an openable script tag');
 });
 
 test('ageHtml always emits the element so the column cannot jump', () => {

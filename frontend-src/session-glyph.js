@@ -55,10 +55,35 @@
     return `<div class="age">${age}</div>`;
   }
 
+  /**
+   * Подсказка при наведении на строку.
+   *
+   * Здесь оседает то, чему в строке не хватает места: полный cwd (в строке он
+   * обрезан многоточием) и текст уведомления агента. Последний — единственное,
+   * что отличает «нужно разрешение» от «просто жду ввода»: оба приходят одним
+   * событием attention, а кружки у них разные.
+   *
+   * Пустая строка означает «подсказки нет» — вызывающий не добавляет атрибут,
+   * иначе браузер показывал бы пустую рамку.
+   */
+  function rowTitle(session) {
+    if (!session) return '';
+    const lines = [];
+    if (session.cwd) lines.push(session.cwd);
+    if (session.agentMessage) lines.push(session.agentMessage);
+    return lines.join('\n');
+  }
+
+  /** Готовый атрибут title, уже экранированный, либо пустая строка. */
+  function titleAttr(session) {
+    const text = rowTitle(session);
+    return text ? ` title="${escapeHtml(text)}"` : '';
+  }
+
   function escapeHtml(text) {
     return String(text).replace(/[&<>"]/g, (c) =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
   }
 
-  return { statusDotHtml, formatAge, ageHtml, escapeHtml };
+  return { statusDotHtml, formatAge, ageHtml, rowTitle, titleAttr, escapeHtml };
 });

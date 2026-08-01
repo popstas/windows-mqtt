@@ -76,7 +76,7 @@
     return window.__TAURI__.core.invoke(cmd, args);
   }
 
-  const { statusDotHtml, ageHtml, escapeHtml } = window.SessionGlyph;
+  const { statusDotHtml, ageHtml, titleAttr, escapeHtml } = window.SessionGlyph;
 
   function render() {
     const visible = window.PickerFilter.filterSessions(groups, search.value);
@@ -90,7 +90,7 @@
       for (const session of group.sessions) {
         const index = rows.length;
         rows.push(session);
-        html += `<div class="row ${session.open ? '' : 'closed'}" data-index="${index}">` +
+        html += `<div class="row ${session.open ? '' : 'closed'}" data-index="${index}"${titleAttr(session)}>` +
           statusDotHtml(session) +
           `<div class="text"><div class="name">${escapeHtml(session.label)}` +
           `${session.open ? '' : '<span class="badge">closed</span>'}</div>` +
