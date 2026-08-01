@@ -50,4 +50,9 @@ if (!fs.existsSync(installedExe)) {
 }
 
 console.log(`Launching ${installedExe}`);
-spawnSync('cmd', ['/c', 'start', '', installedExe], { stdio: 'inherit' });
+// Не inherit: `start` отвязывает процесс, но приложение наследует наши stdout и
+// stderr и держит трубу открытой всё время, пока работает. Вызывающая оболочка
+// ждёт EOF, а не завершения процесса, поэтому `npm run deploy-local` не
+// возвращал управление часами и не печатал ни строчки — и «завершался» ровно в
+// тот момент, когда следующий деплой делал taskkill.
+spawnSync('cmd', ['/c', 'start', '', installedExe], { stdio: 'ignore' });
