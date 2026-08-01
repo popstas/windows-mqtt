@@ -120,9 +120,9 @@ test('buildSessionEntities pins each entity to a row, not to a session', () => {
   // every change of composition would mean rewriting the panel config.
   const entities = buildSessionEntities([s({ id: 'a', title: 'one' })], 3);
   assert.deepStrictEqual(entities.map(e => e.entityId), [
-    'binary_sensor.claude_session_1',
-    'binary_sensor.claude_session_2',
-    'binary_sensor.claude_session_3',
+    'switch.claude_session_1',
+    'switch.claude_session_2',
+    'switch.claude_session_3',
   ]);
   assert.strictEqual(entities[0].attributes.session_id, 'a');
   assert.strictEqual(entities[2].attributes.session_id, '');

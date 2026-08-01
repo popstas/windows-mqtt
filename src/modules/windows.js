@@ -4,7 +4,7 @@ const {exec} = require('child_process');
 const {buildSessionsPayload, chooseAction, resolveDesktopSwitch} = require('../picker/session-groups');
 const {labelSessions} = require('../picker/session-groups');
 const {buildSlots, sessionIdForSlot} = require('../picker/session-slots');
-const {HomeAssistantApi} = require('../homeassistant/api');
+const {discoveryMessages, stateMessages, topics: haTopics} = require('../homeassistant/discovery');
 const {buildSessionEntities, buildSummaryEntity} = require('../homeassistant/claude-sessions');
 
 module.exports = async (mqtt, config, log) => {
@@ -164,16 +164,16 @@ module.exports = async (mqtt, config, log) => {
   // панель показывает список постоянно, а фид крутится только пока открыто окно
   // выбора. Интервал редкий — claudeWtSessions() сканирует окна через
   // getWindows(), и раз в секунду в фоне ему тут делать нечего.
-  // Ленивая инициализация, а не const: startHomeAssistantExport() вызывается
-  // выше по файлу, при запуске модуля, и const в этом месте попал бы в
-  // временную мёртвую зону.
-  let ha = null;
-  const homeAssistant = () => (ha ??= new HomeAssistantApi(globalConfig.homeassistant, log));
+  // Транспорт — MQTT Discovery, а не REST: только так у сущностей появляется
+  // устройство, unique_id и жизнь после перезапуска HA. /api/states пишет
+  // состояние мимо реестра, поэтому там ни устройства, ни переименования.
   const haCfg = {
     slots: config?.homeassistant?.slots ?? 9,
     interval: (config?.homeassistant?.interval ?? 15) * 1000,
+    enabled: config?.homeassistant?.enabled !== false,
   };
   let haTimerId = null;
+  let haAnnounced = false;
   // Последняя разложенная по слотам картина: фокус с панели приходит номером
   // строки, а не id сессии — кнопка прибита к строке, и что в ней лежит, знает
   // только эта сторона.
@@ -185,8 +185,12 @@ module.exports = async (mqtt, config, log) => {
     return labelSessions(res.sessions);
   }
 
+  function publishAll(messages) {
+    for (const m of messages) mqtt.publish(m.topic, m.payload, {retain: m.retain, qos: 0});
+  }
+
   async function exportToHomeAssistant() {
-    if (!homeAssistant().enabled) return;
+    if (!haCfg.enabled) return;
     let sessions;
     try {
       sessions = currentSessions();
@@ -194,16 +198,22 @@ module.exports = async (mqtt, config, log) => {
       log(`claude-wt sessions failed: ${e.message}`, 'error');
       return;
     }
+    // Конфиги — один раз за жизнь процесса: HA держит их у себя retained, и
+    // повторять их каждые пятнадцать секунд значит гонять килобайты впустую.
+    if (!haAnnounced) {
+      publishAll(discoveryMessages(config.base, haCfg.slots));
+      haAnnounced = true;
+    }
     lastSlots = buildSlots(sessions, haCfg.slots);
-    await homeAssistant().setStates([
+    publishAll(stateMessages(config.base, [
       buildSummaryEntity(sessions),
       ...buildSessionEntities(sessions, haCfg.slots),
-    ]);
+    ]));
   }
 
   function startHomeAssistantExport() {
-    if (!homeAssistant().enabled || haTimerId !== null) return;
-    log(`home assistant: exporting ${haCfg.slots} session slots every ${haCfg.interval / 1000}s`);
+    if (!haCfg.enabled || haTimerId !== null) return;
+    log(`home assistant: publishing ${haCfg.slots} session slots every ${haCfg.interval / 1000}s`);
     exportToHomeAssistant();
     haTimerId = setInterval(exportToHomeAssistant, haCfg.interval);
   }
@@ -212,6 +222,23 @@ module.exports = async (mqtt, config, log) => {
     if (haTimerId === null) return;
     clearInterval(haTimerId);
     haTimerId = null;
+    // Сущности станут unavailable, а не застынут с последним состоянием: пока
+    // windows-mqtt не работает, никакой номер слота ничего не значит.
+    mqtt.publish(haTopics(config.base).availability, 'offline', {retain: true, qos: 0});
+  }
+
+  /**
+   * Нажатие на переключатель сессии в интерфейсе Home Assistant.
+   *
+   * Топик несёт номер слота, полезная нагрузка (ON/OFF) не важна: у сессии нет
+   * «выключить», есть только «перейти к ней». Состояние вернётся тем, что
+   * пришлёт следующий экспорт, — переключатель на секунду отскочит, и это
+   * ожидаемо.
+   */
+  async function claudeSlotCommand(topic) {
+    const slot = topic.split('/').at(-2);
+    log(`< ${topic}`);
+    await claudeFocusSlot(topic, slot);
   }
 
   /**
@@ -501,6 +528,14 @@ module.exports = async (mqtt, config, log) => {
       {
         topics: [config.base + '/claude-snapshot-restore'],
         handler: claudeSnapshotRestore
+      },
+      {
+        // Переключатели сессий в Home Assistant. Топики перечислены поимённо:
+        // диспетчер подписок ищет обработчик точным совпадением, шаблон с + он
+        // не разрешит.
+        topics: Array.from({length: config?.homeassistant?.slots ?? 9},
+          (_, i) => haTopics(config.base).slotCommand(i + 1)),
+        handler: claudeSlotCommand
       },
       {
         topics: [config.base + '/autoplace'],
