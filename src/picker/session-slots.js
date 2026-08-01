@@ -63,6 +63,7 @@ function emptySlot(index) {
     monitor: null,
     lastActivity: null,
     message: '',
+    summary: '',
   };
 }
 
@@ -82,6 +83,9 @@ function buildSlots(sessions, count = DEFAULT_SLOTS) {
       monitor: s.monitor ?? null,
       lastActivity: s.lastActivity ?? null,
       message: s.agentMessage ?? '',
+      // Чем сессия закончила: первая строка последнего ответа агента. В строку
+      // панели не влезает, но годится в подсказку и в нижнюю строку состояния.
+      summary: s.agentSummary ?? '',
     };
   });
 }

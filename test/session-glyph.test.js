@@ -179,9 +179,19 @@ test('rowTitle puts the full cwd and the agent message on separate lines', () =>
   );
 });
 
+test('rowTitle puts what the agent last said between the path and the notification', () => {
+  // The summary answers 'what did this session end on', which neither the dot
+  // nor the window title answers.
+  assert.strictEqual(
+    rowTitle({ cwd: '/home/popstas', agentSummary: 'Закоммитил — ea527f0', agentMessage: 'waiting' }),
+    '/home/popstas\nЗакоммитил — ea527f0\nwaiting'
+  );
+});
+
 test('rowTitle drops whichever part is missing', () => {
   assert.strictEqual(rowTitle({ cwd: '/home/popstas' }), '/home/popstas');
   assert.strictEqual(rowTitle({ agentMessage: 'waiting' }), 'waiting');
+  assert.strictEqual(rowTitle({ agentSummary: 'Оба сделано.' }), 'Оба сделано.');
   assert.strictEqual(rowTitle({}), '');
   assert.strictEqual(rowTitle(undefined), '');
 });

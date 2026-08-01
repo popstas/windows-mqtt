@@ -114,6 +114,11 @@
     if (!session) return '';
     const lines = [];
     if (session.cwd) lines.push(session.cwd);
+    // Первая строка последнего ответа агента. Отвечает на вопрос «чем эта
+    // сессия закончила», на который ни кружок, ни заголовок окна не отвечают:
+    // «Закоммитил — ea527f0, рабочее дерево чистое» против «Дизайн, секция 1
+    // из 5».
+    if (session.agentSummary) lines.push(session.agentSummary);
     if (session.agentMessage) lines.push(session.agentMessage);
     return lines.join('\n');
   }

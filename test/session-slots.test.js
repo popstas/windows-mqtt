@@ -7,6 +7,12 @@ const s = (over) => ({
   desktop: 1, monitor: 1, open: true, lastActivity: 100, ...over,
 });
 
+test('buildSlots carries what the agent last said, and leaves it blank for an empty slot', () => {
+  const [filled, empty] = buildSlots([s({ agentSummary: 'Оба сделано.' })], 2);
+  assert.strictEqual(filled.summary, 'Оба сделано.');
+  assert.strictEqual(empty.summary, '');
+});
+
 test('orderSessions puts live sessions first, grouped by desktop', () => {
   const out = orderSessions([
     s({ id: 'closed', open: false, lastActivity: 999 }),

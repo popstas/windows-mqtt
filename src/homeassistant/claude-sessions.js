@@ -78,6 +78,9 @@ function buildSessionEntities(sessions, count) {
       monitor: slot.monitor,
       last_activity: slot.lastActivity,
       message: slot.message,
+      // Чем сессия закончила. В строку панели не влезает — там уже значок и
+      // заголовок, — но доступна автоматизациям и нижней строке состояния.
+      summary: slot.summary,
     },
   }));
 }
