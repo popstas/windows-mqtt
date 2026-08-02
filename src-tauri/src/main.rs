@@ -671,13 +671,13 @@ struct ClaudeProject {
     hotkey: String,
 }
 
-/// Top-level `claudeProjects` entries used for global project hotkeys.
-fn parse_claude_projects(content: &str) -> Vec<ClaudeProject> {
-    let value: serde_yaml::Value = match serde_yaml::from_str(content) {
+/// Parses the JSON array dumped by `claudeWtProjects()` in windows11-manager.
+fn parse_claude_projects_json(content: &str) -> Vec<ClaudeProject> {
+    let value: serde_json::Value = match serde_json::from_str(content) {
         Ok(v) => v,
         Err(_) => return Vec::new(),
     };
-    let Some(list) = value.get("claudeProjects").and_then(|v| v.as_sequence()) else {
+    let Some(list) = value.as_array() else {
         return Vec::new();
     };
     let mut out = Vec::new();
@@ -705,10 +705,25 @@ fn parse_claude_projects(content: &str) -> Vec<ClaudeProject> {
     out
 }
 
-fn read_claude_projects(config_path: &PathBuf) -> Vec<ClaudeProject> {
-    match std::fs::read_to_string(config_path) {
-        Ok(content) => parse_claude_projects(&content),
-        Err(_) => Vec::new(),
+/// Asks windows11-manager for the merged `claudeWt.projects` list instead of
+/// re-parsing the yaml config here, so this stays in sync with the same
+/// defaults/merge logic the node daemon and picker already use. Namespace
+/// import (`import * as m`), not default: the package only has named exports.
+fn read_claude_projects_from_manager(app_root: &PathBuf) -> Vec<ClaudeProject> {
+    let output = std::process::Command::new("node")
+        .args([
+            "--input-type=module",
+            "-e",
+            "import * as m from 'windows11-manager'; process.stdout.write(JSON.stringify(m.claudeWtProjects()))",
+        ])
+        .current_dir(app_root)
+        .stdin(std::process::Stdio::null())
+        .output();
+    match output {
+        Ok(o) if o.status.success() => {
+            parse_claude_projects_json(&String::from_utf8_lossy(&o.stdout))
+        }
+        _ => Vec::new(),
     }
 }
 
@@ -1304,7 +1319,7 @@ fn main() {
             let claude_projects = app_root_result
                 .as_ref()
                 .ok()
-                .map(|root| read_claude_projects(&resolve_config_path(&app.handle(), root)))
+                .map(read_claude_projects_from_manager)
                 .unwrap_or_default();
             for project in claude_projects {
                 register_project_shortcut_with_retry(
@@ -1544,7 +1559,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{describe_child_exit, find_app_root};
-    use super::{parse_claude_projects, parse_picker_config, ClaudeProject};
+    use super::{parse_claude_projects_json, parse_picker_config};
 
     #[test]
     fn picker_config_falls_back_to_defaults() {
@@ -1573,40 +1588,28 @@ mod tests {
     }
 
     #[test]
-    fn claude_projects_parses_named_entries() {
-        let projects = parse_claude_projects(
-            "claudeProjects:\n  - name: home\n    cwd: /p/home\n    hotkey: Ctrl+F11\n  - name: ez\n    cwd: /p/ez\n    hotkey: Ctrl+F12\n",
+    fn claude_projects_json_parses_entries() {
+        let projects = parse_claude_projects_json(
+            r#"[{"name":"home","cwd":"/p/home","hotkey":"Ctrl+F11","profile":"home"}]"#,
         );
-        assert_eq!(
-            projects,
-            vec![
-                ClaudeProject {
-                    name: "home".into(),
-                    cwd: "/p/home".into(),
-                    hotkey: "Ctrl+F11".into(),
-                },
-                ClaudeProject {
-                    name: "ez".into(),
-                    cwd: "/p/ez".into(),
-                    hotkey: "Ctrl+F12".into(),
-                },
-            ]
-        );
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].name, "home");
+        assert_eq!(projects[0].hotkey, "Ctrl+F11");
     }
 
     #[test]
-    fn claude_projects_skips_incomplete_entries() {
-        let projects = parse_claude_projects(
-            "claudeProjects:\n  - name: home\n    hotkey: Ctrl+F11\n  - name: ok\n    cwd: /p\n    hotkey: Ctrl+F12\n",
+    fn claude_projects_json_skips_incomplete() {
+        let projects = parse_claude_projects_json(
+            r#"[{"name":"x"},{"name":"ok","cwd":"/p","hotkey":"Ctrl+F12"}]"#,
         );
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].name, "ok");
     }
 
     #[test]
-    fn claude_projects_empty_when_missing_or_broken() {
-        assert!(parse_claude_projects("picker:\n  hotkey: Super+F10\n").is_empty());
-        assert!(parse_claude_projects("\t\tnot: [valid").is_empty());
+    fn claude_projects_json_empty_when_missing_or_broken() {
+        assert!(parse_claude_projects_json("{}").is_empty());
+        assert!(parse_claude_projects_json("not json").is_empty());
     }
 
     #[test]
