@@ -60,6 +60,7 @@
            строку ищут глазами по названию и каталогу. */
         .summary { font-size: 11px; color: #6f757e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .badge { margin-left: 6px; font-size: 10px; color: #868c95; }
+        .name .hotkey { margin-left: 6px; font-size: 11px; color: #7d838c; font-weight: normal; }
         /* Текстовый статус агента, прижат вправо вместе с возрастом. */
         .state {
             flex: 0 0 auto; margin-left: auto; padding-left: 10px;
@@ -171,6 +172,7 @@
         html += `<div class="row ${session.open ? '' : 'closed'}" data-index="${index}"${titleAttr(session)}>` +
           statusDotHtml(session) +
           `<div class="text"><div class="name">${escapeHtml(session.label)}` +
+          `${session.hotkey ? `<span class="hotkey">${escapeHtml(session.hotkey)}</span>` : ''}` +
           `${session.open ? '' : '<span class="badge">closed</span>'}</div>` +
           `<div class="cwd">${escapeHtml(shortPath(session.cwd))}</div>` +
           // Третья строка появляется только когда есть что сказать: пустой div

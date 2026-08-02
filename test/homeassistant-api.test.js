@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { HomeAssistantApi, mergeHaConfig } = require('../src/homeassistant/api');
 const {
-  slotText, slotUsage, sessionEntity, buildSessionEntities, buildSummaryEntity,
+  slotText, slotUsage, slotSummary, sessionEntity, buildSessionEntities, buildSummaryEntity,
 } = require('../src/homeassistant/claude-sessions');
 const { buildSlots } = require('../src/picker/session-slots');
 const { stateMessages } = require('../src/homeassistant/discovery');
@@ -111,12 +111,19 @@ test('slotText prefixes the title with an ASCII status glyph', () => {
   assert.strictEqual(slotText({ status: 'review', title: 'agent' }), '! agent');
 });
 
-test('slotText leaves an empty slot blank', () => {
-  // The dash was there from when a blank text collapsed the object and the
-  // list jumped on every change of composition; the rows now carry explicit
-  // w and h, so there is nothing left to collapse.
-  assert.strictEqual(slotText({ status: 'empty', title: '' }), '');
-  assert.strictEqual(slotText(undefined), '');
+test('slotText clears an empty slot with a dash', () => {
+  // Пустой payload / пробел openHASP не стирает — карточка залипала бы.
+  assert.strictEqual(slotText({ status: 'empty', title: '' }), '-');
+  assert.strictEqual(slotText(undefined), '-');
+  assert.strictEqual(slotText({ status: 'idle', title: '' }), '-');
+});
+
+test('slotSummary clears empty and blank summaries with a dash', () => {
+  assert.strictEqual(slotSummary({ status: 'empty', summary: '' }), '-');
+  assert.strictEqual(slotSummary({ status: 'idle', summary: '' }), '-');
+  assert.strictEqual(slotSummary({ status: 'idle', summary: '  ' }), '-');
+  assert.strictEqual(slotSummary({ status: 'idle', summary: 'Готово' }), 'Готово');
+  assert.strictEqual(slotSummary(undefined), '-');
 });
 
 test('slotUsage puts money before context in the corner of the row', () => {
@@ -220,10 +227,12 @@ test('a session turns the entity on only when it wants you', () => {
   assert.strictEqual(on({ open: false }), 'off');
 });
 
-test('an empty slot is off and carries no text', () => {
+test('an empty slot is off and carries dash placeholders for the panel', () => {
   const [, empty] = buildSessionEntities([s({ id: 'a' })], 2);
   assert.strictEqual(empty.state, 'off');
-  assert.strictEqual(empty.attributes.text, '');
+  assert.strictEqual(empty.attributes.text, '-');
+  assert.strictEqual(empty.attributes.summary, '-');
+  assert.strictEqual(empty.attributes.usage, '-');
 });
 
 test('the display text lives in an attribute, since the state holds the on/off flag', () => {

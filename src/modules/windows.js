@@ -17,6 +17,7 @@ const {
   buildOpenCommands,
   buildDumpRefreshCommand,
 } = require('../picker/session-open-helpers');
+const { resolveClaudeProject, attachProjectHotkeys } = require('../picker/claude-project-helpers');
 const {resolveAppFile} = require('../paths');
 const {
   discoveryMessages, namesFingerprint, stateMessages, topics: haTopics,
@@ -177,6 +178,33 @@ module.exports = async (mqtt, config, log) => {
     }
     if (!winMan.focusWindowById(session.windowId)) {
       log(`claude-wt: ${id} is not on screen`, 'warn');
+    }
+    scheduleHaRefresh();
+  }
+
+  // Project hotkey: focus last open session for cwd, or spawn a fresh named Claude.
+  async function claudeFocusProject(payload) {
+    const project = resolveClaudeProject(globalConfig.claudeProjects, payload);
+    if (!project) {
+      log(`claude-wt: unknown project ${JSON.stringify(payload)}`, 'warn');
+      return;
+    }
+    let res;
+    try {
+      res = await winMan.openClaudeProject({ cwd: project.cwd, name: project.name });
+    } catch (e) {
+      log(`claude-wt open-project failed: ${e.message}`, 'error');
+      return;
+    }
+    if (!res?.ok) {
+      log(`claude-wt open-project: ${res?.reason || 'failed'}`, 'warn');
+      return;
+    }
+    log(`claude-wt open-project ${project.name}: ${res.action}${res.sessionId ? ` ${res.sessionId}` : ''}`);
+    // New session is invisible to the dump until ccfzf rewrites it. Refresh
+    // once the session file exists so the daemon can bind the WT window.
+    if (res.action === 'spawn') {
+      scheduleSessionDumpRefresh();
     }
     scheduleHaRefresh();
   }
@@ -540,7 +568,11 @@ module.exports = async (mqtt, config, log) => {
       return;
     }
     const sort = readSessionsSortFromConfig(config);
-    mqtt.sendEvent('claude-wt-sessions', buildSessionsPayload(res, sort));
+    const withHotkeys = {
+      ...res,
+      sessions: attachProjectHotkeys(res.sessions, globalConfig.claudeProjects),
+    };
+    mqtt.sendEvent('claude-wt-sessions', buildSessionsPayload(withHotkeys, sort));
   }
 
   function cycleSessionsSort() {
@@ -568,15 +600,45 @@ module.exports = async (mqtt, config, log) => {
   // once a second, which is not something to do in the background forever.
   function refreshSessionDump() {
     const cmd = buildDumpRefreshCommand(sessionOpenOpts());
-    const child = spawn(cmd.file, cmd.args, {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
+    return new Promise((resolve) => {
+      const child = spawn(cmd.file, cmd.args, {
+        detached: false,
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        try {
+          if (typeof winMan.invalidateSessionIndex === 'function') {
+            winMan.invalidateSessionIndex();
+          }
+        } catch (e) {
+          log(`claude-wt session index invalidate failed: ${e.message}`, 'warn');
+        }
+        resolve();
+      };
+      child.on('error', (e) => {
+        log(`claude-wt ccfzf dump refresh failed: ${e.message}`, 'warn');
+        finish();
+      });
+      child.on('exit', finish);
+      // Detached dumps used to hang forever on a stuck ssh; keep a ceiling.
+      setTimeout(finish, 30000);
     });
-    child.on('error', (e) => {
-      log(`claude-wt ccfzf dump refresh failed: ${e.message}`, 'warn');
-    });
-    child.unref();
+  }
+
+  /** After a fresh Claude spawn the session file appears with a short delay. */
+  function scheduleSessionDumpRefresh() {
+    const delays = [1500, 4000];
+    for (const ms of delays) {
+      setTimeout(() => {
+        refreshSessionDump().catch((e) => {
+          log(`claude-wt ccfzf dump refresh failed: ${e.message}`, 'warn');
+        });
+      }, ms);
+    }
   }
 
   function startSessionsFeed() {
@@ -784,6 +846,7 @@ module.exports = async (mqtt, config, log) => {
     },
     'windows/claude-restore': () => claudeRestore(),
     'windows/claude-focus': (payload) => claudeFocus(payload),
+    'windows/claude-focus-project': (payload) => claudeFocusProject(payload),
     'windows/claude-session-actions': (payload) => claudeSessionActions(payload),
     'windows/claude-session-open': (payload) => claudeSessionOpen(payload),
     'windows/claude-sessions-start': () => startSessionsFeed(),

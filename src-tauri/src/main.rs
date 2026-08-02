@@ -664,6 +664,54 @@ fn read_picker_config(config_path: &PathBuf) -> PickerConfig {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ClaudeProject {
+    name: String,
+    cwd: String,
+    hotkey: String,
+}
+
+/// Top-level `claudeProjects` entries used for global project hotkeys.
+fn parse_claude_projects(content: &str) -> Vec<ClaudeProject> {
+    let value: serde_yaml::Value = match serde_yaml::from_str(content) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+    let Some(list) = value.get("claudeProjects").and_then(|v| v.as_sequence()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for item in list {
+        let name = item
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let cwd = item
+            .get("cwd")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let hotkey = item
+            .get("hotkey")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if name.is_empty() || cwd.is_empty() || hotkey.is_empty() {
+            continue;
+        }
+        out.push(ClaudeProject { name, cwd, hotkey });
+    }
+    out
+}
+
+fn read_claude_projects(config_path: &PathBuf) -> Vec<ClaudeProject> {
+    match std::fs::read_to_string(config_path) {
+        Ok(content) => parse_claude_projects(&content),
+        Err(_) => Vec::new(),
+    }
+}
+
 fn find_app_root(candidates: &[PathBuf]) -> Option<PathBuf> {
     candidates
         .iter()
@@ -1028,6 +1076,59 @@ fn register_shortcut_with_retry(
     });
 }
 
+/// Project hotkeys carry a name string, so they cannot share the Copy
+/// ShortcutAction enum used by autoplace/picker. Same retry loop otherwise.
+fn register_project_shortcut_with_retry(
+    app: tauri::AppHandle,
+    shortcut_str: String,
+    project_name: String,
+) {
+    if shortcut_str.is_empty() || project_name.is_empty() {
+        return;
+    }
+    std::thread::spawn(move || {
+        const ATTEMPTS: u32 = 10;
+        for attempt in 1..=ATTEMPTS {
+            unregister_shortcut(&app, &shortcut_str);
+            let app_for_handler = app.clone();
+            let name_for_handler = project_name.clone();
+            let result = app.global_shortcut().on_shortcut(
+                shortcut_str.as_str(),
+                move |_app, _shortcut, _event| {
+                    let app_handle = app_for_handler.clone();
+                    let name = name_for_handler.clone();
+                    tauri::async_runtime::spawn(async move {
+                        allow_node_foreground(&app_handle).await;
+                        send_command_with(
+                            &app_handle,
+                            "windows/claude-focus-project",
+                            Some(serde_json::json!({ "name": name })),
+                        )
+                        .await;
+                    });
+                },
+            );
+            match result {
+                Ok(()) => return,
+                Err(e) if attempt == ATTEMPTS => {
+                    let message = format!(
+                        "Failed to register project hotkey '{shortcut_str}' ({project_name}) after {ATTEMPTS} attempts: {e}"
+                    );
+                    eprintln!("{message}");
+                    let _ = app.emit(
+                        "server-log",
+                        LogPayload {
+                            message,
+                            level: "warn".into(),
+                        },
+                    );
+                }
+                Err(_) => std::thread::sleep(Duration::from_millis(300)),
+            }
+        }
+    });
+}
+
 // --- Main ---
 
 fn main() {
@@ -1199,6 +1300,19 @@ fn main() {
                 "picker",
             );
             app.manage(picker_cfg);
+
+            let claude_projects = app_root_result
+                .as_ref()
+                .ok()
+                .map(|root| read_claude_projects(&resolve_config_path(&app.handle(), root)))
+                .unwrap_or_default();
+            for project in claude_projects {
+                register_project_shortcut_with_retry(
+                    app.handle().clone(),
+                    project.hotkey,
+                    project.name,
+                );
+            }
 
             let (menu, hotkey_items, interval_items) =
                 build_tray_menu(&app_handle).expect("failed to build tray menu");
@@ -1430,7 +1544,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{describe_child_exit, find_app_root};
-    use super::parse_picker_config;
+    use super::{parse_claude_projects, parse_picker_config, ClaudeProject};
 
     #[test]
     fn picker_config_falls_back_to_defaults() {
@@ -1456,6 +1570,43 @@ mod tests {
     fn picker_config_survives_broken_yaml() {
         let cfg = parse_picker_config("\t\tnot: [valid");
         assert_eq!(cfg.hotkey, "Super+F10");
+    }
+
+    #[test]
+    fn claude_projects_parses_named_entries() {
+        let projects = parse_claude_projects(
+            "claudeProjects:\n  - name: home\n    cwd: /p/home\n    hotkey: Ctrl+F11\n  - name: ez\n    cwd: /p/ez\n    hotkey: Ctrl+F12\n",
+        );
+        assert_eq!(
+            projects,
+            vec![
+                ClaudeProject {
+                    name: "home".into(),
+                    cwd: "/p/home".into(),
+                    hotkey: "Ctrl+F11".into(),
+                },
+                ClaudeProject {
+                    name: "ez".into(),
+                    cwd: "/p/ez".into(),
+                    hotkey: "Ctrl+F12".into(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn claude_projects_skips_incomplete_entries() {
+        let projects = parse_claude_projects(
+            "claudeProjects:\n  - name: home\n    hotkey: Ctrl+F11\n  - name: ok\n    cwd: /p\n    hotkey: Ctrl+F12\n",
+        );
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].name, "ok");
+    }
+
+    #[test]
+    fn claude_projects_empty_when_missing_or_broken() {
+        assert!(parse_claude_projects("picker:\n  hotkey: Super+F10\n").is_empty());
+        assert!(parse_claude_projects("\t\tnot: [valid").is_empty());
     }
 
     #[test]

@@ -37,15 +37,16 @@ const STATUS_GLYPH = {
 /**
  * Текст, который увидит панель.
  *
- * Пустой слот — пустая строка. Прочерк здесь стоял с тех пор, когда пустой
- * текст схлопывал объект по высоте и список прыгал при каждой смене состава;
- * с тех пор у строк появились явные w и h, так что схлопываться нечему. Если
- * кнопки всё же начнут пропадать, вернуть сюда прочерк.
+ * Пустой слот — `-`, не пустая строка: openHASP не стирает текст пустым
+ * payload, а HA ещё обрезает пробел из шаблона — карточка залипала бы
+ * предыдущей сессией. То же правило, что у `slotUsage` / `slotSummary`.
  */
 function slotText(slot) {
-  if (!slot || slot.status === 'empty') return '';
+  if (!slot || slot.status === 'empty') return '-';
   const glyph = STATUS_GLYPH[slot.status] ?? '';
-  return `${glyph} ${slot.title}`.trim();
+  const title = typeof slot.title === 'string' ? slot.title.trim() : '';
+  if (!title) return '-';
+  return `${glyph} ${title}`.trim();
 }
 
 /**
@@ -69,6 +70,15 @@ function slotUsage(slot, nowSec = Math.floor(Date.now() / 1000)) {
   if (slot.contextPct > 0) parts.push(`${slot.contextPct}%`);
   if (parts.length) return parts.join(' ');
   return formatAge(slot.lastActivity, nowSec) || '-';
+}
+
+/**
+ * Нижняя строка карточки (сводка). Пусто / пустой слот → `-`, иначе залипает.
+ */
+function slotSummary(slot) {
+  if (!slot || slot.status === 'empty') return '-';
+  const s = typeof slot.summary === 'string' ? slot.summary.trim() : '';
+  return s || '-';
 }
 
 /**
@@ -105,7 +115,8 @@ function sessionEntity(slot, nowSec = Math.floor(Date.now() / 1000)) {
       message: slot.message,
       // Чем сессия закончила. В строку панели не влезает — там уже значок и
       // заголовок, — но доступна автоматизациям и нижней строке состояния.
-      summary: slot.summary,
+      // Пустое → `-`: иначе openHASP не стирает прежнюю сводку.
+      summary: slotSummary(slot),
       last_summary: slot.lastSummary,
       // Готовая строка для правого верхнего угла кнопки: «$12 47%» или «5m».
       usage: slotUsage(slot, nowSec),
@@ -152,6 +163,6 @@ function buildSummaryEntity(sessions) {
 }
 
 module.exports = {
-  SLOT_PREFIX, STATUS_GLYPH, slotText, slotUsage,
+  SLOT_PREFIX, STATUS_GLYPH, slotText, slotUsage, slotSummary,
   sessionEntity, buildSessionEntities, buildSummaryEntity,
 };

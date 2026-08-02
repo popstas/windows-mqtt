@@ -233,3 +233,16 @@ test('DEFAULT_PICKER_HOTKEY in main.rs matches config.example.yml picker.hotkey'
     'config.example.yml picker.hotkey must match DEFAULT_PICKER_HOTKEY in main.rs'
   );
 });
+
+test('config.example.yml documents claudeProjects with home and expertizeme', () => {
+  const config = yaml.load(fs.readFileSync(path.join(repoRoot, 'config.example.yml'), 'utf8'));
+  const projects = config && config.claudeProjects;
+  assert.ok(Array.isArray(projects), 'claudeProjects must be an array');
+  assert.ok(projects.length >= 2, 'expected at least home and expertizeme');
+  for (const p of projects) {
+    assert.ok(p.name && p.cwd && p.hotkey, `project entry incomplete: ${JSON.stringify(p)}`);
+  }
+  const names = projects.map(p => p.name);
+  assert.ok(names.includes('home'));
+  assert.ok(names.includes('expertizeme'));
+});
