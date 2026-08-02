@@ -65,6 +65,8 @@ function emptySlot(index) {
     message: '',
     summary: '',
     lastSummary: '',
+    costUsd: 0,
+    contextPct: 0,
   };
 }
 
@@ -90,6 +92,10 @@ function buildSlots(sessions, count = DEFAULT_SLOTS) {
       // Не стирается у работающей сессии, в отличие от summary: «на чём
       // остановилась в прошлый раз» — вопрос отдельный от «что говорит сейчас».
       lastSummary: s.agentLastSummary ?? '',
+      // Во что обошлась сессия и сколько от контекста съедено. Ноль — данных
+      // нет: перехват статуслайна стоит не у всех.
+      costUsd: s.agentCostUsd ?? 0,
+      contextPct: s.agentContextPct ?? 0,
     };
   });
 }

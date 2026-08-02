@@ -4,8 +4,9 @@ const { buildSlots } = require('../picker/session-slots');
 
 // switch, а не binary_sensor: через MQTT Discovery у переключателя есть
 // command_topic, и нажатие в интерфейсе Home Assistant переводит фокус на эту
-// сессию. Состояние при этом отвечает на вопрос «нужен ли я тебе», поэтому
-// переключатель тут же вернётся в положение из следующего экспорта.
+// сессию. Состояние при этом отвечает на вопрос «нужен ли я тебе», а на него
+// нажатие уже ответило — поэтому переключатель гасится сразу, тем же
+// обработчиком, что переводит фокус (см. claudeSlotCommand).
 const SLOT_PREFIX = 'switch.claude_session_';
 
 // Состояния, при которых сессия требует внимания. Плитка на панели горит
@@ -47,16 +48,37 @@ function slotText(slot) {
 }
 
 /**
- * Слоты сессий как сущности HA.
+ * Правый верхний угол строки: во что обошлась сессия и сколько от контекста
+ * съедено.
  *
- * Номер слота — часть entity_id, и это принципиально: кнопка на панели
- * прибита к строке, а не к сессии, поэтому и сущность должна быть привязана к
- * строке. Иначе при каждом изменении состава пришлось бы переписывать
- * конфигурацию панели.
+ * Собирается здесь, а не шаблоном в конфиге панели: в Home Assistant это была
+ * бы склейка из двух state_attr с двумя проверками на пустоту в каждой кнопке,
+ * то есть пять копий одной логики в YAML.
+ *
+ * Ноль означает «данных нет» — перехват статуслайна стоит не у каждой сессии,
+ * — поэтому нулевая часть просто не показывается, а не рисуется как «$0».
+ * Только ASCII: во встроенном шрифте openHASP нет ни точки-разделителя, ни
+ * тире, вместо них панель рисует пустые квадраты.
  */
-function buildSessionEntities(sessions, count) {
-  const slots = buildSlots(sessions, count);
-  return slots.map(slot => ({
+function slotUsage(slot) {
+  if (!slot || slot.status === 'empty') return '';
+  const parts = [];
+  if (slot.costUsd > 0) parts.push(`$${slot.costUsd}`);
+  if (slot.contextPct > 0) parts.push(`${slot.contextPct}%`);
+  return parts.join(' ');
+}
+
+/**
+ * Один слот как сущность HA.
+ *
+ * Отдельно от `buildSessionEntities`, потому что публиковать слот приходится и
+ * поодиночке: нажатие на переключатель гасит его сразу, не дожидаясь
+ * очередного экспорта. Состояние и атрибуты живут в одном топике, поэтому
+ * опубликовать одно только `state` нельзя — с ним улетели бы и текст, и
+ * сводка, и строка панели опустела бы до следующего тика.
+ */
+function sessionEntity(slot) {
+  return {
     entityId: `${SLOT_PREFIX}${slot.slot}`,
     // Состояние — это «нужен ли я тебе», а не «жива ли сессия». Панель
     // подсвечивает включённые плитки, и подсвечивать работающую сессию значит
@@ -82,8 +104,25 @@ function buildSessionEntities(sessions, count) {
       // заголовок, — но доступна автоматизациям и нижней строке состояния.
       summary: slot.summary,
       last_summary: slot.lastSummary,
+      // Готовая строка для правого верхнего угла кнопки: «$12 47%». Числа
+      // рядом на случай автоматизаций — им склейка ни к чему.
+      usage: slotUsage(slot),
+      cost_usd: slot.costUsd,
+      context_pct: slot.contextPct,
     },
-  }));
+  };
+}
+
+/**
+ * Слоты сессий как сущности HA.
+ *
+ * Номер слота — часть entity_id, и это принципиально: кнопка на панели
+ * прибита к строке, а не к сессии, поэтому и сущность должна быть привязана к
+ * строке. Иначе при каждом изменении состава пришлось бы переписывать
+ * конфигурацию панели.
+ */
+function buildSessionEntities(sessions, count) {
+  return buildSlots(sessions, count).map(sessionEntity);
 }
 
 /** Сводная сущность: сколько сессий живо и сколько из них ждут внимания. */
@@ -110,4 +149,7 @@ function buildSummaryEntity(sessions) {
   };
 }
 
-module.exports = { SLOT_PREFIX, STATUS_GLYPH, slotText, buildSessionEntities, buildSummaryEntity };
+module.exports = {
+  SLOT_PREFIX, STATUS_GLYPH, slotText, slotUsage,
+  sessionEntity, buildSessionEntities, buildSummaryEntity,
+};

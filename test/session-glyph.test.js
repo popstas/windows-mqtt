@@ -2,6 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const {
   escapeHtml, statusDotHtml, formatAge, ageHtml, stateText, stateHtml,
+  contextLevel, usageHtml,
   shortPath, rowTitle, titleAttr,
 } = require('../frontend-src/session-glyph');
 
@@ -249,6 +250,33 @@ test('ageHtml always emits the element so the column cannot jump', () => {
   assert.strictEqual(ageHtml({ lastActivity: NOW - 7200 }, NOW), '<div class="age">2h</div>');
   assert.strictEqual(ageHtml({}, NOW), '<div class="age"></div>');
   assert.strictEqual(ageHtml(undefined, NOW), '<div class="age"></div>');
+});
+
+test('contextLevel warns at thirty per cent and turns hot at forty', () => {
+  // Границы включающие: ровно 30 — это уже предупреждение, а не последняя
+  // спокойная строка.
+  assert.strictEqual(contextLevel(29), '');
+  assert.strictEqual(contextLevel(30), 'warn');
+  assert.strictEqual(contextLevel(39), 'warn');
+  assert.strictEqual(contextLevel(40), 'hot');
+});
+
+test('usageHtml puts the cost before the highlighted context', () => {
+  // Тот же порядок, что и на панели: список и плата показывают одно и то же.
+  assert.strictEqual(
+    usageHtml({ agentContextPct: 13, agentCostUsd: 2 }),
+    '<div class="usage"><span class="cost">$2</span> · <span class="ctx">13%</span></div>'
+  );
+  assert.ok(usageHtml({ agentContextPct: 47, agentCostUsd: 2 }).includes('class="ctx hot"'));
+});
+
+test('usageHtml leaves out what nobody measured, but keeps the column', () => {
+  // Ноль — это «данных нет»: перехват статуслайна стоит не у каждой сессии, и
+  // «$0» утверждало бы, что она обошлась бесплатно.
+  assert.strictEqual(usageHtml({ agentContextPct: 0, agentCostUsd: 2 }),
+    '<div class="usage"><span class="cost">$2</span></div>');
+  assert.strictEqual(usageHtml({}), '<div class="usage"></div>');
+  assert.strictEqual(usageHtml(undefined), '<div class="usage"></div>');
 });
 
 test('stateText shows the state and the event that produced it', () => {

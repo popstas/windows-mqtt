@@ -227,6 +227,9 @@ modules:
     # start the claude-wt window position watcher (needs a claudeWt block with
     # statePath in %APPDATA%\windows-mqtt\windows11-manager.config.js)
     claudeWt: false
+    # Пикер сессий: cost | oldest | newest | recent | name. Меняется кликом по
+    # statusline внизу списка и пишется сюда же без перезаписи всего файла.
+    sessionsSort: cost
     # Сколько строк отдавать в Home Assistant и как часто. Строк постоянное
     # число: кнопка на панели прибита к строке, а не к сессии. Интервал редкий —
     # опрос окон недёшев, а панель не требует секундной точности.

@@ -1,13 +1,22 @@
 const winMan = require('windows11-manager');
 const globalConfig = require('../config.js');
 const {exec} = require('child_process');
-const {buildSessionsPayload, chooseAction, resolveDesktopSwitch} = require('../picker/session-groups');
+const {
+  buildSessionsPayload, chooseAction, resolveDesktopSwitch, cycleSort,
+} = require('../picker/session-groups');
 const {labelSessions} = require('../picker/session-groups');
 const {buildSlots, sessionIdForSlot} = require('../picker/session-slots');
 const {
+  readSessionsSortFromConfig, persistSessionsSort,
+} = require('../picker/sessions-sort-config');
+const {resolveAppFile} = require('../paths');
+const {
   discoveryMessages, namesFingerprint, stateMessages, topics: haTopics,
 } = require('../homeassistant/discovery');
-const {buildSessionEntities, buildSummaryEntity} = require('../homeassistant/claude-sessions');
+const {
+  sessionEntity, buildSessionEntities, buildSummaryEntity,
+} = require('../homeassistant/claude-sessions');
+const {throttlePress} = require('./press-throttle');
 
 module.exports = async (mqtt, config, log) => {
   let lastStats = {};
@@ -172,7 +181,7 @@ module.exports = async (mqtt, config, log) => {
   // устройство, unique_id и жизнь после перезапуска HA. /api/states пишет
   // состояние мимо реестра, поэтому там ни устройства, ни переименования.
   const haCfg = {
-    slots: config?.homeassistant?.slots ?? 9,
+    slots: config?.homeassistant?.slots ?? 10,
     interval: (config?.homeassistant?.interval ?? 15) * 1000,
     enabled: config?.homeassistant?.enabled !== false,
     // Закрытые сессии на панели только мешают: строк там единицы, и каждая,
@@ -272,16 +281,53 @@ module.exports = async (mqtt, config, log) => {
   }
 
   /**
+   * Погасить переключатель слота, не дожидаясь очередного экспорта.
+   *
+   * Состояние слота отвечает на вопрос «нужен ли я тебе», и нажатие на него уже
+   * ответило: человек идёт к этой сессии. Ждать до пятнадцати секунд, пока
+   * периодический экспорт скажет то же самое, незачем — всё это время плитка
+   * горит и зовёт туда, куда уже пошли.
+   *
+   * Публикуется слот целиком, а не одно поле: состояние и атрибуты живут в
+   * одном топике (`json_attributes_topic` = `state_topic`), и нагрузка из
+   * одного `state` стёрла бы текст, сводку и цифры — строка на панели опустела
+   * бы до следующего тика.
+   *
+   * Раскладка берётся из последнего экспорта: она же отвечала на нажатие, и
+   * гасить надо ровно ту строку, которую человек видел.
+   */
+  function publishSlotOff(slot) {
+    if (!haCfg.enabled) return;
+    const n = Number(slot);
+    const known = lastSlots.find(s => s.slot === n);
+    if (!known) return;
+    publishAll(stateMessages(config.base, [{...sessionEntity(known), state: 'off'}]));
+  }
+
+  /**
    * Нажатие на переключатель сессии в интерфейсе Home Assistant.
    *
    * Топик несёт номер слота, полезная нагрузка (ON/OFF) не важна: у сессии нет
-   * «выключить», есть только «перейти к ней». Состояние вернётся тем, что
-   * пришлёт следующий экспорт, — переключатель на секунду отскочит, и это
-   * ожидаемо.
+   * «выключить», есть только «перейти к ней».
+   *
+   * Гасим до перехода, а не после: focusWindowById() ходит в Windows и может
+   * задуматься, а переключатель к этому моменту уже должен стоять правильно.
    */
+  /**
+   * Отброшенное нажатие с панели.
+   *
+   * Пишется в журнал, а не проглатывается молча: с той стороны человек видит
+   * только то, что кнопка не сработала, и без строки в логе это неотличимо от
+   * поломки — ни на плате, ни в Home Assistant следа не остаётся.
+   */
+  function pressDropped(topic, message) {
+    log(`< ${topic}: ${String(message ?? '').trim()} — отброшено, не чаще раза в секунду`, 'warn');
+  }
+
   async function claudeSlotCommand(topic) {
     const slot = topic.split('/').at(-2);
     log(`< ${topic}`);
+    publishSlotOff(slot);
     await claudeFocusSlot(topic, slot);
   }
 
@@ -340,7 +386,26 @@ module.exports = async (mqtt, config, log) => {
       mqtt.sendEvent('claude-wt-sessions', {ok: false, reason: e.message});
       return;
     }
-    mqtt.sendEvent('claude-wt-sessions', buildSessionsPayload(res));
+    const sort = readSessionsSortFromConfig(config);
+    mqtt.sendEvent('claude-wt-sessions', buildSessionsPayload(res, sort));
+  }
+
+  function cycleSessionsSort() {
+    const next = cycleSort(readSessionsSortFromConfig(config));
+    try {
+      persistSessionsSort({
+        moduleConfig: config,
+        globalConfig,
+        sort: next,
+        configPath: resolveAppFile('config.yml', 'CONFIG'),
+      });
+    } catch (e) {
+      log(`claude-wt sessionsSort persist failed: ${e.message}`, 'error');
+      // In-memory still updated so the UI reflects the click even if the file
+      // write failed (read-only install, missing config.yml, …).
+      config.sessionsSort = next;
+    }
+    sendSessions();
   }
 
   // Only runs while the picker window is open: it scans every terminal window
@@ -549,6 +614,7 @@ module.exports = async (mqtt, config, log) => {
     'windows/claude-focus': (payload) => claudeFocus(payload),
     'windows/claude-sessions-start': () => startSessionsFeed(),
     'windows/claude-sessions-stop': () => stopSessionsFeed(),
+    'windows/claude-sessions-sort-cycle': () => cycleSessionsSort(),
     'windows/claude-restore-one': (payload) => claudeRestoreOne(payload),
     'windows/restart_restore': () => { winMan.storeWindows(); restart(); },
     'windows/sleep': () => sleep(),
@@ -566,12 +632,18 @@ module.exports = async (mqtt, config, log) => {
     subscriptions: [
       {
         // Панель openHASP шлёт сюда номер строки; см. claudeFocusSlot().
+        //
+        // Под ограничителем: строка на панели — физическая кнопка, и палец,
+        // снятый неровно, даёт две-три посылки подряд. Каждая — переход фокуса
+        // в Windows, то есть настоящая работа, а не запись в переменную.
         topics: [config.base + '/claude-focus-slot'],
-        handler: claudeFocusSlot
+        handler: throttlePress(claudeFocusSlot, {onDrop: pressDropped})
       },
       {
+        // Своё окно, а не общее со строками: восстановление снимка — другое
+        // действие, и нажатие на строку не должно съедать нажатие на кнопку.
         topics: [config.base + '/claude-snapshot-restore'],
-        handler: claudeSnapshotRestore
+        handler: throttlePress(claudeSnapshotRestore, {onDrop: pressDropped})
       },
       {
         // Переключатели сессий в Home Assistant. Топики перечислены поимённо:

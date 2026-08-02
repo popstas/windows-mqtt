@@ -1,10 +1,14 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { labelSessions, groupSessions, buildSessionsPayload, chooseAction, resolveDesktopSwitch } = require('../src/picker/session-groups');
+const {
+  labelSessions, groupSessions, buildSessionsPayload, chooseAction, resolveDesktopSwitch,
+  cycleSort, normalizeSort, DEFAULT_SORT, SORT_MODES,
+} = require('../src/picker/session-groups');
 
 const s = (over) => ({
   id: 'x', title: 't', cwd: '/p', bounds: { x: 0, y: 0, width: 10, height: 10 },
-  desktop: 1, monitor: 1, monitorBounds: null, open: true, windowId: 1, ...over,
+  desktop: 1, monitor: 1, monitorBounds: null, open: true, windowId: 1,
+  agentCostUsd: 0, agentStarted: 0, lastActivity: null, ...over,
 });
 
 test('labelSessions leaves a unique name alone', () => {
@@ -30,22 +34,75 @@ test('labelSessions leaves same name in different projects alone', () => {
   assert.strictEqual(out[1].label, 'agent');
 });
 
-test('groupSessions sorts by x, then by y', () => {
+test('normalizeSort falls back to cost', () => {
+  assert.strictEqual(normalizeSort('nope'), DEFAULT_SORT);
+  assert.strictEqual(normalizeSort('recent'), 'recent');
+});
+
+test('cycleSort walks cost → oldest → newest → recent → name → cost', () => {
+  assert.deepStrictEqual(
+    SORT_MODES.reduce((acc, _) => [...acc, cycleSort(acc[acc.length - 1])], ['cost']),
+    ['cost', 'oldest', 'newest', 'recent', 'name', 'cost'],
+  );
+});
+
+test('groupSessions sorts by cost desc by default', () => {
   const [group] = groupSessions([
-    s({ id: 'c', bounds: { x: 300, y: 0, width: 10, height: 10 } }),
-    s({ id: 'a', bounds: { x: 100, y: 200, width: 10, height: 10 } }),
-    s({ id: 'b', bounds: { x: 100, y: 10, width: 10, height: 10 } }),
+    s({ id: 'cheap', agentCostUsd: 1 }),
+    s({ id: 'pricey', agentCostUsd: 40 }),
+    s({ id: 'mid', agentCostUsd: 12 }),
   ]);
-  assert.deepStrictEqual(group.sessions.map(x => x.id), ['b', 'a', 'c']);
+  assert.deepStrictEqual(group.sessions.map(x => x.id), ['pricey', 'mid', 'cheap']);
+});
+
+test('groupSessions oldest puts earliest started first', () => {
+  const [group] = groupSessions([
+    s({ id: 'new', agentStarted: 300 }),
+    s({ id: 'old', agentStarted: 100 }),
+    s({ id: 'mid', agentStarted: 200 }),
+  ], 'oldest');
+  assert.deepStrictEqual(group.sessions.map(x => x.id), ['old', 'mid', 'new']);
+});
+
+test('groupSessions newest puts latest started first', () => {
+  const [group] = groupSessions([
+    s({ id: 'old', agentStarted: 100 }),
+    s({ id: 'new', agentStarted: 300 }),
+  ], 'newest');
+  assert.deepStrictEqual(group.sessions.map(x => x.id), ['new', 'old']);
+});
+
+test('groupSessions recent sorts by lastActivity desc', () => {
+  const [group] = groupSessions([
+    s({ id: 'stale', lastActivity: 10 }),
+    s({ id: 'fresh', lastActivity: 90 }),
+  ], 'recent');
+  assert.deepStrictEqual(group.sessions.map(x => x.id), ['fresh', 'stale']);
+});
+
+test('groupSessions name sorts by label ascending', () => {
+  const [group] = groupSessions([
+    s({ id: 'b', title: 'zeta' }),
+    s({ id: 'a', title: 'alpha' }),
+  ], 'name');
+  assert.deepStrictEqual(group.sessions.map(x => x.id), ['a', 'b']);
+});
+
+test('groupSessions sinks sessions with no sort key to the end', () => {
+  const [group] = groupSessions([
+    s({ id: 'known', agentCostUsd: 5 }),
+    s({ id: 'blank', agentCostUsd: 0 }),
+  ], 'cost');
+  assert.deepStrictEqual(group.sessions.map(x => x.id), ['known', 'blank']);
 });
 
 test('groupSessions puts every live session in one group above the closed ones', () => {
   const groups = groupSessions([
     s({ id: 'closed1', open: false, desktop: 2 }),
-    s({ id: 'live2', open: true, desktop: 2, bounds: { x: 200, y: 0, width: 10, height: 10 } }),
+    s({ id: 'live2', open: true, desktop: 2, title: 'b' }),
     s({ id: 'closed2', open: false, desktop: 1 }),
-    s({ id: 'live1', open: true, desktop: 1, bounds: { x: 100, y: 0, width: 10, height: 10 } }),
-  ]);
+    s({ id: 'live1', open: true, desktop: 1, title: 'a' }),
+  ], 'name');
   assert.deepStrictEqual(groups.map(g => g.label), ['Active sessions', 'Desktop 1', 'Desktop 2']);
   // Live sessions are not split by desktop: 'live1' and 'live2' sit on
   // different desktops and still share the top group.
@@ -89,15 +146,6 @@ test('groupSessions tolerates a session with no bounds', () => {
   assert.deepStrictEqual(group.sessions.map(x => x.id), ['a']);
 });
 
-test('groupSessions sorts null bounds correctly when comparing with multiple sessions', () => {
-  const [group] = groupSessions([
-    s({ id: 'c', bounds: { x: 200, y: 50, width: 10, height: 10 } }),
-    s({ id: 'a', bounds: null }),
-    s({ id: 'b', bounds: { x: 100, y: 100, width: 10, height: 10 } }),
-  ]);
-  assert.deepStrictEqual(group.sessions.map(x => x.id), ['a', 'b', 'c']);
-});
-
 test('groupSessions returns an empty list for an empty input', () => {
   const groups = groupSessions([]);
   assert.deepStrictEqual(groups, []);
@@ -111,6 +159,7 @@ test('buildSessionsPayload labels and groups sessions on the ok path', () => {
   const payload = buildSessionsPayload({ ok: true, sessions });
 
   assert.strictEqual(payload.ok, true);
+  assert.strictEqual(payload.sort, 'cost');
   // groupSessions ran: two closed sessions on different desktops became two
   // groups, sorted ascending (2 before 1 in the input, 1 before 2 in output).
   assert.deepStrictEqual(payload.groups.map(g => g.label), ['Desktop 1', 'Desktop 2']);
@@ -118,6 +167,11 @@ test('buildSessionsPayload labels and groups sessions on the ok path', () => {
   // prefix rather than passing the raw sessions through untouched.
   assert.strictEqual(payload.groups[0].sessions[0].label, 'agent (bbbb)');
   assert.strictEqual(payload.groups[1].sessions[0].label, 'agent (aaaa)');
+});
+
+test('buildSessionsPayload carries the chosen sort mode', () => {
+  const payload = buildSessionsPayload({ ok: true, sessions: [] }, 'name');
+  assert.strictEqual(payload.sort, 'name');
 });
 
 test('buildSessionsPayload carries the reason through unchanged on the failure path', () => {

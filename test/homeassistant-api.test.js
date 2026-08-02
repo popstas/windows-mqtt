@@ -2,8 +2,10 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { HomeAssistantApi, mergeHaConfig } = require('../src/homeassistant/api');
 const {
-  slotText, buildSessionEntities, buildSummaryEntity,
+  slotText, slotUsage, sessionEntity, buildSessionEntities, buildSummaryEntity,
 } = require('../src/homeassistant/claude-sessions');
+const { buildSlots } = require('../src/picker/session-slots');
+const { stateMessages } = require('../src/homeassistant/discovery');
 
 const s = (over) => ({
   id: 'x', title: 't', cwd: '/p', bounds: { x: 0, y: 0, width: 10, height: 10 },
@@ -115,6 +117,46 @@ test('slotText leaves an empty slot blank', () => {
   // w and h, so there is nothing left to collapse.
   assert.strictEqual(slotText({ status: 'empty', title: '' }), '');
   assert.strictEqual(slotText(undefined), '');
+});
+
+test('slotUsage puts money before context in the corner of the row', () => {
+  assert.strictEqual(slotUsage({ status: 'idle', costUsd: 12, contextPct: 47 }), '$12 47%');
+});
+
+test('slotUsage leaves out what nobody measured', () => {
+  // Ноль — это «данных нет»: перехват статуслайна стоит не у каждой сессии, и
+  // «$0» утверждало бы, что она обошлась бесплатно.
+  assert.strictEqual(slotUsage({ status: 'idle', costUsd: 0, contextPct: 47 }), '47%');
+  assert.strictEqual(slotUsage({ status: 'idle', costUsd: 12, contextPct: 0 }), '$12');
+  assert.strictEqual(slotUsage({ status: 'idle', costUsd: 0, contextPct: 0 }), '');
+  assert.strictEqual(slotUsage({ status: 'empty', costUsd: 12, contextPct: 47 }), '');
+  assert.strictEqual(slotUsage(undefined), '');
+});
+
+test('one slot on its own is the same entity as in the bulk export', () => {
+  // Нажатие на переключатель публикует слот поодиночке; разойдись эти два пути,
+  // погашенная строка приехала бы в другой форме, чем следующий экспорт.
+  const sessions = [s({ id: 'a', title: 'home', agentState: 'review', agentEvent: 'stop' })];
+  const [bulk] = buildSessionEntities(sessions, 2);
+  assert.deepStrictEqual(sessionEntity(buildSlots(sessions, 2)[0]), bulk);
+});
+
+test('switching a slot off keeps everything the panel reads from it', () => {
+  // Состояние и атрибуты приходят из одного топика: нагрузка из одного `state`
+  // стёрла бы текст и сводку, и строка на панели опустела бы до следующего тика.
+  const sessions = [s({
+    id: 'a', title: 'home', agentState: 'review', agentEvent: 'stop',
+    agentSummary: 'Готово', agentCostUsd: 12, agentContextPct: 47,
+  })];
+  const [lit] = buildSessionEntities(sessions, 1);
+  assert.strictEqual(lit.state, 'on');
+  const [message] = stateMessages('base', [{ ...sessionEntity(buildSlots(sessions, 1)[0]), state: 'off' }]);
+  const payload = JSON.parse(message.payload);
+  assert.strictEqual(message.topic, 'base/claude/slot/1');
+  assert.strictEqual(payload.state, 'off');
+  assert.strictEqual(payload.text, '! home');
+  assert.strictEqual(payload.summary, 'Готово');
+  assert.strictEqual(payload.usage, '$12 47%');
 });
 
 test('buildSessionEntities pins each entity to a row, not to a session', () => {

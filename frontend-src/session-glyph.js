@@ -93,6 +93,47 @@
     return `<div class="state">${escapeHtml(text)}</div>`;
   }
 
+  // Пороги подсветки контекста. До тридцати процентов заполненность ничего не
+  // значит — она такая у любой сессии после пары ходов, и красить её значило бы
+  // красить весь список. Дальше это уже предупреждение: за сорока процентами
+  // начинают выпадать ранние куски разговора, и лучше узнать об этом из списка,
+  // чем из ответа, который забыл, о чём шла речь.
+  const CONTEXT_WARN = 30;
+  const CONTEXT_HOT = 40;
+
+  function contextLevel(pct) {
+    if (pct >= CONTEXT_HOT) return 'hot';
+    if (pct >= CONTEXT_WARN) return 'warn';
+    return '';
+  }
+
+  /**
+   * Деньги и контекст: «$2 13%».
+   *
+   * Тот же порядок, что и на панели openHASP, — список и плата показывают одно
+   * и то же, и разный порядок заставлял бы перечитывать. Подсвечены только
+   * проценты: по ним решают, не пора ли начинать заново, а стоимость — справка.
+   *
+   * Ноль означает «данных нет», а не «ничего не потратила»: перехват
+   * статуслайна стоит не у каждой сессии (см. claude-wt-statusline.sh). Такая
+   * часть просто не показывается.
+   */
+  function usageHtml(session) {
+    const pct = Number.isFinite(session?.agentContextPct) ? session.agentContextPct : 0;
+    const cost = Number.isFinite(session?.agentCostUsd) ? session.agentCostUsd : 0;
+    const parts = [];
+    const level = contextLevel(pct);
+    if (cost > 0) parts.push(`<span class="cost">$${cost}</span>`);
+    if (pct > 0) parts.push(`<span class="ctx${level ? ` ${level}` : ''}">${pct}%</span>`);
+    // Разделитель тот же, что у stateText: это две независимые величины, а не
+    // одно число из двух частей, и пробела для такого мало. На панель он не
+    // уезжает — во встроенном шрифте openHASP точки нет, там пустой квадрат.
+    //
+    // Пустой элемент вместо пропуска — по той же причине, что и у возраста:
+    // колонки справа стоят друг за другом и не должны разъезжаться.
+    return `<div class="usage">${parts.join(' · ')}</div>`;
+  }
+
   /** Пустой элемент вместо пропуска: колонка возраста не должна прыгать. */
   function ageHtml(session, nowSec) {
     const age = formatAge(session && session.lastActivity, nowSec);
@@ -161,6 +202,7 @@
 
   return {
     statusDotHtml, formatAge, ageHtml, stateText, stateHtml,
+    contextLevel, usageHtml,
     shortPath, rowTitle, titleAttr, escapeHtml,
   };
 });
