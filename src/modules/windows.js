@@ -9,6 +9,7 @@ const {buildSlots, sessionIdForSlot} = require('../picker/session-slots');
 const {
   readSessionsSortFromConfig, readHaSessionsSort, persistSessionsSort,
   readShowPathsFromConfig, persistShowPaths,
+  readShowEventFromConfig, persistShowEvent,
 } = require('../picker/sessions-sort-config');
 const {
   DEFAULTS: sessionOpenDefaults,
@@ -622,6 +623,7 @@ module.exports = async (mqtt, config, log) => {
     mqtt.sendEvent('claude-wt-sessions', {
       ...buildSessionsPayload(withHotkeys, sort),
       showPaths: readShowPathsFromConfig(config),
+      showEvent: readShowEventFromConfig(config),
     });
   }
 
@@ -658,6 +660,22 @@ module.exports = async (mqtt, config, log) => {
     } catch (e) {
       log(`claude-wt showPaths persist failed: ${e.message}`, 'error');
       config.showPaths = next;
+    }
+    sendSessions();
+  }
+
+  function setSessionsShowEvent(payload) {
+    const next = readShowEventFromConfig({ showEvent: payload?.showEvent });
+    try {
+      persistShowEvent({
+        moduleConfig: config,
+        globalConfig,
+        showEvent: next,
+        configPath: resolveAppFile('config.yml', 'CONFIG'),
+      });
+    } catch (e) {
+      log(`claude-wt showEvent persist failed: ${e.message}`, 'error');
+      config.showEvent = next;
     }
     sendSessions();
   }
@@ -919,6 +937,7 @@ module.exports = async (mqtt, config, log) => {
     'windows/claude-sessions-stop': () => stopSessionsFeed(),
     'windows/claude-sessions-sort-cycle': () => cycleSessionsSort(),
     'windows/claude-sessions-show-paths': (payload) => setSessionsShowPaths(payload),
+    'windows/claude-sessions-show-event': (payload) => setSessionsShowEvent(payload),
     'windows/claude-restore-one': (payload) => claudeRestoreOne(payload),
     'windows/claude-snapshots': () => sendSnapshots(),
     'windows/claude-snapshot-restore': (payload) => claudeSnapshotRestorePayload(payload),

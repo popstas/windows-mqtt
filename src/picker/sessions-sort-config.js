@@ -2,6 +2,7 @@ const fs = require('fs');
 const { normalizeSort, DEFAULT_SORT } = require('./session-groups');
 
 const DEFAULT_SHOW_PATHS = true;
+const DEFAULT_SHOW_EVENT = true;
 
 /**
  * Read the picker sort mode. Accepts either the module opts slice
@@ -28,17 +29,34 @@ function readHaSessionsSort(config) {
   return readSessionsSortFromConfig(config);
 }
 
-function normalizeShowPaths(raw) {
-  if (raw === undefined || raw === null || raw === '') return DEFAULT_SHOW_PATHS;
+function normalizeBool(raw, defaultValue) {
+  if (raw === undefined || raw === null || raw === '') return defaultValue;
   if (raw === false || raw === 0 || raw === '0' || raw === 'false' || raw === 'off') return false;
   if (raw === true || raw === 1 || raw === '1' || raw === 'true' || raw === 'on') return true;
-  return DEFAULT_SHOW_PATHS;
+  return defaultValue;
+}
+
+function normalizeShowPaths(raw) {
+  return normalizeBool(raw, DEFAULT_SHOW_PATHS);
+}
+
+function normalizeShowEvent(raw) {
+  return normalizeBool(raw, DEFAULT_SHOW_EVENT);
+}
+
+function readWindowsBool(config, key, defaultValue) {
+  const raw = config?.[key] ?? config?.modules?.windows?.[key];
+  return normalizeBool(raw, defaultValue);
 }
 
 /** Whether the picker shows the cwd line under each session. Default on. */
 function readShowPathsFromConfig(config) {
-  const raw = config?.showPaths ?? config?.modules?.windows?.showPaths;
-  return normalizeShowPaths(raw);
+  return readWindowsBool(config, 'showPaths', DEFAULT_SHOW_PATHS);
+}
+
+/** Whether the picker shows agent state/event text (idle, attention, …). Default on. */
+function readShowEventFromConfig(config) {
+  return readWindowsBool(config, 'showEvent', DEFAULT_SHOW_EVENT);
 }
 
 /**
@@ -81,6 +99,10 @@ function setShowPathsInYaml(text, showPaths) {
   return setWindowsScalarInYaml(text, 'showPaths', normalizeShowPaths(showPaths));
 }
 
+function setShowEventInYaml(text, showEvent) {
+  return setWindowsScalarInYaml(text, 'showEvent', normalizeShowEvent(showEvent));
+}
+
 function writeSessionsSortFile(configPath, sort) {
   const mode = normalizeSort(sort);
   const current = fs.readFileSync(configPath, 'utf8');
@@ -89,12 +111,32 @@ function writeSessionsSortFile(configPath, sort) {
   return mode;
 }
 
-function writeShowPathsFile(configPath, showPaths) {
-  const value = normalizeShowPaths(showPaths);
+function writeWindowsBoolFile(configPath, key, value, normalize) {
+  const nextValue = normalize(value);
   const current = fs.readFileSync(configPath, 'utf8');
-  const next = setShowPathsInYaml(current, value);
+  const next = setWindowsScalarInYaml(current, key, nextValue);
   if (next !== current) fs.writeFileSync(configPath, next);
-  return value;
+  return nextValue;
+}
+
+function writeShowPathsFile(configPath, showPaths) {
+  return writeWindowsBoolFile(configPath, 'showPaths', showPaths, normalizeShowPaths);
+}
+
+function writeShowEventFile(configPath, showEvent) {
+  return writeWindowsBoolFile(configPath, 'showEvent', showEvent, normalizeShowEvent);
+}
+
+function persistWindowsBool({
+  key, value, normalize, moduleConfig, globalConfig, configPath, writeFile,
+}) {
+  const next = normalize(value);
+  if (moduleConfig && typeof moduleConfig === 'object') moduleConfig[key] = next;
+  if (globalConfig?.modules?.windows && typeof globalConfig.modules.windows === 'object') {
+    globalConfig.modules.windows[key] = next;
+  }
+  if (configPath) writeFile(configPath, next);
+  return next;
 }
 
 /**
@@ -112,26 +154,46 @@ function persistSessionsSort({ moduleConfig, globalConfig, sort, configPath, wri
 }
 
 function persistShowPaths({ moduleConfig, globalConfig, showPaths, configPath, writeFile = writeShowPathsFile }) {
-  const value = normalizeShowPaths(showPaths);
-  if (moduleConfig && typeof moduleConfig === 'object') moduleConfig.showPaths = value;
-  if (globalConfig?.modules?.windows && typeof globalConfig.modules.windows === 'object') {
-    globalConfig.modules.windows.showPaths = value;
-  }
-  if (configPath) writeFile(configPath, value);
-  return value;
+  return persistWindowsBool({
+    key: 'showPaths',
+    value: showPaths,
+    normalize: normalizeShowPaths,
+    moduleConfig,
+    globalConfig,
+    configPath,
+    writeFile,
+  });
+}
+
+function persistShowEvent({ moduleConfig, globalConfig, showEvent, configPath, writeFile = writeShowEventFile }) {
+  return persistWindowsBool({
+    key: 'showEvent',
+    value: showEvent,
+    normalize: normalizeShowEvent,
+    moduleConfig,
+    globalConfig,
+    configPath,
+    writeFile,
+  });
 }
 
 module.exports = {
   DEFAULT_SORT,
   DEFAULT_SHOW_PATHS,
+  DEFAULT_SHOW_EVENT,
   readSessionsSortFromConfig,
   readHaSessionsSort,
   readShowPathsFromConfig,
+  readShowEventFromConfig,
   normalizeShowPaths,
+  normalizeShowEvent,
   setSessionsSortInYaml,
   setShowPathsInYaml,
+  setShowEventInYaml,
   writeSessionsSortFile,
   writeShowPathsFile,
+  writeShowEventFile,
   persistSessionsSort,
   persistShowPaths,
+  persistShowEvent,
 };

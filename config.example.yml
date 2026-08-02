@@ -243,6 +243,8 @@ modules:
     sessionsSort: cost
     # Строка cwd под именем сессии. Чекбокс Show paths в statusline.
     showPaths: true
+    # Текст agent state/event (idle, attention, …). Чекбокс Show event.
+    showEvent: true
     # Ctrl+K в пикере: открыть cwd сессии в Cursor / Explorer / ssh-терминале.
     # Linux cwd (/home/popstas/...) мапится на SMB-диск V:. ssh_app берётся из
     # modules.exec, если здесь не задан.

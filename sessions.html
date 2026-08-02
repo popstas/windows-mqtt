@@ -31,12 +31,15 @@
         }
         #sort-control:hover { color: #a8adb5; }
         #statusline .icon { font-size: 12px; line-height: 1; }
-        #show-paths-label {
-            display: flex; align-items: center; gap: 6px;
-            margin-left: auto; cursor: pointer; color: #7d838c;
+        .status-checks {
+            display: flex; align-items: center; gap: 12px; margin-left: auto;
         }
-        #show-paths-label:hover { color: #a8adb5; }
-        #show-paths {
+        .status-check {
+            display: flex; align-items: center; gap: 6px;
+            cursor: pointer; color: #7d838c;
+        }
+        .status-check:hover { color: #a8adb5; }
+        .status-check input {
             margin: 0; accent-color: #7d838c; cursor: pointer;
         }
         .group-label {
@@ -130,7 +133,10 @@
 <div id="message">Loading…</div>
 <div id="statusline">
   <span id="sort-control" title="Click to change sort"><span class="icon">⇅</span><span id="sort-label">cost</span></span>
-  <label id="show-paths-label"><input type="checkbox" id="show-paths" checked> Show paths</label>
+  <span class="status-checks">
+    <label class="status-check"><input type="checkbox" id="show-paths" checked> Show paths</label>
+    <label class="status-check"><input type="checkbox" id="show-event" checked> Show event</label>
+  </span>
 </div>
 <div id="actions-backdrop" aria-hidden="true">
   <div id="actions-menu" role="menu">
@@ -150,6 +156,7 @@
   let active = 0;
   let sortMode = 'cost';
   let showPaths = true;
+  let showEvent = true;
   let menuOpen = false;
   let menuActions = [];
   let menuActive = 0;
@@ -162,6 +169,7 @@
   const sortControl = document.getElementById('sort-control');
   const sortLabel = document.getElementById('sort-label');
   const showPathsCheckbox = document.getElementById('show-paths');
+  const showEventCheckbox = document.getElementById('show-event');
   const actionsBackdrop = document.getElementById('actions-backdrop');
   const actionsTitle = document.getElementById('actions-title');
   const actionsList = document.getElementById('actions-list');
@@ -173,6 +181,10 @@
 
   function paintShowPaths() {
     showPathsCheckbox.checked = showPaths;
+  }
+
+  function paintShowEvent() {
+    showEventCheckbox.checked = showEvent;
   }
 
   function invoke(cmd, args) {
@@ -235,7 +247,7 @@
           ((session.agentSummary || session.agentLastSummary)
             ? `<div class="summary">${escapeHtml(session.agentSummary || session.agentLastSummary)}</div>` : '') +
           `</div>` +
-          stateHtml(session) + usageHtml(session) + ageHtml(session, nowSec) + `</div>`;
+          (showEvent ? stateHtml(session) : '') + usageHtml(session) + ageHtml(session, nowSec) + `</div>`;
       }
     }
     list.innerHTML = html;
@@ -434,6 +446,19 @@
     });
   });
 
+  showEventCheckbox.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
+
+  showEventCheckbox.addEventListener('change', () => {
+    showEvent = showEventCheckbox.checked;
+    render();
+    invoke('picker_send', {
+      action: 'windows/claude-sessions-show-event',
+      payload: { showEvent },
+    });
+  });
+
   // Reset the palette for a show and (re)start the feed. Called both from the
   // 'picker-shown' listener (every show after the window has finished
   // loading) and, once, directly from start() to cover the show that raced
@@ -484,8 +509,10 @@
       groups = data.groups || [];
       if (data.sort) sortMode = data.sort;
       if (typeof data.showPaths === 'boolean') showPaths = data.showPaths;
+      if (typeof data.showEvent === 'boolean') showEvent = data.showEvent;
       paintSort();
       paintShowPaths();
+      paintShowEvent();
       render();
     });
 

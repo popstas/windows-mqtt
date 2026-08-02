@@ -3,7 +3,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { setSessionsSortInYaml, readSessionsSortFromConfig, readHaSessionsSort, readShowPathsFromConfig, setShowPathsInYaml } = require('../src/picker/sessions-sort-config');
+const { setSessionsSortInYaml, readSessionsSortFromConfig, readHaSessionsSort, readShowPathsFromConfig, setShowPathsInYaml, readShowEventFromConfig, setShowEventInYaml } = require('../src/picker/sessions-sort-config');
 
 test('setSessionsSortInYaml replaces an existing sessionsSort line', () => {
   const src =
@@ -99,4 +99,24 @@ test('setShowPathsInYaml replaces or inserts under windows', () => {
     '  windows:\n' +
     '    sessionsSort: cost\n';
   assert.match(setShowPathsInYaml(missing, false), /windows:\n\s+showPaths: false\n\s+sessionsSort: cost/);
+});
+
+test('readShowEventFromConfig defaults to true', () => {
+  assert.strictEqual(readShowEventFromConfig(null), true);
+  assert.strictEqual(readShowEventFromConfig({ showEvent: false }), false);
+  assert.strictEqual(readShowEventFromConfig({ modules: { windows: { showEvent: false } } }), false);
+});
+
+test('setShowEventInYaml replaces or inserts under windows', () => {
+  const withKey =
+    'modules:\n' +
+    '  windows:\n' +
+    '    showEvent: true\n';
+  assert.match(setShowEventInYaml(withKey, false), /^\s*showEvent:\s*false\s*$/m);
+
+  const missing =
+    'modules:\n' +
+    '  windows:\n' +
+    '    sessionsSort: cost\n';
+  assert.match(setShowEventInYaml(missing, false), /windows:\n\s+showEvent: false\n\s+sessionsSort: cost/);
 });
