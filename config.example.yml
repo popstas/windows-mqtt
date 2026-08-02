@@ -34,17 +34,7 @@ picker:
   # combinations before they reach the app; change this if it never fires.
   hotkey: 'Super+F10'
 
-# Project hotkeys: focus the last open Claude session for a cwd, or spawn a
-# fresh `claude -n <name>` there. Registered by the Tauri tray at startup.
-claudeProjects:
-  - name: home
-    cwd: /home/popstas/projects/text/obsidian/home
-    hotkey: Ctrl+F11
-    # profile: home   # optional WT profile; overrides claudeWt.profile for spawn
-  - name: expertizeme
-    cwd: /home/popstas/projects/text/obsidian/ExpertizeMe
-    hotkey: Ctrl+F12
-    # profile: ExpertizeMe
+# Project hotkeys + WT profiles: claudeWt.projects in windows11-manager.config.js
 
 tray:
   # What a left click on the tray icon opens: picker | log

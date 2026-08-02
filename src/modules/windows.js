@@ -30,6 +30,14 @@ const {
 const {throttlePress} = require('./press-throttle');
 const {createDelayedSlotOff} = require('./delayed-slot-off');
 
+function claudeProjects() {
+  try {
+    return winMan.claudeWtProjects?.() ?? winMan.getClaudeWtConfig?.().projects ?? [];
+  } catch {
+    return [];
+  }
+}
+
 module.exports = async (mqtt, config, log) => {
   let lastStats = {};
   let statsIntervalId = null;
@@ -187,7 +195,7 @@ module.exports = async (mqtt, config, log) => {
 
   // Project hotkey: focus last open session for cwd, or spawn a fresh named Claude.
   async function claudeFocusProject(payload) {
-    const project = resolveClaudeProject(globalConfig.claudeProjects, payload);
+    const project = resolveClaudeProject(claudeProjects(), payload);
     if (!project) {
       log(`claude-wt: unknown project ${JSON.stringify(payload)}`, 'warn');
       return;
@@ -331,6 +339,11 @@ module.exports = async (mqtt, config, log) => {
       return;
     }
     const {session} = found;
+    if (action === 'terminal') {
+      await claudeRestoreOne({id});
+      scheduleHaRefresh();
+      return;
+    }
     const opts = sessionOpenOpts();
     const winPath = toWindowsPath(session.cwd, opts);
     if (!winPath) {
@@ -622,7 +635,7 @@ module.exports = async (mqtt, config, log) => {
     const sort = readSessionsSortFromConfig(config);
     const withHotkeys = {
       ...res,
-      sessions: attachProjectHotkeys(res.sessions, globalConfig.claudeProjects),
+      sessions: attachProjectHotkeys(res.sessions, claudeProjects()),
     };
     mqtt.sendEvent('claude-wt-sessions', {
       ...buildSessionsPayload(withHotkeys, sort),
