@@ -55,3 +55,19 @@ test('matches the session label independently of cwd', () => {
   assert.strictEqual(out[0].sessions.length, 1);
   assert.deepStrictEqual(out[0].sessions.map(s => s.id), ['b']);
 });
+
+test('does not match the leading /home of a Linux cwd', () => {
+  // Иначе запрос "home" поднимает все сессии с /home/popstas/...
+  const withHomeProject = [
+    {
+      label: 'Desktop 1',
+      sessions: [
+        { id: 'a', label: 'ccfzf', cwd: '/home/popstas/projects/shell/ccfzf' },
+        { id: 'h', label: 'vault', cwd: '/home/popstas/projects/text/home' },
+        { id: 'n', label: 'home', cwd: '/home/popstas/projects/misc/notes' },
+      ],
+    },
+  ];
+  const out = filterSessions(withHomeProject, 'home');
+  assert.deepStrictEqual(out[0].sessions.map(s => s.id).sort(), ['h', 'n']);
+});
