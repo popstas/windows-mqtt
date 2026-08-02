@@ -205,6 +205,7 @@ test('prepare-frontend copies both pages and the picker filter to the right dest
     { from: 'sessions.html', to: 'frontend/sessions.html' },
     { from: 'frontend-src/picker-filter.js', to: 'frontend/picker-filter.js' },
     { from: 'frontend-src/session-glyph.js', to: 'frontend/session-glyph.js' },
+    { from: 'frontend-src/picker-snapshots.js', to: 'frontend/picker-snapshots.js' },
   ];
   for (const pair of required) {
     assert.ok(

@@ -26,6 +26,7 @@ const {
   sessionEntity, buildSessionEntities, buildSummaryEntity,
 } = require('../homeassistant/claude-sessions');
 const {throttlePress} = require('./press-throttle');
+const {createDelayedSlotOff} = require('./delayed-slot-off');
 
 module.exports = async (mqtt, config, log) => {
   let lastStats = {};
@@ -485,6 +486,14 @@ module.exports = async (mqtt, config, log) => {
     publishAll(stateMessages(config.base, [{...sessionEntity(known), state: 'off'}]));
   }
 
+  // openHASP с toggle:true рисует локальное включение раньше, чем доедет MQTT.
+  // Полсекунды после нажатия — после локального toggle, до ощущения «залипло».
+  // Путь HA (claudeSlotCommand) гасит сразу; этот таймер нужен панели.
+  const schedulePanelSlotOff = createDelayedSlotOff({
+    delayMs: 500,
+    publish: publishSlotOff,
+  });
+
   /**
    * Нажатие на переключатель сессии в интерфейсе Home Assistant.
    *
@@ -552,7 +561,44 @@ module.exports = async (mqtt, config, log) => {
       log(`claude-wt: slot ${slot} is empty`, 'warn');
       return;
     }
+    // Панель: отложенный off после локального toggle. HA-путь уже погасил сразу.
+    schedulePanelSlotOff(slot);
     await claudeFocus({id});
+  }
+
+  function sendSnapshots() {
+    if (typeof mqtt.sendEvent !== 'function') return;
+    let res;
+    try {
+      res = winMan.claudeWtSnapshots();
+    } catch (e) {
+      log(`claude-wt snapshots failed: ${e.message}`, 'error');
+      mqtt.sendEvent('claude-wt-snapshots', {ok: false, reason: e.message});
+      return;
+    }
+    if (!res.ok) {
+      mqtt.sendEvent('claude-wt-snapshots', res);
+      return;
+    }
+    let openSessionIds = [];
+    try {
+      const sessions = winMan.claudeWtSessions();
+      if (sessions.ok) {
+        openSessionIds = sessions.sessions.filter(s => s.open).map(s => s.id);
+      }
+    } catch (e) {
+      log(`claude-wt sessions for snapshots failed: ${e.message}`, 'warn');
+    }
+    mqtt.sendEvent('claude-wt-snapshots', {
+      ok: true,
+      snapshots: res.snapshots,
+      openSessionIds,
+    });
+  }
+
+  async function claudeSnapshotRestorePayload(payload) {
+    const id = String(payload?.id ?? '').trim() || 'last';
+    await claudeSnapshotRestore('stdin/claude-snapshot-restore', id);
   }
 
   let sessionsTimerId = null;
@@ -853,6 +899,8 @@ module.exports = async (mqtt, config, log) => {
     'windows/claude-sessions-stop': () => stopSessionsFeed(),
     'windows/claude-sessions-sort-cycle': () => cycleSessionsSort(),
     'windows/claude-restore-one': (payload) => claudeRestoreOne(payload),
+    'windows/claude-snapshots': () => sendSnapshots(),
+    'windows/claude-snapshot-restore': (payload) => claudeSnapshotRestorePayload(payload),
     'windows/restart_restore': () => { winMan.storeWindows(); restart(); },
     'windows/sleep': () => sleep(),
     'windows/restart': () => restart(),

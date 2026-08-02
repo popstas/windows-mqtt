@@ -56,6 +56,8 @@
         .text { min-width: 0; }
         .name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .cwd { font-size: 11px; color: #868c95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .snap-meta { font-size: 11px; color: #868c95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .snap-restore { font-size: 11px; color: #6f757e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         /* Чем сессия закончила / что спросили. Тусклее пути: это подсказка, а
            не опознание — строку ищут глазами по названию и каталогу. */
         .summary { font-size: 11px; color: #6f757e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -123,10 +125,13 @@
   </div>
 </div>
 <script src="picker-filter.js"></script>
+<script src="picker-snapshots.js"></script>
 <script src="session-glyph.js"></script>
 <script>
   let groups = [];
   let rows = [];
+  let snapshotRows = [];
+  let snapshotsLoading = false;
   let active = 0;
   let sortMode = 'cost';
   let menuOpen = false;
@@ -158,12 +163,36 @@
   } = window.SessionGlyph;
 
   function render() {
-    const visible = window.PickerFilter.filterSessions(groups, search.value);
-    // Одна отметка времени на всю отрисовку: иначе строки одного и того же
-    // списка считали бы возраст от чуть разных «сейчас».
     const nowSec = Math.floor(Date.now() / 1000);
     rows = [];
     let html = '';
+
+    if (window.PickerSnapshots.isSnapshotsCommand(search.value)) {
+      for (const snap of snapshotRows) {
+        const index = rows.length;
+        rows.push(snap);
+        html += `<div class="row" data-index="${index}">` +
+          `<div class="text">` +
+          `<div class="name">${escapeHtml(snap.line1)}</div>` +
+          `<div class="snap-meta">${escapeHtml(snap.line2)}</div>` +
+          `<div class="snap-restore">${escapeHtml(snap.line3)}</div>` +
+          `</div></div>`;
+      }
+      list.innerHTML = html;
+      if (!rows.length) {
+        message.style.display = 'block';
+        message.textContent = snapshotsLoading ? 'Loading snapshots…' : 'No snapshots yet.';
+      } else {
+        message.style.display = 'none';
+      }
+      if (active >= rows.length) active = Math.max(0, rows.length - 1);
+      paint();
+      return;
+    }
+
+    const visible = window.PickerFilter.filterSessions(groups, search.value);
+    // Одна отметка времени на всю отрисовку: иначе строки одного и того же
+    // списка считали бы возраст от чуть разных «сейчас».
     for (const group of visible) {
       html += `<div class="group-label">${escapeHtml(group.label)}</div>`;
       for (const session of group.sessions) {
@@ -210,8 +239,16 @@
   }
 
   async function choose() {
-    const session = rows[active];
-    if (!session) return;
+    const row = rows[active];
+    if (!row) return;
+    if (window.PickerSnapshots.isSnapshotsCommand(search.value)) {
+      await invoke('hide_picker');
+      await invoke('picker_send', {
+        action: 'windows/claude-snapshot-restore',
+        payload: { id: row.id },
+      });
+      return;
+    }
     await invoke('hide_picker');
     // Always go through claude-focus rather than picking the action here from
     // this ~1s-stale snapshot. claudeFocus() re-fetches live session state and
@@ -224,8 +261,26 @@
     // reported a bogus "failed to restore" instead of focusing the live window.
     await invoke('picker_send', {
       action: 'windows/claude-focus',
-      payload: { id: session.id },
+      payload: { id: row.id },
     });
+  }
+
+  function requestSnapshots() {
+    snapshotsLoading = true;
+    snapshotRows = [];
+    render();
+    invoke('picker_send', { action: 'windows/claude-snapshots' });
+  }
+
+  function onSearchInput() {
+    active = 0;
+    if (window.PickerSnapshots.isSnapshotsCommand(search.value)) {
+      requestSnapshots();
+      return;
+    }
+    snapshotRows = [];
+    snapshotsLoading = false;
+    render();
   }
 
   function closeMenu() {
@@ -267,6 +322,7 @@
   }
 
   function openMenu() {
+    if (window.PickerSnapshots.isSnapshotsCommand(search.value)) return;
     const session = rows[active];
     if (!session) return;
     menuSessionId = session.id;
@@ -295,7 +351,7 @@
     paintMenu();
   }
 
-  search.addEventListener('input', () => { active = 0; render(); });
+  search.addEventListener('input', onSearchInput);
 
   document.addEventListener('keydown', (e) => {
     if (menuOpen) {
@@ -350,6 +406,8 @@
     closeMenu();
     search.value = '';
     active = 0;
+    snapshotRows = [];
+    snapshotsLoading = false;
     search.focus();
     search.select();
     // Clear the previous show's session list before anything else. Without
@@ -379,6 +437,7 @@
 
     await listen('claude-wt-sessions', (event) => {
       const data = event.payload || {};
+      if (window.PickerSnapshots.isSnapshotsCommand(search.value)) return;
       if (!data.ok) {
         groups = [];
         render();
@@ -389,6 +448,24 @@
       groups = data.groups || [];
       if (data.sort) sortMode = data.sort;
       paintSort();
+      render();
+    });
+
+    await listen('claude-wt-snapshots', (event) => {
+      const data = event.payload || {};
+      snapshotsLoading = false;
+      if (!window.PickerSnapshots.isSnapshotsCommand(search.value)) return;
+      if (!data.ok) {
+        snapshotRows = [];
+        render();
+        message.style.display = 'block';
+        message.textContent = data.reason || 'claude-wt snapshots failed.';
+        return;
+      }
+      snapshotRows = window.PickerSnapshots.buildSnapshotRows(
+        data.snapshots || [],
+        new Set(data.openSessionIds || []),
+      );
       render();
     });
 
