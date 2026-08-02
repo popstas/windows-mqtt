@@ -123,14 +123,27 @@ test('slotUsage puts money before context in the corner of the row', () => {
   assert.strictEqual(slotUsage({ status: 'idle', costUsd: 12, contextPct: 47 }), '$12 47%');
 });
 
-test('slotUsage leaves out what nobody measured', () => {
-  // Ноль — это «данных нет»: перехват статуслайна стоит не у каждой сессии, и
-  // «$0» утверждало бы, что она обошлась бесплатно.
-  assert.strictEqual(slotUsage({ status: 'idle', costUsd: 0, contextPct: 47 }), '47%');
-  assert.strictEqual(slotUsage({ status: 'idle', costUsd: 12, contextPct: 0 }), '$12');
-  assert.strictEqual(slotUsage({ status: 'idle', costUsd: 0, contextPct: 0 }), '');
-  assert.strictEqual(slotUsage({ status: 'empty', costUsd: 12, contextPct: 47 }), '');
-  assert.strictEqual(slotUsage(undefined), '');
+test('slotUsage falls back to last-action age when nothing was measured', () => {
+  // Пустая строка на openHASP не стирает предыдущий текст (HA ещё и обрезает
+  // пробел из шаблона). Возраст всегда непустой — угол перезаписывается.
+  const NOW = 1_000_000;
+  assert.strictEqual(
+    slotUsage({ status: 'idle', costUsd: 0, contextPct: 0, lastActivity: NOW - 300 }, NOW),
+    '5m',
+  );
+  assert.strictEqual(
+    slotUsage({ status: 'idle', costUsd: 0, contextPct: 47, lastActivity: NOW - 300 }, NOW),
+    '47%',
+  );
+  assert.strictEqual(
+    slotUsage({ status: 'empty', costUsd: 12, contextPct: 47, lastActivity: NOW }, NOW),
+    '-',
+  );
+  assert.strictEqual(slotUsage(undefined, NOW), '-');
+  assert.strictEqual(
+    slotUsage({ status: 'idle', costUsd: 0, contextPct: 0, lastActivity: null }, NOW),
+    '-',
+  );
 });
 
 test('one slot on its own is the same entity as in the bulk export', () => {

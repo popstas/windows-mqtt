@@ -248,6 +248,8 @@ modules:
       # закрытой сессией, вытесняет работающую. Закрытые остаются в пикере —
       # там места хватает, и восстановить их можно только оттуда.
       openOnly: true
+      # Порядок слотов на панели. По умолчанию = sessionsSort пикера.
+      # sessionsSort: cost
     placeWindowOnStart: false
     notifyPlaced: true
     restoreOnStart: true

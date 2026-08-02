@@ -108,6 +108,15 @@ function buildOpenCommands({
   return null;
 }
 
+/**
+ * Non-interactive ssh argv that rewrites the ccfzf session dump on the Linux
+ * host. Caller spawns it fire-and-forget when the picker opens.
+ */
+function buildDumpRefreshCommand(opts = {}) {
+  const { sshHost } = resolveOpts(opts);
+  return { file: 'ssh', args: [sshHost, 'ccfzf --dump'] };
+}
+
 module.exports = {
   DEFAULTS,
   toWindowsPath,
@@ -115,4 +124,5 @@ module.exports = {
   availableActions,
   buildTerminalRemote,
   buildOpenCommands,
+  buildDumpRefreshCommand,
 };

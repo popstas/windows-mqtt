@@ -1,28 +1,24 @@
 /** Раскладка сессий claude-wt по фиксированным слотам. Без I/O. */
 
+const { compareSessions, DEFAULT_SORT } = require('./session-groups');
+
 const DEFAULT_SLOTS = 9;
 
 /**
- * Порядок сессий на экране.
+ * Порядок сессий на панели / в Home Assistant.
  *
- * Живые идут первыми и группируются по виртуальным столам — на панели важно
- * сначала увидеть то, что работает прямо сейчас. Внутри стола порядок по
- * координатам, чтобы слоты не прыгали от тика к тику: набор сессий приходит в
- * порядке hwnd'ов, а он меняется.
- *
- * Закрытые идут следом по свежести: чем позже сессия подавала признаки жизни,
- * тем выше она нужна. Их обычно десятки, и в девять слотов попадут единицы —
- * поэтому сортировка тут важнее, чем группировка.
+ * Живые идут первыми — на панели важно сначала увидеть то, что работает
+ * прямо сейчас. Внутри каждой группы — тот же режим, что у пикера
+ * (`sessionsSort`: cost | oldest | newest | recent | name). Закрытые следом
+ * тем же компаратором: в девять слотов попадут единицы, и сортировка тут
+ * важнее группировки по столу.
  */
-function orderSessions(sessions) {
+function orderSessions(sessions, sort = DEFAULT_SORT) {
   const open = [];
   const closed = [];
   for (const s of sessions ?? []) (s.open ? open : closed).push(s);
-  open.sort((a, b) =>
-    (a.desktop ?? Number.MAX_SAFE_INTEGER) - (b.desktop ?? Number.MAX_SAFE_INTEGER) ||
-    (a.bounds?.x ?? 0) - (b.bounds?.x ?? 0) ||
-    (a.bounds?.y ?? 0) - (b.bounds?.y ?? 0));
-  closed.sort((a, b) => (b.lastActivity ?? 0) - (a.lastActivity ?? 0));
+  open.sort((a, b) => compareSessions(a, b, sort));
+  closed.sort((a, b) => compareSessions(a, b, sort));
   return [...open, ...closed];
 }
 
@@ -70,8 +66,8 @@ function emptySlot(index) {
   };
 }
 
-function buildSlots(sessions, count = DEFAULT_SLOTS) {
-  const ordered = orderSessions(sessions);
+function buildSlots(sessions, count = DEFAULT_SLOTS, sort = DEFAULT_SORT) {
+  const ordered = orderSessions(sessions, sort);
   return Array.from({ length: count }, (_, i) => {
     const s = ordered[i];
     if (!s) return emptySlot(i);

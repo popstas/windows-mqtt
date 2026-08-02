@@ -7,7 +7,7 @@ const {
 const {labelSessions} = require('../picker/session-groups');
 const {buildSlots, sessionIdForSlot} = require('../picker/session-slots');
 const {
-  readSessionsSortFromConfig, persistSessionsSort,
+  readSessionsSortFromConfig, readHaSessionsSort, persistSessionsSort,
 } = require('../picker/sessions-sort-config');
 const {
   DEFAULTS: sessionOpenDefaults,
@@ -15,6 +15,7 @@ const {
   isCursorProcessPath,
   availableActions,
   buildOpenCommands,
+  buildDumpRefreshCommand,
 } = require('../picker/session-open-helpers');
 const {resolveAppFile} = require('../paths');
 const {
@@ -369,7 +370,8 @@ module.exports = async (mqtt, config, log) => {
     // Сводка считается по всем сессиям, слоты — только по живым: total в
     // сводке должен оставаться total.
     const slotSessions = haCfg.openOnly ? sessions.filter(s => s.open) : sessions;
-    lastSlots = buildSlots(slotSessions, haCfg.slots);
+    const sort = readHaSessionsSort(config);
+    lastSlots = buildSlots(slotSessions, haCfg.slots, sort);
     // Конфиги переиздаются только когда меняются имена: HA держит их retained,
     // и гонять десяток сообщений каждые пятнадцать секунд ради тех же
     // заголовков незачем.
@@ -381,7 +383,7 @@ module.exports = async (mqtt, config, log) => {
     }
     publishAll(stateMessages(config.base, [
       buildSummaryEntity(sessions),
-      ...buildSessionEntities(slotSessions, haCfg.slots),
+      ...buildSessionEntities(slotSessions, haCfg.slots, sort),
     ]));
   }
 
@@ -557,11 +559,30 @@ module.exports = async (mqtt, config, log) => {
       config.sessionsSort = next;
     }
     sendSessions();
+    // Панель читает тот же sessionsSort — без внеочередного экспорта она
+    // останется на прежнем порядке до следующего 15-секундного тика.
+    scheduleHaRefresh(0);
   }
 
   // Only runs while the picker window is open: it scans every terminal window
   // once a second, which is not something to do in the background forever.
+  function refreshSessionDump() {
+    const cmd = buildDumpRefreshCommand(sessionOpenOpts());
+    const child = spawn(cmd.file, cmd.args, {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    child.on('error', (e) => {
+      log(`claude-wt ccfzf dump refresh failed: ${e.message}`, 'warn');
+    });
+    child.unref();
+  }
+
   function startSessionsFeed() {
+    // Дамп на pc-virt обновляется только при запуске ccfzf; без явного
+    // запроса свежая/переименованная сессия минутами не попадает в индекс.
+    refreshSessionDump();
     sendSessions();
     if (sessionsTimerId === null) sessionsTimerId = setInterval(sendSessions, 1000);
   }

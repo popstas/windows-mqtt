@@ -13,36 +13,37 @@ test('buildSlots carries what the agent last said, and leaves it blank for an em
   assert.strictEqual(empty.summary, '');
 });
 
-test('orderSessions puts live sessions first, grouped by desktop', () => {
+test('orderSessions puts live sessions first', () => {
   const out = orderSessions([
     s({ id: 'closed', open: false, lastActivity: 999 }),
     s({ id: 'live-d2', desktop: 2 }),
     s({ id: 'live-d1', desktop: 1 }),
-  ]);
+  ], 'name');
   assert.deepStrictEqual(out.map(x => x.id), ['live-d1', 'live-d2', 'closed']);
 });
 
-test('orderSessions sorts live sessions on one desktop by position', () => {
-  // The session list arrives in hwnd order, which reshuffles between ticks;
-  // without a stable sort the panel rows would swap places on their own.
+test('orderSessions sorts live sessions by the picker sort mode', () => {
   const out = orderSessions([
-    s({ id: 'right', bounds: { x: 900, y: 0, width: 10, height: 10 } }),
-    s({ id: 'left', bounds: { x: 100, y: 0, width: 10, height: 10 } }),
-  ]);
-  assert.deepStrictEqual(out.map(x => x.id), ['left', 'right']);
+    s({ id: 'old', lastActivity: 100 }),
+    s({ id: 'fresh', lastActivity: 900 }),
+  ], 'recent');
+  assert.deepStrictEqual(out.map(x => x.id), ['fresh', 'old']);
 });
 
-test('orderSessions sorts closed sessions by how recently they lived', () => {
+test('orderSessions sorts closed sessions by the same sort mode', () => {
   const out = orderSessions([
     s({ id: 'old', open: false, lastActivity: 100 }),
     s({ id: 'recent', open: false, lastActivity: 900 }),
-  ]);
+  ], 'recent');
   assert.deepStrictEqual(out.map(x => x.id), ['recent', 'old']);
 });
 
-test('orderSessions sorts a session with no desktop after the known ones', () => {
-  const out = orderSessions([s({ id: 'none', desktop: null }), s({ id: 'd1', desktop: 1 })]);
-  assert.deepStrictEqual(out.map(x => x.id), ['d1', 'none']);
+test('orderSessions defaults to cost like the picker', () => {
+  const out = orderSessions([
+    s({ id: 'cheap', agentCostUsd: 1 }),
+    s({ id: 'pricey', agentCostUsd: 40 }),
+  ]);
+  assert.deepStrictEqual(out.map(x => x.id), ['pricey', 'cheap']);
 });
 
 test('slotStatus reports what the agent is doing', () => {

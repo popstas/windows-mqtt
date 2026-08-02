@@ -1,6 +1,7 @@
 /** Сущности Home Assistant для сессий claude-wt. Чистая сборка, без I/O. */
 
 const { buildSlots } = require('../picker/session-slots');
+const { formatAge } = require('../picker/format-age');
 
 // switch, а не binary_sensor: через MQTT Discovery у переключателя есть
 // command_topic, и нажатие в интерфейсе Home Assistant переводит фокус на эту
@@ -49,23 +50,25 @@ function slotText(slot) {
 
 /**
  * Правый верхний угол строки: во что обошлась сессия и сколько от контекста
- * съедено.
+ * съедено — или, если цифр нет, сколько назад было последнее действие.
  *
  * Собирается здесь, а не шаблоном в конфиге панели: в Home Assistant это была
  * бы склейка из двух state_attr с двумя проверками на пустоту в каждой кнопке,
  * то есть пять копий одной логики в YAML.
  *
- * Ноль означает «данных нет» — перехват статуслайна стоит не у каждой сессии,
- * — поэтому нулевая часть просто не показывается, а не рисуется как «$0».
- * Только ASCII: во встроенном шрифте openHASP нет ни точки-разделителя, ни
- * тире, вместо них панель рисует пустые квадраты.
+ * Ноль в cost/context — «данных нет»: перехват статуслайна стоит не у каждой
+ * сессии. Пустую строку сюда класть нельзя: openHASP не стирает текст пустым
+ * payload, а HA ещё обрезает пробел из шаблона — угол залипал бы значением
+ * предыдущей сессии при смене порядка. Поэтому без цифр — возраст (`5m`), а
+ * без возраста — `-`.
  */
-function slotUsage(slot) {
-  if (!slot || slot.status === 'empty') return '';
+function slotUsage(slot, nowSec = Math.floor(Date.now() / 1000)) {
+  if (!slot || slot.status === 'empty') return '-';
   const parts = [];
   if (slot.costUsd > 0) parts.push(`$${slot.costUsd}`);
   if (slot.contextPct > 0) parts.push(`${slot.contextPct}%`);
-  return parts.join(' ');
+  if (parts.length) return parts.join(' ');
+  return formatAge(slot.lastActivity, nowSec) || '-';
 }
 
 /**
@@ -77,7 +80,7 @@ function slotUsage(slot) {
  * опубликовать одно только `state` нельзя — с ним улетели бы и текст, и
  * сводка, и строка панели опустела бы до следующего тика.
  */
-function sessionEntity(slot) {
+function sessionEntity(slot, nowSec = Math.floor(Date.now() / 1000)) {
   return {
     entityId: `${SLOT_PREFIX}${slot.slot}`,
     // Состояние — это «нужен ли я тебе», а не «жива ли сессия». Панель
@@ -104,9 +107,8 @@ function sessionEntity(slot) {
       // заголовок, — но доступна автоматизациям и нижней строке состояния.
       summary: slot.summary,
       last_summary: slot.lastSummary,
-      // Готовая строка для правого верхнего угла кнопки: «$12 47%». Числа
-      // рядом на случай автоматизаций — им склейка ни к чему.
-      usage: slotUsage(slot),
+      // Готовая строка для правого верхнего угла кнопки: «$12 47%» или «5m».
+      usage: slotUsage(slot, nowSec),
       cost_usd: slot.costUsd,
       context_pct: slot.contextPct,
     },
@@ -121,8 +123,8 @@ function sessionEntity(slot) {
  * строке. Иначе при каждом изменении состава пришлось бы переписывать
  * конфигурацию панели.
  */
-function buildSessionEntities(sessions, count) {
-  return buildSlots(sessions, count).map(sessionEntity);
+function buildSessionEntities(sessions, count, sort, nowSec = Math.floor(Date.now() / 1000)) {
+  return buildSlots(sessions, count, sort).map(slot => sessionEntity(slot, nowSec));
 }
 
 /** Сводная сущность: сколько сессий живо и сколько из них ждут внимания. */

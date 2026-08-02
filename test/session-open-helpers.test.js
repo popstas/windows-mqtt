@@ -7,6 +7,7 @@ const {
   availableActions,
   buildTerminalRemote,
   buildOpenCommands,
+  buildDumpRefreshCommand,
 } = require('../src/picker/session-open-helpers');
 
 test('toWindowsPath maps home-relative cwd to V: drive', () => {
@@ -156,4 +157,18 @@ test('buildOpenCommands returns null for unknown action or missing winPath', () 
     buildOpenCommands({ action: 'nope', cwd: '/home/popstas/p', winPath: 'V:\\p' }),
     null,
   );
+});
+
+test('buildDumpRefreshCommand uses ssh and ccfzf --dump on the default host', () => {
+  assert.deepStrictEqual(buildDumpRefreshCommand(), {
+    file: 'ssh',
+    args: [DEFAULTS.sshHost, 'ccfzf --dump'],
+  });
+});
+
+test('buildDumpRefreshCommand respects a custom sshHost', () => {
+  assert.deepStrictEqual(buildDumpRefreshCommand({ sshHost: 'me@box' }), {
+    file: 'ssh',
+    args: ['me@box', 'ccfzf --dump'],
+  });
 });

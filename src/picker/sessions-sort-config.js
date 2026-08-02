@@ -11,6 +11,22 @@ function readSessionsSortFromConfig(config) {
 }
 
 /**
+ * Sort mode for Home Assistant / openHASP slots.
+ *
+ * Optional override under `homeassistant.sessionsSort`; when absent or
+ * commented out, inherits the picker `sessionsSort`.
+ */
+function readHaSessionsSort(config) {
+  const ha = config?.homeassistant
+    ?? config?.modules?.windows?.homeassistant;
+  const override = ha?.sessionsSort;
+  if (override !== undefined && override !== null && override !== '') {
+    return normalizeSort(override);
+  }
+  return readSessionsSortFromConfig(config);
+}
+
+/**
  * Surgical edit of config.yml text: set `sessionsSort` under `windows:`
  * without dumping the whole document (comments and ordering stay put).
  */
@@ -68,6 +84,7 @@ function persistSessionsSort({ moduleConfig, globalConfig, sort, configPath, wri
 module.exports = {
   DEFAULT_SORT,
   readSessionsSortFromConfig,
+  readHaSessionsSort,
   setSessionsSortInYaml,
   writeSessionsSortFile,
   persistSessionsSort,

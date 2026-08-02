@@ -3,7 +3,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { setSessionsSortInYaml, readSessionsSortFromConfig } = require('../src/picker/sessions-sort-config');
+const { setSessionsSortInYaml, readSessionsSortFromConfig, readHaSessionsSort } = require('../src/picker/sessions-sort-config');
 
 test('setSessionsSortInYaml replaces an existing sessionsSort line', () => {
   const src =
@@ -44,6 +44,22 @@ test('readSessionsSortFromConfig reads module opts or full config', () => {
   assert.strictEqual(readSessionsSortFromConfig({ sessionsSort: 'name' }), 'name');
   assert.strictEqual(readSessionsSortFromConfig({ modules: { windows: { sessionsSort: 'recent' } } }), 'recent');
   assert.strictEqual(readSessionsSortFromConfig(null), 'cost');
+});
+
+test('readHaSessionsSort prefers homeassistant.sessionsSort then falls back', () => {
+  assert.strictEqual(
+    readHaSessionsSort({ sessionsSort: 'recent', homeassistant: { sessionsSort: 'cost' } }),
+    'cost',
+  );
+  assert.strictEqual(
+    readHaSessionsSort({ sessionsSort: 'recent', homeassistant: {} }),
+    'recent',
+  );
+  assert.strictEqual(
+    readHaSessionsSort({ modules: { windows: { sessionsSort: 'name', homeassistant: { sessionsSort: 'oldest' } } } }),
+    'oldest',
+  );
+  assert.strictEqual(readHaSessionsSort(null), 'cost');
 });
 
 test('setSessionsSortInYaml round-trips through a real file', () => {
