@@ -154,8 +154,31 @@ module.exports = async (mqtt, config, log) => {
     log(`claude-wt restored ${restored.length}, skipped ${skipped.length}`);
   }
 
-  // Focus fails silently unless Rust has granted this process the right to take
-  // the foreground first — see allow_node_foreground and send_command_with in main.rs.
+  // Shared by claudeFocus (picker/panel focus action) and claudeSessionOpen's
+  // terminal action: if the session still has a live window, focus it (moving
+  // to its virtual desktop first); otherwise fall back to restoring it via a
+  // fresh terminal. Focus fails silently unless Rust has granted this process
+  // the right to take the foreground first — see allow_node_foreground and
+  // send_command_with in main.rs.
+  async function focusOrRestoreClaudeSession(id, session) {
+    const action = chooseAction(session, (windowId) => !!winMan.getWindowById(windowId));
+    if (action === 'restore') {
+      await claudeRestoreOne({id});
+      scheduleHaRefresh();
+      return;
+    }
+
+    const current = await winMan.virtualDesktop.GetWindowDesktopNumber(session.windowId);
+    const target = resolveDesktopSwitch(current);
+    if (target !== null) {
+      await winMan.virtualDesktop.GoToDesktopNumber(target);
+    }
+    if (!winMan.focusWindowById(session.windowId)) {
+      log(`claude-wt: ${id} is not on screen`, 'warn');
+    }
+    scheduleHaRefresh();
+  }
+
   async function claudeFocus(payload) {
     const id = payload?.id;
     if (!id) return;
@@ -175,22 +198,7 @@ module.exports = async (mqtt, config, log) => {
       return;
     }
 
-    const action = chooseAction(session, (windowId) => !!winMan.getWindowById(windowId));
-    if (action === 'restore') {
-      await claudeRestoreOne({id});
-      scheduleHaRefresh();
-      return;
-    }
-
-    const current = await winMan.virtualDesktop.GetWindowDesktopNumber(session.windowId);
-    const target = resolveDesktopSwitch(current);
-    if (target !== null) {
-      await winMan.virtualDesktop.GoToDesktopNumber(target);
-    }
-    if (!winMan.focusWindowById(session.windowId)) {
-      log(`claude-wt: ${id} is not on screen`, 'warn');
-    }
-    scheduleHaRefresh();
+    await focusOrRestoreClaudeSession(id, session);
   }
 
   // Project hotkey: focus last open session for cwd, or spawn a fresh named Claude.
@@ -340,8 +348,9 @@ module.exports = async (mqtt, config, log) => {
     }
     const {session} = found;
     if (action === 'terminal') {
-      await claudeRestoreOne({id});
-      scheduleHaRefresh();
+      // Session may already be open on screen — restoring would just refuse
+      // (already-open guard in claudeRestoreOne), so focus it instead.
+      await focusOrRestoreClaudeSession(id, session);
       return;
     }
     const opts = sessionOpenOpts();

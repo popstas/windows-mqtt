@@ -709,21 +709,64 @@ fn parse_claude_projects_json(content: &str) -> Vec<ClaudeProject> {
 /// re-parsing the yaml config here, so this stays in sync with the same
 /// defaults/merge logic the node daemon and picker already use. Namespace
 /// import (`import * as m`), not default: the package only has named exports.
-fn read_claude_projects_from_manager(app_root: &PathBuf) -> Vec<ClaudeProject> {
-    let output = std::process::Command::new("node")
-        .args([
-            "--input-type=module",
-            "-e",
-            "import * as m from 'windows11-manager'; process.stdout.write(JSON.stringify(m.claudeWtProjects()))",
-        ])
-        .current_dir(app_root)
-        .stdin(std::process::Stdio::null())
-        .output();
-    match output {
+fn read_claude_projects_from_manager(
+    app_root: &PathBuf,
+    app: &tauri::AppHandle,
+) -> Vec<ClaudeProject> {
+    let mut cmd = std::process::Command::new("node");
+    cmd.args([
+        "--input-type=module",
+        "-e",
+        "import * as m from 'windows11-manager'; process.stdout.write(JSON.stringify(m.claudeWtProjects()))",
+    ])
+    .current_dir(app_root)
+    .stdin(std::process::Stdio::null());
+    // Plain std::process::Command spawns a console app with its own console
+    // window even when the parent is a GUI (windows_subsystem = "windows")
+    // process; suppress that flash explicitly (tauri_plugin_shell does this
+    // internally, but this call is synchronous and runs before the async
+    // runtime is set up).
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    match cmd.output() {
         Ok(o) if o.status.success() => {
             parse_claude_projects_json(&String::from_utf8_lossy(&o.stdout))
         }
-        _ => Vec::new(),
+        Ok(o) => {
+            // A missing/empty list here silently drops every project hotkey
+            // (e.g. Ctrl+F11), so log enough to diagnose it: exit status and
+            // whatever node wrote to stderr.
+            let message = format!(
+                "claude-wt: reading projects from manager exited with {:?}: {}",
+                o.status.code(),
+                String::from_utf8_lossy(&o.stderr).trim()
+            );
+            eprintln!("{message}");
+            let _ = app.emit(
+                "server-log",
+                LogPayload {
+                    message,
+                    level: "warn".into(),
+                },
+            );
+            Vec::new()
+        }
+        Err(e) => {
+            let message = format!("claude-wt: failed to spawn node for projects: {e}");
+            eprintln!("{message}");
+            let _ = app.emit(
+                "server-log",
+                LogPayload {
+                    message,
+                    level: "error".into(),
+                },
+            );
+            Vec::new()
+        }
     }
 }
 
@@ -1319,7 +1362,7 @@ fn main() {
             let claude_projects = app_root_result
                 .as_ref()
                 .ok()
-                .map(read_claude_projects_from_manager)
+                .map(|root| read_claude_projects_from_manager(root, app.handle()))
                 .unwrap_or_default();
             for project in claude_projects {
                 register_project_shortcut_with_retry(
