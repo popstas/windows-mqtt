@@ -194,7 +194,11 @@ module.exports = async (mqtt, config, log) => {
     }
     let res;
     try {
-      res = await winMan.openClaudeProject({ cwd: project.cwd, name: project.name });
+      res = await winMan.openClaudeProject({
+        cwd: project.cwd,
+        name: project.name,
+        profile: project.profile,
+      });
     } catch (e) {
       log(`claude-wt open-project failed: ${e.message}`, 'error');
       return;

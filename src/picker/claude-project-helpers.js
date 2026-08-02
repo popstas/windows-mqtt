@@ -1,9 +1,9 @@
 /** Resolve a claudeProjects entry from an IPC/MQTT payload. No I/O. */
 
 /**
- * @param {Array<{ name?: string, cwd?: string, hotkey?: string }>|null|undefined} projects
+ * @param {Array<{ name?: string, cwd?: string, hotkey?: string, profile?: string }>|null|undefined} projects
  * @param {{ name?: string, cwd?: string }|null|undefined} payload
- * @returns {{ name: string, cwd: string, hotkey?: string }|null}
+ * @returns {{ name: string, cwd: string, hotkey?: string, profile?: string }|null}
  */
 function resolveClaudeProject(projects, payload) {
   const list = Array.isArray(projects) ? projects : [];
@@ -13,19 +13,25 @@ function resolveClaudeProject(projects, payload) {
   if (name) {
     const hit = list.find(p => p && p.name === name);
     if (hit && typeof hit.cwd === 'string' && hit.cwd) {
-      return { name: hit.name, cwd: hit.cwd, hotkey: hit.hotkey };
+      return projectFields(hit);
     }
   }
 
   if (cwd) {
     const hit = list.find(p => p && p.cwd === cwd);
     if (hit && typeof hit.name === 'string' && hit.name) {
-      return { name: hit.name, cwd: hit.cwd, hotkey: hit.hotkey };
+      return projectFields(hit);
     }
     if (name) return { name, cwd };
   }
 
   return null;
+}
+
+function projectFields(hit) {
+  const out = { name: hit.name, cwd: hit.cwd, hotkey: hit.hotkey };
+  if (typeof hit.profile === 'string' && hit.profile) out.profile = hit.profile;
+  return out;
 }
 
 /**

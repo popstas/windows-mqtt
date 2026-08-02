@@ -40,9 +40,11 @@ claudeProjects:
   - name: home
     cwd: /home/popstas/projects/text/obsidian/home
     hotkey: Ctrl+F11
+    # profile: home   # optional WT profile; overrides claudeWt.profile for spawn
   - name: expertizeme
     cwd: /home/popstas/projects/text/obsidian/ExpertizeMe
     hotkey: Ctrl+F12
+    # profile: ExpertizeMe
 
 tray:
   # What a left click on the tray icon opens: picker | log

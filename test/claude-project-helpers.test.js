@@ -18,6 +18,26 @@ test('resolves by name', () => {
   );
 });
 
+test('forwards optional profile from the project entry', () => {
+  const withProfile = [
+    { name: 'home', cwd: '/home/popstas/projects/text/obsidian/home', hotkey: 'Ctrl+F11', profile: 'home' },
+  ];
+  assert.deepEqual(
+    resolveClaudeProject(withProfile, { name: 'home' }),
+    {
+      name: 'home',
+      cwd: '/home/popstas/projects/text/obsidian/home',
+      hotkey: 'Ctrl+F11',
+      profile: 'home',
+    }
+  );
+});
+
+test('omits profile when the entry has none', () => {
+  const out = resolveClaudeProject(projects, { name: 'home' });
+  assert.equal(out.profile, undefined);
+});
+
 test('resolves by cwd', () => {
   assert.equal(
     resolveClaudeProject(projects, { cwd: '/home/popstas/projects/text/obsidian/ExpertizeMe' }).name,
