@@ -1,6 +1,8 @@
 const fs = require('fs');
 const { normalizeSort, DEFAULT_SORT } = require('./session-groups');
 
+const DEFAULT_SHOW_PATHS = true;
+
 /**
  * Read the picker sort mode. Accepts either the module opts slice
  * (`modules.windows`) or the full loaded config.
@@ -26,37 +28,57 @@ function readHaSessionsSort(config) {
   return readSessionsSortFromConfig(config);
 }
 
+function normalizeShowPaths(raw) {
+  if (raw === undefined || raw === null || raw === '') return DEFAULT_SHOW_PATHS;
+  if (raw === false || raw === 0 || raw === '0' || raw === 'false' || raw === 'off') return false;
+  if (raw === true || raw === 1 || raw === '1' || raw === 'true' || raw === 'on') return true;
+  return DEFAULT_SHOW_PATHS;
+}
+
+/** Whether the picker shows the cwd line under each session. Default on. */
+function readShowPathsFromConfig(config) {
+  const raw = config?.showPaths ?? config?.modules?.windows?.showPaths;
+  return normalizeShowPaths(raw);
+}
+
+/**
+ * Insert or replace a scalar under the `windows:` block without dumping YAML.
+ */
+function setWindowsScalarInYaml(text, key, value) {
+  const lines = String(text).split(/\r?\n/);
+  const keyRe = new RegExp(`^(\\s*)${key}\\s*:\\s*.*$`);
+  const rendered = `${key}: ${value}`;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (keyRe.test(lines[i])) {
+      const indent = lines[i].match(keyRe)[1];
+      lines[i] = `${indent}${rendered}`;
+      return lines.join('\n');
+    }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^(\s*)windows\s*:\s*(?:#.*)?$/);
+    if (!m) continue;
+    const indent = `${m[1]}  `;
+    lines.splice(i + 1, 0, `${indent}${rendered}`);
+    return lines.join('\n');
+  }
+
+  const suffix = lines[lines.length - 1] === '' ? '' : '\n';
+  return `${text}${suffix}modules:\n  windows:\n    ${rendered}\n`;
+}
+
 /**
  * Surgical edit of config.yml text: set `sessionsSort` under `windows:`
  * without dumping the whole document (comments and ordering stay put).
  */
 function setSessionsSortInYaml(text, sort) {
-  const mode = normalizeSort(sort);
-  const lines = String(text).split(/\r?\n/);
-  const sortLineRe = /^(\s*)sessionsSort\s*:\s*.*$/;
+  return setWindowsScalarInYaml(text, 'sessionsSort', normalizeSort(sort));
+}
 
-  for (let i = 0; i < lines.length; i++) {
-    if (sortLineRe.test(lines[i])) {
-      const indent = lines[i].match(sortLineRe)[1];
-      lines[i] = `${indent}sessionsSort: ${mode}`;
-      return lines.join('\n');
-    }
-  }
-
-  // Key missing — insert right after the `windows:` line, indented one step
-  // deeper than that line (YAML block mapping under modules.windows).
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^(\s*)windows\s*:\s*(?:#.*)?$/);
-    if (!m) continue;
-    const indent = `${m[1]}  `;
-    lines.splice(i + 1, 0, `${indent}sessionsSort: ${mode}`);
-    return lines.join('\n');
-  }
-
-  // No windows block at all — append a minimal one. Rare: example configs
-  // always have modules.windows; this is a last-resort safety net.
-  const suffix = lines[lines.length - 1] === '' ? '' : '\n';
-  return `${text}${suffix}modules:\n  windows:\n    sessionsSort: ${mode}\n`;
+function setShowPathsInYaml(text, showPaths) {
+  return setWindowsScalarInYaml(text, 'showPaths', normalizeShowPaths(showPaths));
 }
 
 function writeSessionsSortFile(configPath, sort) {
@@ -65,6 +87,14 @@ function writeSessionsSortFile(configPath, sort) {
   const next = setSessionsSortInYaml(current, mode);
   if (next !== current) fs.writeFileSync(configPath, next);
   return mode;
+}
+
+function writeShowPathsFile(configPath, showPaths) {
+  const value = normalizeShowPaths(showPaths);
+  const current = fs.readFileSync(configPath, 'utf8');
+  const next = setShowPathsInYaml(current, value);
+  if (next !== current) fs.writeFileSync(configPath, next);
+  return value;
 }
 
 /**
@@ -81,11 +111,27 @@ function persistSessionsSort({ moduleConfig, globalConfig, sort, configPath, wri
   return mode;
 }
 
+function persistShowPaths({ moduleConfig, globalConfig, showPaths, configPath, writeFile = writeShowPathsFile }) {
+  const value = normalizeShowPaths(showPaths);
+  if (moduleConfig && typeof moduleConfig === 'object') moduleConfig.showPaths = value;
+  if (globalConfig?.modules?.windows && typeof globalConfig.modules.windows === 'object') {
+    globalConfig.modules.windows.showPaths = value;
+  }
+  if (configPath) writeFile(configPath, value);
+  return value;
+}
+
 module.exports = {
   DEFAULT_SORT,
+  DEFAULT_SHOW_PATHS,
   readSessionsSortFromConfig,
   readHaSessionsSort,
+  readShowPathsFromConfig,
+  normalizeShowPaths,
   setSessionsSortInYaml,
+  setShowPathsInYaml,
   writeSessionsSortFile,
+  writeShowPathsFile,
   persistSessionsSort,
+  persistShowPaths,
 };

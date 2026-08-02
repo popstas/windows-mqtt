@@ -8,6 +8,7 @@ const {labelSessions} = require('../picker/session-groups');
 const {buildSlots, sessionIdForSlot} = require('../picker/session-slots');
 const {
   readSessionsSortFromConfig, readHaSessionsSort, persistSessionsSort,
+  readShowPathsFromConfig, persistShowPaths,
 } = require('../picker/sessions-sort-config');
 const {
   DEFAULTS: sessionOpenDefaults,
@@ -618,7 +619,10 @@ module.exports = async (mqtt, config, log) => {
       ...res,
       sessions: attachProjectHotkeys(res.sessions, globalConfig.claudeProjects),
     };
-    mqtt.sendEvent('claude-wt-sessions', buildSessionsPayload(withHotkeys, sort));
+    mqtt.sendEvent('claude-wt-sessions', {
+      ...buildSessionsPayload(withHotkeys, sort),
+      showPaths: readShowPathsFromConfig(config),
+    });
   }
 
   function cycleSessionsSort() {
@@ -640,6 +644,22 @@ module.exports = async (mqtt, config, log) => {
     // Панель читает тот же sessionsSort — без внеочередного экспорта она
     // останется на прежнем порядке до следующего 15-секундного тика.
     scheduleHaRefresh(0);
+  }
+
+  function setSessionsShowPaths(payload) {
+    const next = readShowPathsFromConfig({ showPaths: payload?.showPaths });
+    try {
+      persistShowPaths({
+        moduleConfig: config,
+        globalConfig,
+        showPaths: next,
+        configPath: resolveAppFile('config.yml', 'CONFIG'),
+      });
+    } catch (e) {
+      log(`claude-wt showPaths persist failed: ${e.message}`, 'error');
+      config.showPaths = next;
+    }
+    sendSessions();
   }
 
   // Only runs while the picker window is open: it scans every terminal window
@@ -898,6 +918,7 @@ module.exports = async (mqtt, config, log) => {
     'windows/claude-sessions-start': () => startSessionsFeed(),
     'windows/claude-sessions-stop': () => stopSessionsFeed(),
     'windows/claude-sessions-sort-cycle': () => cycleSessionsSort(),
+    'windows/claude-sessions-show-paths': (payload) => setSessionsShowPaths(payload),
     'windows/claude-restore-one': (payload) => claudeRestoreOne(payload),
     'windows/claude-snapshots': () => sendSnapshots(),
     'windows/claude-snapshot-restore': (payload) => claudeSnapshotRestorePayload(payload),

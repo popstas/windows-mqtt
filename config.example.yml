@@ -241,6 +241,8 @@ modules:
     # Пикер сессий: cost | oldest | newest | recent | name. Меняется кликом по
     # statusline внизу списка и пишется сюда же без перезаписи всего файла.
     sessionsSort: cost
+    # Строка cwd под именем сессии. Чекбокс Show paths в statusline.
+    showPaths: true
     # Ctrl+K в пикере: открыть cwd сессии в Cursor / Explorer / ssh-терминале.
     # Linux cwd (/home/popstas/...) мапится на SMB-диск V:. ssh_app берётся из
     # modules.exec, если здесь не задан.

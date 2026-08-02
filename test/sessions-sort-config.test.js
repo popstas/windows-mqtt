@@ -3,7 +3,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { setSessionsSortInYaml, readSessionsSortFromConfig, readHaSessionsSort } = require('../src/picker/sessions-sort-config');
+const { setSessionsSortInYaml, readSessionsSortFromConfig, readHaSessionsSort, readShowPathsFromConfig, setShowPathsInYaml } = require('../src/picker/sessions-sort-config');
 
 test('setSessionsSortInYaml replaces an existing sessionsSort line', () => {
   const src =
@@ -75,4 +75,28 @@ test('setSessionsSortInYaml round-trips through a real file', () => {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('readShowPathsFromConfig defaults to true', () => {
+  assert.strictEqual(readShowPathsFromConfig(null), true);
+  assert.strictEqual(readShowPathsFromConfig({}), true);
+  assert.strictEqual(readShowPathsFromConfig({ showPaths: false }), false);
+  assert.strictEqual(readShowPathsFromConfig({ modules: { windows: { showPaths: false } } }), false);
+  assert.strictEqual(readShowPathsFromConfig({ showPaths: true }), true);
+});
+
+test('setShowPathsInYaml replaces or inserts under windows', () => {
+  const withKey =
+    'modules:\n' +
+    '  windows:\n' +
+    '    sessionsSort: cost\n' +
+    '    showPaths: true\n';
+  assert.match(setShowPathsInYaml(withKey, false), /^\s*showPaths:\s*false\s*$/m);
+  assert.doesNotMatch(setShowPathsInYaml(withKey, false), /showPaths:\s*true/);
+
+  const missing =
+    'modules:\n' +
+    '  windows:\n' +
+    '    sessionsSort: cost\n';
+  assert.match(setShowPathsInYaml(missing, false), /windows:\n\s+showPaths: false\n\s+sessionsSort: cost/);
 });
