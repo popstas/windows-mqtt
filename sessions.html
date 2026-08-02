@@ -56,10 +56,10 @@
         .text { min-width: 0; }
         .name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .cwd { font-size: 11px; color: #868c95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        /* Чем сессия закончила. Тусклее пути: это подсказка, а не опознание —
-           строку ищут глазами по названию и каталогу. */
+        /* Чем сессия закончила / что спросили. Тусклее пути: это подсказка, а
+           не опознание — строку ищут глазами по названию и каталогу. */
         .summary { font-size: 11px; color: #6f757e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .badge { margin-left: 6px; font-size: 10px; color: #868c95; }
+        .prompt { font-size: 11px; color: #868c95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .name .hotkey { margin-left: 6px; font-size: 11px; color: #7d838c; font-weight: normal; }
         /* Текстовый статус агента, прижат вправо вместе с возрастом. */
         .state {
@@ -173,12 +173,15 @@
           statusDotHtml(session) +
           `<div class="text"><div class="name">${escapeHtml(session.label)}` +
           `${session.hotkey ? `<span class="hotkey">${escapeHtml(session.hotkey)}</span>` : ''}` +
-          `${session.open ? '' : '<span class="badge">closed</span>'}</div>` +
+          `</div>` +
           `<div class="cwd">${escapeHtml(shortPath(session.cwd))}</div>` +
-          // Третья строка появляется только когда есть что сказать: пустой div
-          // всё равно занял бы высоту, и строки без сводки стали бы выше.
-          (session.agentSummary
-            ? `<div class="summary">${escapeHtml(session.agentSummary)}</div>` : '') +
+          // Две строки под карточкой: что спросили и чем ответили. Пустой div
+          // всё равно занял бы высоту, поэтому рисуем только то, что есть.
+          // У работающей сессии свежей сводки нет — берём последнюю известную.
+          (session.agentPrompt
+            ? `<div class="prompt">${escapeHtml(session.agentPrompt)}</div>` : '') +
+          ((session.agentSummary || session.agentLastSummary)
+            ? `<div class="summary">${escapeHtml(session.agentSummary || session.agentLastSummary)}</div>` : '') +
           `</div>` +
           stateHtml(session) + usageHtml(session) + ageHtml(session, nowSec) + `</div>`;
       }
@@ -193,14 +196,17 @@
   function paint() {
     const nodes = list.querySelectorAll('.row');
     nodes.forEach((node, i) => node.classList.toggle('active', i === active));
-    const current = nodes[active];
-    if (current) current.scrollIntoView({ block: 'nearest' });
   }
 
   function move(delta) {
     if (!rows.length) return;
     active = (active + delta + rows.length) % rows.length;
     paint();
+    // Только здесь, не в paint: render() тикает раз в секунду с обновлением
+    // списка, и scrollIntoView каждый раз дёргал бы скролл к активной строке,
+    // даже когда пользователь сам ушёл вниз читать другие сессии.
+    const current = list.querySelectorAll('.row')[active];
+    if (current) current.scrollIntoView({ block: 'nearest' });
   }
 
   async function choose() {

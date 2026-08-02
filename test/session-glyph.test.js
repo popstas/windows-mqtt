@@ -194,6 +194,17 @@ test('rowTitle shortens the agent home directory to a tilde', () => {
   assert.strictEqual(rowTitle({ cwd: '/opt/home/x' }), '/opt/home/x');
 });
 
+test('rowTitle puts the user prompt above the agent summary', () => {
+  assert.strictEqual(
+    rowTitle({
+      cwd: '/home/popstas',
+      agentPrompt: 'добавь тесты',
+      agentSummary: 'Готово.',
+    }),
+    '~\n\nдобавь тесты\nГотово.'
+  );
+});
+
 test('rowTitle separates the path from what the agent last said with a blank line', () => {
   assert.strictEqual(
     rowTitle({ cwd: '/home/popstas', agentSummary: 'Закоммитил — ea527f0', agentMessage: 'Claude needs your permission' }),
