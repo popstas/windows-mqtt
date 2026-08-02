@@ -114,7 +114,7 @@ function groupSessions(sessions, sort = DEFAULT_SORT) {
 
   if (!open.length) return past;
   sortGroupSessions(open, mode);
-  return [{ desktop: null, monitor: null, label: 'Active sessions', sessions: open }, ...past];
+  return [{ desktop: null, monitor: null, label: `Active sessions - ${open.length}`, sessions: open }, ...past];
 }
 
 /**

@@ -103,7 +103,7 @@ test('groupSessions puts every live session in one group above the closed ones',
     s({ id: 'closed2', open: false, desktop: 1 }),
     s({ id: 'live1', open: true, desktop: 1, title: 'a' }),
   ], 'name');
-  assert.deepStrictEqual(groups.map(g => g.label), ['Active sessions', 'Desktop 1', 'Desktop 2']);
+  assert.deepStrictEqual(groups.map(g => g.label), ['Active sessions - 2', 'Desktop 1', 'Desktop 2']);
   // Live sessions are not split by desktop: 'live1' and 'live2' sit on
   // different desktops and still share the top group.
   assert.deepStrictEqual(groups[0].sessions.map(x => x.id), ['live1', 'live2']);
@@ -118,7 +118,7 @@ test('groupSessions omits the active group entirely when nothing is open', () =>
 
 test('groupSessions omits the desktop groups when everything is open', () => {
   const groups = groupSessions([s({ id: 'a', open: true, desktop: 1 })]);
-  assert.deepStrictEqual(groups.map(g => g.label), ['Active sessions']);
+  assert.deepStrictEqual(groups.map(g => g.label), ['Active sessions - 1']);
 });
 
 test('groupSessions ignores the monitor when splitting closed sessions', () => {
