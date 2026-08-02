@@ -230,6 +230,14 @@ modules:
     # Пикер сессий: cost | oldest | newest | recent | name. Меняется кликом по
     # statusline внизу списка и пишется сюда же без перезаписи всего файла.
     sessionsSort: cost
+    # Ctrl+K в пикере: открыть cwd сессии в Cursor / Explorer / ssh-терминале.
+    # Linux cwd (/home/popstas/...) мапится на SMB-диск V:. ssh_app берётся из
+    # modules.exec, если здесь не задан.
+    # sessionOpen:
+    #   linuxHome: '/home/popstas'
+    #   windowsRoot: 'V:\\'
+    #   sshHost: 'popstas@pc-virt.popstas.pro'
+    #   sshApp: 'wt.exe -p your_profile ssh -A'
     # Сколько строк отдавать в Home Assistant и как часто. Строк постоянное
     # число: кнопка на панели прибита к строке, а не к сессии. Интервал редкий —
     # опрос окон недёшев, а панель не требует секундной точности.

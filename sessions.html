@@ -7,7 +7,7 @@
         :root { color-scheme: dark; }
         * { box-sizing: border-box; }
         body {
-            margin: 0; height: 100vh; overflow: hidden;
+            margin: 0; height: 100vh; overflow: hidden; position: relative;
             font-family: "Segoe UI", Arial, sans-serif;
             background: #1e1f22; color: #e6e6e6;
             border: 1px solid #3a3d42; border-radius: 10px;
@@ -82,6 +82,31 @@
             font-size: 11px; color: #7d838c; font-variant-numeric: tabular-nums;
         }
         #message { padding: 24px 18px; color: #868c95; font-size: 13px; flex: 0 0 auto; }
+        /* Ctrl+K actions overlay — sits above the session list, same palette. */
+        #actions-backdrop {
+            display: none; position: absolute; inset: 0; z-index: 10;
+            background: rgba(0, 0, 0, .45);
+            align-items: center; justify-content: center; padding: 24px;
+        }
+        #actions-backdrop.open { display: flex; }
+        #actions-menu {
+            width: min(360px, 100%); background: #25262a;
+            border: 1px solid #3a3d42; border-radius: 10px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, .45); overflow: hidden;
+        }
+        #actions-title {
+            padding: 12px 16px 8px; font-size: 11px; color: #7d838c;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            border-bottom: 1px solid #3a3d42;
+        }
+        #actions-list { padding: 6px 0; }
+        .action-row {
+            padding: 10px 16px; font-size: 13px; cursor: pointer;
+        }
+        .action-row.active { background: #31343a; }
+        #actions-empty {
+            display: none; padding: 16px; font-size: 13px; color: #868c95;
+        }
     </style>
 </head>
 <body>
@@ -89,6 +114,13 @@
 <div id="list"></div>
 <div id="message">Loading…</div>
 <div id="statusline" title="Click to change sort"><span class="icon">⇅</span><span id="sort-label">cost</span></div>
+<div id="actions-backdrop" aria-hidden="true">
+  <div id="actions-menu" role="menu">
+    <div id="actions-title"></div>
+    <div id="actions-list"></div>
+    <div id="actions-empty">No open actions for this session.</div>
+  </div>
+</div>
 <script src="picker-filter.js"></script>
 <script src="session-glyph.js"></script>
 <script>
@@ -96,12 +128,20 @@
   let rows = [];
   let active = 0;
   let sortMode = 'cost';
+  let menuOpen = false;
+  let menuActions = [];
+  let menuActive = 0;
+  let menuSessionId = null;
 
   const search = document.getElementById('search');
   const list = document.getElementById('list');
   const message = document.getElementById('message');
   const statusline = document.getElementById('statusline');
   const sortLabel = document.getElementById('sort-label');
+  const actionsBackdrop = document.getElementById('actions-backdrop');
+  const actionsTitle = document.getElementById('actions-title');
+  const actionsList = document.getElementById('actions-list');
+  const actionsEmpty = document.getElementById('actions-empty');
 
   function paintSort() {
     sortLabel.textContent = sortMode;
@@ -180,9 +220,89 @@
     });
   }
 
+  function closeMenu() {
+    menuOpen = false;
+    menuActions = [];
+    menuActive = 0;
+    menuSessionId = null;
+    actionsBackdrop.classList.remove('open');
+    actionsBackdrop.setAttribute('aria-hidden', 'true');
+    search.focus();
+  }
+
+  function paintMenu() {
+    const nodes = actionsList.querySelectorAll('.action-row');
+    nodes.forEach((node, i) => node.classList.toggle('active', i === menuActive));
+  }
+
+  function renderMenu(data) {
+    menuSessionId = data.id;
+    menuActions = data.actions || [];
+    menuActive = 0;
+    const title = data.label
+      ? `${data.label} — ${shortPath(data.cwd || '')}`
+      : shortPath(data.cwd || '') || 'Session';
+    actionsTitle.textContent = title;
+    if (!menuActions.length) {
+      actionsList.innerHTML = '';
+      actionsEmpty.style.display = 'block';
+    } else {
+      actionsEmpty.style.display = 'none';
+      actionsList.innerHTML = menuActions.map((action, index) =>
+        `<div class="action-row${index === 0 ? ' active' : ''}" data-index="${index}" role="menuitem">${escapeHtml(action.label)}</div>`
+      ).join('');
+    }
+    menuOpen = true;
+    actionsBackdrop.classList.add('open');
+    actionsBackdrop.setAttribute('aria-hidden', 'false');
+    search.blur();
+  }
+
+  function openMenu() {
+    const session = rows[active];
+    if (!session) return;
+    menuSessionId = session.id;
+    invoke('picker_send', {
+      action: 'windows/claude-session-actions',
+      payload: { id: session.id },
+    });
+  }
+
+  async function runMenuAction() {
+    const action = menuActions[menuActive];
+    if (!action || !menuSessionId) return;
+    const id = menuSessionId;
+    const actionId = action.id;
+    closeMenu();
+    await invoke('hide_picker');
+    await invoke('picker_send', {
+      action: 'windows/claude-session-open',
+      payload: { id, action: actionId },
+    });
+  }
+
+  function moveMenu(delta) {
+    if (!menuActions.length) return;
+    menuActive = (menuActive + delta + menuActions.length) % menuActions.length;
+    paintMenu();
+  }
+
   search.addEventListener('input', () => { active = 0; render(); });
 
   document.addEventListener('keydown', (e) => {
+    if (menuOpen) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); moveMenu(1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); moveMenu(-1); }
+      else if (e.key === 'Enter') { e.preventDefault(); runMenuAction(); }
+      else if (e.key === 'Escape') { e.preventDefault(); closeMenu(); }
+      else if (!(e.ctrlKey || e.metaKey || e.altKey)) { e.preventDefault(); }
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      openMenu();
+      return;
+    }
     if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
     else if (e.key === 'Enter') { e.preventDefault(); choose(); }
@@ -190,14 +310,27 @@
   });
 
   list.addEventListener('click', (e) => {
+    if (menuOpen) return;
     const row = e.target.closest('.row');
     if (!row) return;
     active = Number(row.dataset.index);
     choose();
   });
 
+  actionsList.addEventListener('click', (e) => {
+    const row = e.target.closest('.action-row');
+    if (!row) return;
+    menuActive = Number(row.dataset.index);
+    runMenuAction();
+  });
+
+  actionsBackdrop.addEventListener('click', (e) => {
+    if (e.target === actionsBackdrop) closeMenu();
+  });
+
   statusline.addEventListener('click', (e) => {
     e.preventDefault();
+    if (menuOpen) return;
     invoke('picker_send', { action: 'windows/claude-sessions-sort-cycle' });
   });
 
@@ -206,6 +339,7 @@
   // loading) and, once, directly from start() to cover the show that raced
   // ahead of this webview finishing DOMContentLoaded (see start()).
   function beginShow() {
+    closeMenu();
     search.value = '';
     active = 0;
     search.focus();
@@ -250,10 +384,23 @@
       render();
     });
 
+    await listen('claude-wt-session-actions', (event) => {
+      const data = event.payload || {};
+      if (!data.ok) {
+        if (menuSessionId) {
+          renderMenu({ id: menuSessionId, label: '', cwd: '', actions: [] });
+        }
+        return;
+      }
+      if (menuSessionId && data.id !== menuSessionId) return;
+      renderMenu(data);
+    });
+
     // Fired by Rust every time the window is shown.
     await listen('picker-shown', beginShow);
 
     await listen('picker-hidden', () => {
+      closeMenu();
       invoke('picker_send', { action: 'windows/claude-sessions-stop' });
     });
 

@@ -1,6 +1,6 @@
 const winMan = require('windows11-manager');
 const globalConfig = require('../config.js');
-const {exec} = require('child_process');
+const {exec, spawn} = require('child_process');
 const {
   buildSessionsPayload, chooseAction, resolveDesktopSwitch, cycleSort,
 } = require('../picker/session-groups');
@@ -9,6 +9,13 @@ const {buildSlots, sessionIdForSlot} = require('../picker/session-slots');
 const {
   readSessionsSortFromConfig, persistSessionsSort,
 } = require('../picker/sessions-sort-config');
+const {
+  DEFAULTS: sessionOpenDefaults,
+  toWindowsPath,
+  isCursorProcessPath,
+  availableActions,
+  buildOpenCommands,
+} = require('../picker/session-open-helpers');
 const {resolveAppFile} = require('../paths');
 const {
   discoveryMessages, namesFingerprint, stateMessages, topics: haTopics,
@@ -171,6 +178,150 @@ module.exports = async (mqtt, config, log) => {
       log(`claude-wt: ${id} is not on screen`, 'warn');
     }
     scheduleHaRefresh();
+  }
+
+  function sessionOpenOpts() {
+    const so = config.sessionOpen || {};
+    const execCfg = globalConfig.modules?.exec || {};
+    return {
+      linuxHome: so.linuxHome || sessionOpenDefaults.linuxHome,
+      windowsRoot: so.windowsRoot || sessionOpenDefaults.windowsRoot,
+      sshHost: so.sshHost || sessionOpenDefaults.sshHost,
+      sshApp: so.sshApp || execCfg.ssh_app || sessionOpenDefaults.sshApp,
+    };
+  }
+
+  function findCursorExe() {
+    try {
+      const hit = winMan.getWindows().find(w => isCursorProcessPath(w.path));
+      return hit?.path || null;
+    } catch (e) {
+      log(`claude-wt cursor detect failed: ${e.message}`, 'warn');
+      return null;
+    }
+  }
+
+  function findSessionById(id) {
+    let res;
+    try {
+      res = winMan.claudeWtSessions();
+    } catch (e) {
+      return { error: e.message };
+    }
+    if (!res.ok) return { error: res.reason };
+    const session = res.sessions.find(s => s.id === id);
+    if (!session) return { error: `unknown session ${id}` };
+    return { session };
+  }
+
+  function runDetachedSpawn(file, args) {
+    return new Promise((resolve, reject) => {
+      const child = spawn(file, args, {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      let done = false;
+      const finish = (fn, arg) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        fn(arg);
+      };
+      child.once('error', (err) => finish(reject, err));
+      child.unref();
+      // ENOENT (and friends) arrive on the next ticks; if nothing failed soon,
+      // treat the spawn as accepted — GUI apps stay running and never "exit".
+      const timer = setTimeout(() => finish(resolve, child), 50);
+    });
+  }
+
+  async function runOpenCommand(cmd, { cursorExe, winPath }) {
+    if (!cmd) throw new Error('unsupported action');
+    if (cmd.kind === 'shell') {
+      return new Promise((resolve, reject) => {
+        exec(cmd.command, (error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+    }
+    try {
+      await runDetachedSpawn(cmd.file, cmd.args);
+    } catch (e) {
+      if (e.code === 'ENOENT' && cmd.file === 'cursor' && cursorExe) {
+        await runDetachedSpawn(cursorExe, [winPath]);
+        return;
+      }
+      throw e;
+    }
+  }
+
+  // Ctrl+K menu: which open-targets apply for this session right now.
+  async function claudeSessionActions(payload) {
+    const id = payload?.id;
+    if (!id || typeof mqtt.sendEvent !== 'function') return;
+    const found = findSessionById(id);
+    if (found.error) {
+      log(`claude-wt session-actions: ${found.error}`, 'warn');
+      mqtt.sendEvent('claude-wt-session-actions', {ok: false, reason: found.error});
+      return;
+    }
+    const {session} = found;
+    const labeled = labelSessions([session])[0];
+    const opts = sessionOpenOpts();
+    const cursorExe = findCursorExe();
+    const actions = availableActions(
+      {cwd: session.cwd, cursorRunning: !!cursorExe},
+      opts,
+    );
+    mqtt.sendEvent('claude-wt-session-actions', {
+      ok: true,
+      id: session.id,
+      label: labeled.label || '',
+      cwd: session.cwd || '',
+      actions,
+    });
+  }
+
+  async function claudeSessionOpen(payload) {
+    const id = payload?.id;
+    const action = payload?.action;
+    if (!id || !action) return;
+    const found = findSessionById(id);
+    if (found.error) {
+      log(`claude-wt session-open: ${found.error}`, 'warn');
+      notifyPicker(`claude-wt: ${found.error}`);
+      return;
+    }
+    const {session} = found;
+    const opts = sessionOpenOpts();
+    const winPath = toWindowsPath(session.cwd, opts);
+    if (!winPath) {
+      notifyPicker('claude-wt: cannot map session path to Windows');
+      return;
+    }
+    const cursorExe = findCursorExe();
+    if (action === 'cursor' && !cursorExe) {
+      notifyPicker('claude-wt: Cursor is not running');
+      return;
+    }
+    const cmd = buildOpenCommands({
+      action,
+      cwd: session.cwd,
+      winPath,
+      sshApp: opts.sshApp,
+      sshHost: opts.sshHost,
+      cursorExe,
+      useCursorCli: true,
+    });
+    try {
+      await runOpenCommand(cmd, {cursorExe, winPath});
+      log(`claude-wt open ${action}: ${session.cwd}`);
+    } catch (e) {
+      log(`claude-wt open ${action} failed: ${e.message}`, 'error');
+      notifyPicker(`claude-wt: open ${action} failed — ${e.message}`);
+    }
   }
 
   // Экспорт сессий в Home Assistant. Живёт своим таймером, а не фидом пикера:
@@ -612,6 +763,8 @@ module.exports = async (mqtt, config, log) => {
     },
     'windows/claude-restore': () => claudeRestore(),
     'windows/claude-focus': (payload) => claudeFocus(payload),
+    'windows/claude-session-actions': (payload) => claudeSessionActions(payload),
+    'windows/claude-session-open': (payload) => claudeSessionOpen(payload),
     'windows/claude-sessions-start': () => startSessionsFeed(),
     'windows/claude-sessions-stop': () => stopSessionsFeed(),
     'windows/claude-sessions-sort-cycle': () => cycleSessionsSort(),
