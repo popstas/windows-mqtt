@@ -353,7 +353,11 @@ module.exports = async (mqtt, config, log) => {
     const opts = sessionOpenOpts();
     const cursorExe = findCursorExe();
     const actions = availableActions(
-      {cwd: session.cwd, cursorRunning: !!cursorExe},
+      {
+        cwd: session.cwd,
+        cursorRunning: !!cursorExe,
+        canMarkUnread: !!session.agentState,
+      },
       opts,
     );
     mqtt.sendEvent('claude-wt-session-actions', {
@@ -409,6 +413,28 @@ module.exports = async (mqtt, config, log) => {
       log(`claude-wt open ${action} failed: ${e.message}`, 'error');
       notifyPicker(`claude-wt: open ${action} failed — ${e.message}`);
     }
+  }
+
+  // Вернуть сессию в непрочитанное. Пикер при этом остаётся открытым: список
+  // перерисовывается раз в секунду, и кружок перекрашивается на глазах.
+  async function claudeSessionUnread(payload) {
+    const id = payload?.id;
+    if (!id) return;
+    let res;
+    try {
+      res = winMan.markSessionUnread(id);
+    } catch (e) {
+      log(`claude-wt mark unread failed: ${e.message}`, 'error');
+      notifyPicker(`claude-wt: ${e.message}`);
+      return;
+    }
+    if (!res.ok) {
+      log(`claude-wt mark unread: ${res.reason}`, 'warn');
+      notifyPicker(`claude-wt: ${res.reason}`);
+      return;
+    }
+    log(`claude-wt marked unread: ${res.ids.join(', ')}`);
+    scheduleHaRefresh();
   }
 
   // Экспорт сессий в Home Assistant. Живёт своим таймером, а не фидом пикера:
@@ -988,6 +1014,7 @@ module.exports = async (mqtt, config, log) => {
     'windows/claude-focus-project': (payload) => claudeFocusProject(payload),
     'windows/claude-session-actions': (payload) => claudeSessionActions(payload),
     'windows/claude-session-open': (payload) => claudeSessionOpen(payload),
+    'windows/claude-session-unread': (payload) => claudeSessionUnread(payload),
     'windows/claude-sessions-start': () => startSessionsFeed(),
     'windows/claude-sessions-stop': () => stopSessionsFeed(),
     'windows/claude-sessions-sort-cycle': () => cycleSessionsSort(),

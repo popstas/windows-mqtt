@@ -39,19 +39,27 @@ function isCursorProcessPath(path) {
   return /(?:^|[\\/])cursor\.exe$/i.test(path);
 }
 
-const ACTION_DEFS = [
+// Пункты, которым нужен путь на диске Windows. Всё остальное меню от него не
+// зависит и живёт по своим условиям.
+const PATH_ACTION_DEFS = [
   { id: 'explorer', label: 'Open in Explorer' },
   { id: 'cursor', label: 'Open in Cursor' },
   { id: 'terminal', label: 'Open in Terminal' },
 ];
 
 /**
- * Actions the picker may offer for a session. Cursor is omitted unless a
- * Cursor.exe process is already running. Empty when cwd cannot be mapped.
+ * Действия, которые пикер может предложить для сессии.
+ *
+ * Cursor — только когда он запущен: пункт, открывающий несуществующее
+ * приложение, хуже отсутствующего. Путь нужен лишь первым трём, поэтому сессия
+ * вне V: остаётся с пометкой непрочитанным, а не с пустым меню.
  */
-function availableActions({ cwd, cursorRunning }, opts = {}) {
-  if (toWindowsPath(cwd, opts) === null) return [];
-  return ACTION_DEFS.filter(a => a.id !== 'cursor' || cursorRunning);
+function availableActions({ cwd, cursorRunning, canMarkUnread = false }, opts = {}) {
+  const actions = toWindowsPath(cwd, opts) === null
+    ? []
+    : PATH_ACTION_DEFS.filter(a => a.id !== 'cursor' || cursorRunning);
+  if (canMarkUnread) actions.push({ id: 'unread', label: 'Mark unread' });
+  return actions;
 }
 
 /** Shell fragment run on the remote host after ssh -t. */

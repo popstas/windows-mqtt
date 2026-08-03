@@ -81,6 +81,31 @@ test('availableActions is empty when cwd cannot be mapped', () => {
   assert.deepStrictEqual(availableActions({ cwd: '', cursorRunning: true }), []);
 });
 
+test('availableActions offers mark-unread when the session has an agent record', () => {
+  const actions = availableActions({
+    cwd: '/home/popstas/projects/x', cursorRunning: false, canMarkUnread: true,
+  });
+  assert.deepStrictEqual(
+    actions.map(a => a.id),
+    ['explorer', 'terminal', 'unread'],
+  );
+  assert.strictEqual(actions.find(a => a.id === 'unread').label, 'Mark unread');
+});
+
+test('availableActions omits mark-unread without an agent record', () => {
+  const actions = availableActions({
+    cwd: '/home/popstas/projects/x', cursorRunning: false, canMarkUnread: false,
+  });
+  assert.deepStrictEqual(actions.map(a => a.id), ['explorer', 'terminal']);
+});
+
+test('availableActions still offers mark-unread when cwd cannot be mapped to Windows', () => {
+  // Пометка не открывает папку: путь ей не нужен, и сессия вне V: не должна
+  // оставаться без единственного действия, которое ей доступно.
+  const actions = availableActions({ cwd: '/opt/elsewhere', canMarkUnread: true });
+  assert.deepStrictEqual(actions.map(a => a.id), ['unread']);
+});
+
 test('buildTerminalRemote sets SSH_STARTDIR then exec zsh -l', () => {
   assert.strictEqual(
     buildTerminalRemote('/home/popstas/projects/x'),
