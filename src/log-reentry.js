@@ -9,18 +9,21 @@
 // снимать защиту, поставленную внешним.
 let depth = 0;
 
-function enter() { depth += 1; }
-function leave() { depth = Math.max(0, depth - 1); }
 function isInside() { return depth > 0; }
 
-/** Выполнить fn под защитой, опустив счётчик даже при исключении. */
+/**
+ * Выполнить fn под защитой, опустив счётчик даже при исключении.
+ *
+ * Наружу отдаётся только run(): пара enter/leave снаружи разъезжается ровно в
+ * тех случаях, ради которых счётчик и заведён, — при исключении по дороге.
+ */
 function run(fn) {
-  enter();
+  depth += 1;
   try {
     return fn();
   } finally {
-    leave();
+    depth -= 1;
   }
 }
 
-module.exports = { enter, leave, isInside, run };
+module.exports = { isInside, run };

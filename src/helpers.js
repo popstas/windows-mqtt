@@ -74,12 +74,21 @@ function fileLine(level, msg, now = Date.now()) {
   return `${fileTs} [${level}] ${stringifyMsg(msg)}`;
 }
 
-function log(msg, logLevel = 'info') {
-  const logLevels = ['debug',  'info', 'warn', 'error'];
+/**
+ * Проходит ли строка этого уровня текущий порог.
+ *
+ * Один порог на оба входа в файл: строка из console идёт мимо log(), но
+ * оседает в том же пятимегабайтном файле, и без общей проверки весь
+ * console.debug приложения попадал туда независимо от logLevel.
+ */
+function passesLogLevel(level) {
+  const logLevels = ['debug', 'info', 'warn', 'error'];
   const currentLogLevel = logLevels.indexOf(config.debug ? 'debug' : (config.logLevel || 'info'));
-  const messageLogLevel = logLevels.indexOf(logLevel);
+  return logLevels.indexOf(level) >= currentLogLevel;
+}
 
-  if (messageLogLevel >= currentLogLevel) {
+function log(msg, logLevel = 'info') {
+  if (passesLogLevel(logLevel)) {
     // Compute the instant once so console and file timestamps can't drift.
     const now = Date.now();
     const tzoffset = (new Date(now)).getTimezoneOffset() * 60000; //offset in milliseconds
@@ -110,9 +119,13 @@ function log(msg, logLevel = 'info') {
  * Rust и показывает в server-log окна приложения. В файл она не попадала
  * никогда, и `[claude-wt] tick failed: …` вместе со всей диагностикой
  * библиотеки терялась вместе с закрытым окном.
+ *
+ * Порог тот же, что у log(): иначе console.debug из любой библиотеки крутил бы
+ * ротацию файла вне зависимости от logLevel.
  */
 function logConsoleLine(level, msg) {
   if (reentry.isInside()) return;
+  if (!passesLogLevel(level)) return;
   reentry.run(() => {
     writeToLogFile(fileLine(level, msg));
   });

@@ -24,6 +24,10 @@ if (process.env.TAURI_BRIDGE === '1') {
   // events correctly (everything on stderr used to show up as [error]).
   // Multi-line stacks must tag EVERY line — Rust strips one prefix per line.
   const { tagLines } = require('./log-tag');
+  // Одна пометка на весь процесс. Молчать тут нельзя — этот путь для того и
+  // заведён, чтобы диагностика перестала теряться, — но и жаловаться на каждую
+  // строку тоже: сбой файлового лога превратился бы в поток шума в stderr.
+  let fileLogFailureNoted = false;
   const stderrWrite = (level) => (...args) => {
     const text = args.join(' ');
     try {
@@ -33,7 +37,18 @@ if (process.env.TAURI_BRIDGE === '1') {
     // тянет его за собой. Первая же строка после старта конфиг уже застанет.
     try {
       require('./helpers').logConsoleLine(level, text);
-    } catch {}
+    } catch (e) {
+      // Штатный случай — helpers в середине загрузки: logConsoleLine ещё
+      // undefined, строка мимо файла. Дальше всё чинится само, но знать, что
+      // начало лога не доехало, надо.
+      if (!fileLogFailureNoted) {
+        fileLogFailureNoted = true;
+        try {
+          process.stderr.write(tagLines('warn',
+            `[log] console line did not reach the file log: ${e && e.message}`) + '\n');
+        } catch {}
+      }
+    }
   };
   console.log = stderrWrite('info');
   console.info = stderrWrite('info');
