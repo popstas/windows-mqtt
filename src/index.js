@@ -25,8 +25,14 @@ if (process.env.TAURI_BRIDGE === '1') {
   // Multi-line stacks must tag EVERY line — Rust strips one prefix per line.
   const { tagLines } = require('./log-tag');
   const stderrWrite = (level) => (...args) => {
+    const text = args.join(' ');
     try {
-      process.stderr.write(tagLines(level, args.join(' ')) + '\n');
+      process.stderr.write(tagLines(level, text) + '\n');
+    } catch {}
+    // Ленивый require: console переопределяется до загрузки конфига, а helpers
+    // тянет его за собой. Первая же строка после старта конфиг уже застанет.
+    try {
+      require('./helpers').logConsoleLine(level, text);
     } catch {}
   };
   console.log = stderrWrite('info');

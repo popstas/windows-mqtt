@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { settingsDir, resolveUserDataFile } = require("./paths");
 const { rotateFile } = require("./log-rotate");
+const reentry = require('./log-reentry');
 const isWindows = os.platform() === 'win32';
 
 let windowsLogger;
@@ -59,23 +60,40 @@ function writeToLogFile(line) {
   }
 }
 
+/**
+ * Собрать строку для файлового лога: таймстамп + уровень + сообщение.
+ * `now` по умолчанию — свежий Date.now(), но log() передаёт свой момент явно,
+ * чтобы строка в консоли и строка в файле описывали один и тот же момент,
+ * а не два отдельных вызова Date.now().
+ */
+function fileLine(level, msg, now = Date.now()) {
+  const tzoffset = (new Date(now)).getTimezoneOffset() * 60000; //offset in milliseconds
+  const local = new Date(now - tzoffset).toISOString();
+  // Full timestamp with ms + level tag on disk for crash forensics.
+  const fileTs = local.replace(/T/, ' ').replace(/Z$/, '');
+  return `${fileTs} [${level}] ${stringifyMsg(msg)}`;
+}
+
 function log(msg, logLevel = 'info') {
   const logLevels = ['debug',  'info', 'warn', 'error'];
   const currentLogLevel = logLevels.indexOf(config.debug ? 'debug' : (config.logLevel || 'info'));
   const messageLogLevel = logLevels.indexOf(logLevel);
 
   if (messageLogLevel >= currentLogLevel) {
-    const tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
     // Compute the instant once so console and file timestamps can't drift.
-    const local = new Date(Date.now() - tzoffset).toISOString();
+    const now = Date.now();
+    const tzoffset = (new Date(now)).getTimezoneOffset() * 60000; //offset in milliseconds
+    const local = new Date(now - tzoffset).toISOString();
     const d = local.
     replace(/T/, ' ').      // replace T with a space
       replace(/\..+/, '')     // delete the dot and everything after
 
-    console[logLevel](`${d} ${msg}`);
-    // Full timestamp with ms + level tag on disk for crash forensics.
-    const fileTs = local.replace(/T/, ' ').replace(/Z$/, '');
-    writeToLogFile(`${fileTs} [${logLevel}] ${stringifyMsg(msg)}`);
+    // Под защитой целиком: console отсюда уходит в stderrWrite, который теперь
+    // тоже пишет в файл, а writeToLogFile при сбое ротации зовёт console.warn.
+    reentry.run(() => {
+      console[logLevel](`${d} ${msg}`);
+      writeToLogFile(fileLine(logLevel, msg, now));
+    });
   }
 
   if (isWindows && process.env.NODE_ENV === 'production') {
@@ -83,6 +101,21 @@ function log(msg, logLevel = 'info') {
     const method = logLevel === 'debug' ? 'info' : logLevel;
     if (typeof windowsLogger[method] === 'function') windowsLogger[method](msg);
   }
+}
+
+/**
+ * Строка, пришедшая из console мимо log(), — в файловый лог.
+ *
+ * Console в bridge-режиме переопределён на запись в stderr, откуда её забирает
+ * Rust и показывает в server-log окна приложения. В файл она не попадала
+ * никогда, и `[claude-wt] tick failed: …` вместе со всей диагностикой
+ * библиотеки терялась вместе с закрытым окном.
+ */
+function logConsoleLine(level, msg) {
+  if (reentry.isInside()) return;
+  reentry.run(() => {
+    writeToLogFile(fileLine(level, msg));
+  });
 }
 
 function getModulesEnabled() {
@@ -129,6 +162,7 @@ async function initModules(modulesEnabled, mqtt) {
 
 module.exports = {
   log,
+  logConsoleLine,
   getModulesEnabled,
   initModules,
 };
