@@ -493,6 +493,15 @@
     document.body.classList.remove('shift');
   });
 
+  // Прямые клавиши дублируют четыре пункта меню Ctrl+K (PR, терминал,
+  // Explorer, Cursor) без открытия самого меню — буква ведёт прямо к id
+  // действия, который уходит в windows/claude-session-open как есть.
+  // Применимость действия (есть ли PR у сессии, запущен ли Cursor,
+  // переводится ли путь на диск Windows) проверяет сервер и сам сообщает
+  // человеку через уведомление, если действие невозможно — здесь это не
+  // дублируется.
+  const DIRECT_OPEN_KEYS = { p: 'pr', t: 'terminal', e: 'explorer', c: 'cursor' };
+
   document.addEventListener('keydown', (e) => {
     if (infoOpen) {
       if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); closeInfo(); }
@@ -516,6 +525,40 @@
       e.preventDefault();
       if (window.PickerSnapshots.isSnapshotsCommand(search.value)) return;
       openInfo(rows[active]);
+      return;
+    }
+    // Ctrl+P/T/E/C — прямые клавиши на открытие PR/терминала/Explorer/Cursor,
+    // preventDefault здесь обязателен: иначе Ctrl+P в webview уйдёт в печать.
+    // Ctrl+C из этой таблицы означает то же самое: до правки это было
+    // копирование выделенного текста в поле поиска, после — открытие Cursor.
+    // Человек попросил именно Ctrl+C для Cursor, зная про этот размен;
+    // недосмотра тут нет.
+    if (e.ctrlKey || e.metaKey) {
+      const directActionId = DIRECT_OPEN_KEYS[e.key.toLowerCase()];
+      if (directActionId) {
+        e.preventDefault();
+        if (window.PickerSnapshots.isSnapshotsCommand(search.value)) return;
+        const session = rows[active];
+        if (!session) return;
+        invoke('hide_picker');
+        invoke('picker_send', {
+          action: 'windows/claude-session-open',
+          payload: { id: session.id, action: directActionId },
+        });
+        return;
+      }
+    }
+    // Ctrl+U — пометить непрочитанным, как пункт unread в меню Ctrl+K: в
+    // отличие от четвёрки выше пикер после него не закрывается.
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U')) {
+      e.preventDefault();
+      if (window.PickerSnapshots.isSnapshotsCommand(search.value)) return;
+      const session = rows[active];
+      if (!session) return;
+      invoke('picker_send', {
+        action: 'windows/claude-session-unread',
+        payload: { id: session.id },
+      });
       return;
     }
     if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
