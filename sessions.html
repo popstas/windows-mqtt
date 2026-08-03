@@ -31,6 +31,14 @@
         }
         #sort-control:hover { color: #a8adb5; }
         #statusline .icon { font-size: 12px; line-height: 1; }
+        /* Подсказка про Ctrl+K, между переключателем сортировки и чекбоксами.
+           min-width: 0 + ellipsis — тем же приёмом, что .text у строки списка:
+           при узком окне подсказка обрезается первой, а не толкает
+           status-checks (у него margin-left: auto) или не ломает раскладку. */
+        #menu-hint {
+            flex: 1 1 auto; min-width: 0; overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap;
+        }
         .status-checks {
             display: flex; align-items: center; gap: 12px; margin-left: auto;
         }
@@ -130,10 +138,23 @@
             border-bottom: 1px solid #3a3d42;
         }
         #actions-list { padding: 6px 0; }
+        /* flex, а не блок: подпись клавиши прижимается вправо тем же приёмом,
+           что и колонка статуса в строке списка (margin-left: auto), а не
+           текстом внутри одной строки — иначе делить их пришлось бы вручную. */
         .action-row {
+            display: flex; align-items: center;
             padding: 10px 16px; font-size: 13px; cursor: pointer;
         }
         .action-row.active { background: #31343a; }
+        .action-label {
+            flex: 1 1 auto; min-width: 0; overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap;
+        }
+        /* Прямая клавиша действия, тусклым — тем же цветом, что и .name .hotkey. */
+        .action-hotkey {
+            flex: 0 0 auto; margin-left: auto; padding-left: 12px;
+            font-size: 11px; color: #7d838c;
+        }
         #actions-empty {
             display: none; padding: 16px; font-size: 13px; color: #868c95;
         }
@@ -167,6 +188,7 @@
 <div id="message">Loading…</div>
 <div id="statusline">
   <span id="sort-control" title="Click to change sort"><span class="icon">⇅</span><span id="sort-label">cost</span></span>
+  <span id="menu-hint">^K - Session menu</span>
   <span class="status-checks">
     <label class="status-check"><input type="checkbox" id="show-paths" checked> Show paths</label>
     <label class="status-check"><input type="checkbox" id="show-event" checked> Show event</label>
@@ -203,6 +225,18 @@
   let menuActive = 0;
   let menuSessionId = null;
   let infoOpen = false;
+
+  // Одна таблица «id действия ⇄ клавиша» на всё: подписи в меню Ctrl+K и
+  // обработчики прямых клавиш ниже читают именно её. Раньше клавиша была
+  // зашита в DIRECT_OPEN_KEYS, а Ctrl+U/Ctrl+I проверялись отдельными
+  // литералами рядом — эти две записи могли разъехаться, и меню обещало бы
+  // клавишу, которая на деле не работает (или наоборот).
+  const ACTION_KEYS = { explorer: 'e', cursor: 'c', terminal: 't', unread: 'u', pr: 'p', info: 'i' };
+  const KEY_TO_ACTION = Object.fromEntries(Object.entries(ACTION_KEYS).map(([id, key]) => [key, id]));
+  // Эта четвёрка уходит в claude-session-open как есть; unread и info шлют
+  // другой invoke и обрабатываются отдельными ветками ниже — но клавишу и
+  // подпись в меню все шестеро берут из ACTION_KEYS.
+  const DIRECT_OPEN_ACTIONS = ['explorer', 'cursor', 'terminal', 'pr'];
 
   const search = document.getElementById('search');
   const list = document.getElementById('list');
@@ -415,9 +449,14 @@
       actionsEmpty.style.display = 'block';
     } else {
       actionsEmpty.style.display = 'none';
-      actionsList.innerHTML = menuActions.map((action, index) =>
-        `<div class="action-row${index === 0 ? ' active' : ''}" data-index="${index}" role="menuitem">${escapeHtml(action.label)}</div>`
-      ).join('');
+      // Клавиша справа — из ACTION_KEYS (единая таблица, см. её объявление
+      // выше): нет записи для id — ничего не рисуем, пустой элемент не нужен.
+      actionsList.innerHTML = menuActions.map((action, index) => {
+        const key = ACTION_KEYS[action.id];
+        const hotkey = key ? `<span class="action-hotkey">^${escapeHtml(key.toUpperCase())}</span>` : '';
+        return `<div class="action-row${index === 0 ? ' active' : ''}" data-index="${index}" role="menuitem">` +
+          `<span class="action-label">${escapeHtml(action.label)}</span>${hotkey}</div>`;
+      }).join('');
     }
     menuOpen = true;
     actionsBackdrop.classList.add('open');
@@ -500,7 +539,6 @@
   // переводится ли путь на диск Windows) проверяет сервер и сам сообщает
   // человеку через уведомление, если действие невозможно — здесь это не
   // дублируется.
-  const DIRECT_OPEN_KEYS = { p: 'pr', t: 'terminal', e: 'explorer', c: 'cursor' };
 
   document.addEventListener('keydown', (e) => {
     if (infoOpen) {
@@ -521,7 +559,7 @@
       openMenu();
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'i' || e.key === 'I')) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === ACTION_KEYS.info) {
       e.preventDefault();
       if (window.PickerSnapshots.isSnapshotsCommand(search.value)) return;
       openInfo(rows[active]);
@@ -534,8 +572,8 @@
     // Человек попросил именно Ctrl+C для Cursor, зная про этот размен;
     // недосмотра тут нет.
     if (e.ctrlKey || e.metaKey) {
-      const directActionId = DIRECT_OPEN_KEYS[e.key.toLowerCase()];
-      if (directActionId) {
+      const directActionId = KEY_TO_ACTION[e.key.toLowerCase()];
+      if (directActionId && DIRECT_OPEN_ACTIONS.includes(directActionId)) {
         e.preventDefault();
         if (window.PickerSnapshots.isSnapshotsCommand(search.value)) return;
         const session = rows[active];
@@ -550,7 +588,7 @@
     }
     // Ctrl+U — пометить непрочитанным, как пункт unread в меню Ctrl+K: в
     // отличие от четвёрки выше пикер после него не закрывается.
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U')) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === ACTION_KEYS.unread) {
       e.preventDefault();
       if (window.PickerSnapshots.isSnapshotsCommand(search.value)) return;
       const session = rows[active];
