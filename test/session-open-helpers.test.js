@@ -239,3 +239,17 @@ test('buildOpenCommands refuses a pull request url of the wrong shape', () => {
     assert.strictEqual(buildOpenCommands({ action: 'pr', prUrl: bad }), null);
   }
 });
+
+test('buildOpenCommands refuses a payload hidden inside the owner/repo segment', () => {
+  // Тот же аргумент `start` без shell: экранирования нет, и `&`/`|`/`"`/пробел
+  // внутри сегмента (а не после номера) точно так же должны быть отвергнуты.
+  for (const bad of [
+    'https://github.com/a&whoami/b/pull/1',
+    'https://github.com/a/b|whoami/pull/1',
+    'https://github.com/a"whoami/b/pull/1',
+    'https://github.com/a b/whoami/pull/1',
+    'https://github.com/a\nwhoami/b/pull/1',
+  ]) {
+    assert.strictEqual(buildOpenCommands({ action: 'pr', prUrl: bad }), null);
+  }
+});

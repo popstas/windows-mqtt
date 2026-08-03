@@ -381,6 +381,16 @@ test('prNumber returns an empty string for anything else', () => {
   assert.strictEqual(prNumber(undefined), '');
 });
 
+test('prNumber rejects a payload hidden inside the owner/repo segment, not just after the number', () => {
+  // Ссылка идёт в аргумент `cmd.exe /c start` без экранирования: `[^/]+`
+  // пропускал бы что угодно, кроме слэша, включая эти символы внутри сегмента.
+  assert.strictEqual(prNumber('https://github.com/a&whoami/b/pull/1'), '');
+  assert.strictEqual(prNumber('https://github.com/a/b|whoami/pull/1'), '');
+  assert.strictEqual(prNumber('https://github.com/a"whoami/b/pull/1'), '');
+  assert.strictEqual(prNumber('https://github.com/a b/whoami/pull/1'), '');
+  assert.strictEqual(prNumber('https://github.com/a\nwhoami/b/pull/1'), '');
+});
+
 test('prBadgeHtml renders the badge only for sessions with a pull request', () => {
   assert.strictEqual(
     prBadgeHtml({ pr_url: 'https://github.com/popstas/ccfzf/pull/3' }),
