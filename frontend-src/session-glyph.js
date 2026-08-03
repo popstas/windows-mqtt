@@ -82,14 +82,38 @@
    * симметрии незачем.
    */
   function stateText(session) {
-    if (!session || !session.open || !session.agentState) return '';
+    if (!session || !session.agentState) return '';
+    // Закрытая сессия ничего не делает — кроме той, за которую работает фоновый
+    // агент (`claude agents`): своего окна у него нет, и «окно закрыто» про него
+    // ничего не сообщает. Строка при этом остаётся строкой родителя.
+    if (!session.open && !session.agentBackground) return '';
     const { agentState, agentEvent } = session;
-    if (!agentEvent || agentEvent === agentState) return agentState;
-    return `${agentState} · ${agentEvent}`;
+    const text = !agentEvent || agentEvent === agentState
+      ? agentState
+      : `${agentState} · ${agentEvent}`;
+    return session.agentBackground ? `bg ${text}` : text;
   }
 
-  function stateHtml(session) {
-    const text = stateText(session);
+  /**
+   * Короткий id — то, чем сессию называют снаружи: `claude --resume`, имя файла
+   * транскрипта, строка в логе демона. Четыре знака — столько же, сколько
+   * приписывает к заголовку `labelSessions`, когда две сессии называются
+   * одинаково; узнать строку хватает, а колонка не съедает место у сводки.
+   *
+   * У сессии, за которую работает фоновый агент, показывается его id: искать по
+   * нему будут именно того, кто пишет, а не того, от кого он форкнут.
+   */
+  function shortSessionId(session) {
+    return String(session?.agentSessionId || session?.id || '').slice(0, 4);
+  }
+
+  /**
+   * Правая колонка перед контекстом: статус агента, а с выключенным «show
+   * event» — id сессии. Место одно и то же, потому что вопрос один: «что это за
+   * строка». Пустой элемент вместо пропуска — иначе колонки справа разъедутся.
+   */
+  function stateHtml(session, showEvent = true) {
+    const text = showEvent ? stateText(session) : shortSessionId(session);
     return `<div class="state">${escapeHtml(text)}</div>`;
   }
 
@@ -209,7 +233,7 @@
   }
 
   return {
-    statusDotHtml, formatAge, ageHtml, stateText, stateHtml,
+    statusDotHtml, formatAge, ageHtml, stateText, shortSessionId, stateHtml,
     contextLevel, usageHtml,
     shortPath, rowTitle, titleAttr, escapeHtml,
   };

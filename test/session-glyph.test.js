@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const {
-  escapeHtml, statusDotHtml, formatAge, ageHtml, stateText, stateHtml,
+  escapeHtml, statusDotHtml, formatAge, ageHtml, stateText, shortSessionId, stateHtml,
   contextLevel, usageHtml,
   shortPath, rowTitle, titleAttr,
 } = require('../frontend-src/session-glyph');
@@ -339,5 +339,32 @@ test('statusDotHtml keeps a stopped session orange until its window is focused',
   assert.strictEqual(
     statusDotHtml({ open: true, agentState: 'review', agentEvent: 'stop', agentSeen: true }),
     '<div class="dot idle"></div>'
+  );
+});
+
+test('stateHtml shows the session id in place of the event when events are off', () => {
+  // Одно место на два вопроса «что это за строка»: колонка та же, чтобы
+  // остальные справа не разъезжались от переключателя.
+  const session = { open: true, id: 'e8afde49-4254-4c64-970e-46c05bf5d516', agentState: 'active' };
+  assert.strictEqual(stateHtml(session, false), '<div class="state">e8af</div>');
+  assert.strictEqual(stateHtml(session, true), '<div class="state">active</div>');
+});
+
+test('shortSessionId names the agent that is writing, not the one it forked from', () => {
+  assert.strictEqual(shortSessionId({ id: 'parent-id', agentSessionId: 'child-id-1234' }), 'chil');
+  assert.strictEqual(shortSessionId({ id: 'parent-id-9999' }), 'pare');
+  assert.strictEqual(shortSessionId(undefined), '');
+});
+
+test('stateText marks a session whose work moved to a background agent', () => {
+  // Окно закрыто, а работа идёт: `claude agents` уводит сессию в форк без
+  // своего окна, и «закрыто» про него ничего не сообщает.
+  assert.strictEqual(
+    stateText({ open: false, agentBackground: true, agentState: 'active', agentEvent: 'tool-done' }),
+    'bg active · tool-done'
+  );
+  assert.strictEqual(
+    stateText({ open: false, agentBackground: false, agentState: 'active' }),
+    ''
   );
 });

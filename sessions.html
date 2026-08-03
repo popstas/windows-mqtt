@@ -248,7 +248,7 @@
           (session.agentDescription
             ? `<div class="summary">${escapeHtml(session.agentDescription)}</div>` : '') +
           `</div>` +
-          (showEvent ? stateHtml(session) : '') + usageHtml(session) + ageHtml(session, nowSec) + `</div>`;
+          stateHtml(session, showEvent) + usageHtml(session) + ageHtml(session, nowSec) + `</div>`;
       }
     }
     list.innerHTML = html;
