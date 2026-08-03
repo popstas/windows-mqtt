@@ -1131,6 +1131,18 @@ fn register_shortcut_action(
     let app_clone = app.clone();
     app.global_shortcut()
         .on_shortcut(shortcut_str, move |_app, _shortcut, event| {
+            // Как и физический клик мышью (Down/Up), нажатие клавиши тоже
+            // прилетает сюда дважды — Pressed и следом Released (HotKeyState
+            // из crate global-hotkey, на котором построен
+            // tauri-plugin-global-shortcut). Фильтр стоит здесь, на входе в
+            // замыкание, а не в одной из веток `match` — он общий для обеих
+            // команд, и раньше был только у ShowPicker: Autoplace без него
+            // отправлял windows/autoplace дважды на одно нажатие. Реагируем
+            // только на нажатие клавиши вниз, симметрично тому, как трей
+            // реагирует только на Up физического клика.
+            if event.state() != ShortcutState::Pressed {
+                return;
+            }
             let app_handle = app_clone.clone();
             match what {
                 ShortcutAction::Autoplace => {
@@ -1138,19 +1150,8 @@ fn register_shortcut_action(
                         send_command(&app_handle, "windows/autoplace").await;
                     });
                 }
-                // Как и физический клик мышью (Down/Up), нажатие клавиши
-                // тоже прилетает сюда дважды — Pressed и следом Released
-                // (HotKeyState из crate global-hotkey, на котором построен
-                // tauri-plugin-global-shortcut). Без фильтра по краю тумблер
-                // переключался бы туда-обратно за одно нажатие: Pressed
-                // открывает пикер, а Released, придя мгновение спустя,
-                // застал бы его уже видимым и тут же закрыл. Реагируем
-                // только на нажатие клавиши вниз, симметрично тому, как трей
-                // реагирует только на Up физического клика.
                 ShortcutAction::ShowPicker => {
-                    if event.state() == ShortcutState::Pressed {
-                        toggle_picker(&app_handle);
-                    }
+                    toggle_picker(&app_handle);
                 }
             }
         })
@@ -1225,7 +1226,16 @@ fn register_project_shortcut_with_retry(
             let name_for_handler = project_name.clone();
             let result = app.global_shortcut().on_shortcut(
                 shortcut_str.as_str(),
-                move |_app, _shortcut, _event| {
+                move |_app, _shortcut, event| {
+                    // Тот же тумблер Pressed/Released, что и у
+                    // register_shortcut_action: без него windows/claude-focus-project
+                    // уходил дважды на одно нажатие, а на другом конце у
+                    // claudeRestoreOne вся защита от повторного запуска — это
+                    // проверка «окно уже открыто», и два запроса приходят
+                    // вплотную, до того как первый успевает её выставить.
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
                     let app_handle = app_for_handler.clone();
                     let name = name_for_handler.clone();
                     tauri::async_runtime::spawn(async move {
