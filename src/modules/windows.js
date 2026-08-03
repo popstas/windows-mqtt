@@ -61,15 +61,27 @@ module.exports = async (mqtt, config, log) => {
     winMan.startClaudeWt();
     // Сторож рядом со стартом, а не в onStart(): onStart в этой кодовой базе
     // никто не вызывает, и повешенный туда сторож никогда бы не завёлся.
-    const check = createClaudeWtWatchdog({
-      status: () => winMan.claudeWtStatus(),
-      health: (args) => winMan.claudeWtHealth(args),
-      restart: () => winMan.startClaudeWt(),
-      log,
-      silenceMs: winMan.TICK_SILENCE_MS,
-      graceMs: winMan.TICK_GRACE_MS,
-    });
-    claudeWtWatchdogId = setInterval(check, CHECK_INTERVAL_MS);
+    //
+    // Диагноз ставит библиотека. Нет его — сторожа не заводим вовсе: иначе
+    // check() падал бы раз в тридцать секунд в глушащий обработчик таймера, и
+    // с виду сторож работал бы, а на деле не смотрел бы ни за чем. Порогов же
+    // может не быть у библиотеки постарше — там подставятся запасные.
+    if (typeof winMan.claudeWtHealth !== 'function') {
+      log('claude-wt: библиотека без claudeWtHealth — сторож не заведён, '
+        + 'молчание демона замечено не будет', 'error');
+    } else {
+      const check = createClaudeWtWatchdog({
+        status: () => winMan.claudeWtStatus(),
+        health: (args) => winMan.claudeWtHealth(args),
+        // Без проверки падения: подъём сторожем — не старт машины, а
+        // maybeRestoreOnStart() зовёт getWindows() и открывает терминалы.
+        restart: () => winMan.startClaudeWt({skipCrashCheck: true}),
+        log,
+        silenceMs: winMan.TICK_SILENCE_MS,
+        graceMs: winMan.TICK_GRACE_MS,
+      });
+      claudeWtWatchdogId = setInterval(check, CHECK_INTERVAL_MS);
+    }
   }
 
   if (config.placeWindowOnStart) {
