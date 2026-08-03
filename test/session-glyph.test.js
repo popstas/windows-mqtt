@@ -4,6 +4,7 @@ const {
   escapeHtml, statusDotHtml, formatAge, ageHtml, stateText, shortSessionId, stateHtml,
   contextLevel, usageHtml,
   shortPath, rowTitle, titleAttr,
+  prNumber, prBadgeHtml,
 } = require('../frontend-src/session-glyph');
 
 test('shortPath collapses the agent home directory, and survives a missing path', () => {
@@ -367,4 +368,24 @@ test('stateText marks a session whose work moved to a background agent', () => {
     stateText({ open: false, agentBackground: false, agentState: 'active' }),
     ''
   );
+});
+
+test('prNumber takes the number from the tail of a pull request url', () => {
+  assert.strictEqual(prNumber('https://github.com/popstas/ccfzf/pull/3'), '3');
+  assert.strictEqual(prNumber('https://github.com/popstas/ccfzf/pull/128'), '128');
+});
+
+test('prNumber returns an empty string for anything else', () => {
+  assert.strictEqual(prNumber('https://github.com/popstas/ccfzf/issues/3'), '');
+  assert.strictEqual(prNumber(''), '');
+  assert.strictEqual(prNumber(undefined), '');
+});
+
+test('prBadgeHtml renders the badge only for sessions with a pull request', () => {
+  assert.strictEqual(
+    prBadgeHtml({ pr_url: 'https://github.com/popstas/ccfzf/pull/3' }),
+    '<span class="pr">↗ #3</span>',
+  );
+  assert.strictEqual(prBadgeHtml({ pr_url: '' }), '');
+  assert.strictEqual(prBadgeHtml({}), '');
 });

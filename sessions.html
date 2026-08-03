@@ -78,6 +78,9 @@
         .summary { font-size: 11px; color: #6f757e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .prompt { font-size: 11px; color: #868c95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .name .hotkey { margin-left: 6px; font-size: 11px; color: #7d838c; font-weight: normal; }
+        /* Метка PR — той же тусклостью, что и подпись хоткея: опознают строку
+           по имени и пути, это подсказка рядом. */
+        .name .pr { margin-left: 6px; font-size: 11px; color: #7d838c; font-weight: normal; }
         /* Текстовый статус агента, прижат вправо вместе с возрастом. */
         .state {
             flex: 0 0 auto; margin-left: auto; padding-left: 10px;
@@ -227,6 +230,7 @@
 
   const {
     statusDotHtml, ageHtml, stateHtml, usageHtml, shortPath, titleAttr, escapeHtml,
+    prBadgeHtml,
   } = window.SessionGlyph;
 
   function render() {
@@ -269,6 +273,7 @@
           statusDotHtml(session) +
           `<div class="text"><div class="name">${escapeHtml(session.label)}` +
           `${session.hotkey ? `<span class="hotkey">${escapeHtml(session.hotkey)}</span>` : ''}` +
+          `${prBadgeHtml(session)}` +
           `</div>` +
           (showPaths
             ? `<div class="cwd">${escapeHtml(shortPath(session.cwd))}</div>` : '') +

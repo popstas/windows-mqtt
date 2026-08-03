@@ -232,9 +232,29 @@
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
   }
 
+  // Номер PR берётся из хвоста ссылки, отдельного поля для него нет: ссылка и
+  // так проверена на форму в windows11-manager, и второе поле означало бы два
+  // источника правды об одном и том же.
+  function prNumber(url) {
+    const m = /^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)$/.exec(url ?? '');
+    return m ? m[1] : '';
+  }
+
+  /**
+   * Метка PR в строке: «↗ #3».
+   *
+   * Текстом, а не картинкой: ассетов у пикера нет вовсе, а стрелка есть в Segoe
+   * UI, которым он и набран.
+   */
+  function prBadgeHtml(session) {
+    const num = prNumber(session?.pr_url);
+    return num ? `<span class="pr">↗ #${num}</span>` : '';
+  }
+
   return {
     statusDotHtml, formatAge, ageHtml, stateText, shortSessionId, stateHtml,
     contextLevel, usageHtml,
     shortPath, rowTitle, titleAttr, escapeHtml,
+    prNumber, prBadgeHtml,
   };
 });
