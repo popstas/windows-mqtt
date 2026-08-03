@@ -12,7 +12,7 @@ use tauri::{
     tray::TrayIconBuilder,
     Emitter, Manager, State, WindowEvent,
 };
-use tauri_plugin_global_shortcut::GlobalShortcutExt;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_shell::{process::CommandEvent, ShellExt};
 
 // --- IPC protocol types ---
@@ -207,6 +207,66 @@ fn hide_picker_window(app: &tauri::AppHandle) {
     }
     if let Some(state) = app.try_state::<LastHidden>() {
         *state.0.lock().unwrap() = Some(std::time::Instant::now());
+    }
+}
+
+/// Итог решения «что сделать с пикером» по одному нажатию (трей или Win+F10).
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum PickerToggle {
+    Show,
+    Hide,
+    Nothing,
+}
+
+/// Решает, что делать с пикером: видимое окно скрывается, невидимое
+/// показывается. Третий исход, `Nothing`, существует из-за автоскрытия по
+/// потере фокуса: если окно скрылось только что само (см. `recently_hidden`
+/// в `toggle_picker`), то текущее нажатие — это и есть закрытие, а не новый
+/// запрос показа, и его нужно проигнорировать — иначе пикер немедленно
+/// откроется обратно вместо того, чтобы остаться закрытым.
+fn picker_toggle(visible: bool, recently_hidden: bool) -> PickerToggle {
+    if visible {
+        PickerToggle::Hide
+    } else if recently_hidden {
+        PickerToggle::Nothing
+    } else {
+        PickerToggle::Show
+    }
+}
+
+/// Общая точка «переключить пикер» для трея и горячей клавиши: обе стороны
+/// читают состояние и исполняют исход здесь, а не дублируют это каждая у себя.
+fn toggle_picker(app: &tauri::AppHandle) {
+    let visible = app
+        .get_webview_window("sessions")
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false);
+    // Clicking the tray icon activates the shell's
+    // notification area, which blurs the picker and
+    // queues a Focused(false)-driven hide at
+    // button-DOWN — before this Up-edge handler runs.
+    // By the time `visible` is read above the window
+    // may already be hidden by that race, which would
+    // otherwise make this branch re-show it (a
+    // hide/show flicker) instead of leaving it closed
+    // as the click visually did. Treat a show request
+    // arriving within the race window as the
+    // toggle-close it actually was.
+    //
+    // Горячая клавиша заходит сюда же и делит эту защиту: у неё гонка
+    // другая (двойное срабатывание Pressed/Released, см. фильтр в
+    // register_shortcut_action), но исход нужен тот же — «скрылось
+    // только что само» не должно тут же открыться обратно от того же
+    // нажатия.
+    let recently_hidden = app
+        .try_state::<LastHidden>()
+        .and_then(|state| *state.0.lock().unwrap())
+        .map(|t| t.elapsed() < Duration::from_millis(300))
+        .unwrap_or(false);
+    match picker_toggle(visible, recently_hidden) {
+        PickerToggle::Show => show_picker(app),
+        PickerToggle::Hide => hide_picker_window(app),
+        PickerToggle::Nothing => {}
     }
 }
 
@@ -1070,7 +1130,7 @@ fn register_shortcut_action(
     }
     let app_clone = app.clone();
     app.global_shortcut()
-        .on_shortcut(shortcut_str, move |_app, _shortcut, _event| {
+        .on_shortcut(shortcut_str, move |_app, _shortcut, event| {
             let app_handle = app_clone.clone();
             match what {
                 ShortcutAction::Autoplace => {
@@ -1078,7 +1138,20 @@ fn register_shortcut_action(
                         send_command(&app_handle, "windows/autoplace").await;
                     });
                 }
-                ShortcutAction::ShowPicker => show_picker(&app_handle),
+                // Как и физический клик мышью (Down/Up), нажатие клавиши
+                // тоже прилетает сюда дважды — Pressed и следом Released
+                // (HotKeyState из crate global-hotkey, на котором построен
+                // tauri-plugin-global-shortcut). Без фильтра по краю тумблер
+                // переключался бы туда-обратно за одно нажатие: Pressed
+                // открывает пикер, а Released, придя мгновение спустя,
+                // застал бы его уже видимым и тут же закрыл. Реагируем
+                // только на нажатие клавиши вниз, симметрично тому, как трей
+                // реагирует только на Up физического клика.
+                ShortcutAction::ShowPicker => {
+                    if event.state() == ShortcutState::Pressed {
+                        toggle_picker(&app_handle);
+                    }
+                }
             }
         })
         .map_err(|e| e.to_string())
@@ -1552,31 +1625,7 @@ fn main() {
                             .map(|cfg| cfg.tray_left_click_picker)
                             .unwrap_or(false);
                         if opens_picker {
-                            let visible = app
-                                .get_webview_window("sessions")
-                                .and_then(|w| w.is_visible().ok())
-                                .unwrap_or(false);
-                            // Clicking the tray icon activates the shell's
-                            // notification area, which blurs the picker and
-                            // queues a Focused(false)-driven hide at
-                            // button-DOWN — before this Up-edge handler runs.
-                            // By the time `visible` is read above the window
-                            // may already be hidden by that race, which would
-                            // otherwise make this branch re-show it (a
-                            // hide/show flicker) instead of leaving it closed
-                            // as the click visually did. Treat a show request
-                            // arriving within the race window as the
-                            // toggle-close it actually was.
-                            let recently_hidden = app
-                                .try_state::<LastHidden>()
-                                .and_then(|state| *state.0.lock().unwrap())
-                                .map(|t| t.elapsed() < Duration::from_millis(300))
-                                .unwrap_or(false);
-                            if visible {
-                                hide_picker_window(app);
-                            } else if !recently_hidden {
-                                show_picker(app);
-                            }
+                            toggle_picker(app);
                         } else if let Some(window) = app.get_webview_window("main") {
                             let is_visible = window.is_visible().unwrap_or(false);
                             if is_visible {
@@ -1603,6 +1652,30 @@ fn main() {
 mod tests {
     use super::{describe_child_exit, find_app_root};
     use super::{parse_claude_projects_json, parse_picker_config};
+    use super::{picker_toggle, PickerToggle};
+
+    #[test]
+    fn picker_toggle_hides_visible_window() {
+        assert_eq!(picker_toggle(true, false), PickerToggle::Hide);
+    }
+
+    #[test]
+    fn picker_toggle_hides_visible_window_even_if_recently_hidden() {
+        // Технически противоречивое сочетание (окно видимо, но метка
+        // «скрылось только что» ещё не сброшена) — видимость всегда решает
+        // первой, `recently_hidden` учитывается только когда окна не видно.
+        assert_eq!(picker_toggle(true, true), PickerToggle::Hide);
+    }
+
+    #[test]
+    fn picker_toggle_shows_hidden_window() {
+        assert_eq!(picker_toggle(false, false), PickerToggle::Show);
+    }
+
+    #[test]
+    fn picker_toggle_ignores_request_right_after_self_hide() {
+        assert_eq!(picker_toggle(false, true), PickerToggle::Nothing);
+    }
 
     #[test]
     fn picker_config_falls_back_to_defaults() {
