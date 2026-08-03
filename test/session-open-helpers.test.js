@@ -210,3 +210,32 @@ test('buildDumpRefreshCommand respects a custom sshHost', () => {
     args: ['me@box', 'ccfzf --dump'],
   });
 });
+
+test('availableActions offers Open PR with the number in the label', () => {
+  const actions = availableActions({
+    cwd: '/home/popstas/projects/x',
+    prUrl: 'https://github.com/popstas/ccfzf/pull/3',
+  });
+  assert.strictEqual(actions.find(a => a.id === 'pr').label, 'Open PR #3');
+});
+
+test('availableActions omits Open PR without a pull request url', () => {
+  const actions = availableActions({ cwd: '/home/popstas/projects/x' });
+  assert.ok(!actions.some(a => a.id === 'pr'));
+});
+
+test('buildOpenCommands opens a pull request url through cmd start', () => {
+  assert.deepStrictEqual(
+    buildOpenCommands({ action: 'pr', prUrl: 'https://github.com/popstas/ccfzf/pull/3' }),
+    { kind: 'spawn', file: 'cmd.exe', args: ['/c', 'start', '', 'https://github.com/popstas/ccfzf/pull/3'] },
+  );
+});
+
+test('buildOpenCommands refuses a pull request url of the wrong shape', () => {
+  // Строка пришла из транскрипта агента и уходит в аргумент `start`: вторые
+  // ворота после normalizeProgress, потому что вызвать эту функцию может кто
+  // угодно.
+  for (const bad of ['', undefined, 'https://evil.tld/a/b/pull/1', 'https://github.com/a/b/pull/1 && calc']) {
+    assert.strictEqual(buildOpenCommands({ action: 'pr', prUrl: bad }), null);
+  }
+});

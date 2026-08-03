@@ -1,5 +1,10 @@
 /** Pure helpers for opening a session cwd from the picker. No I/O. */
 
+// Номер PR считает тот же модуль, что рисует метку в строке: правило одно, и
+// разъехаться ему негде. Файл фронтенда грузится и как <script>, и как модуль —
+// require здесь пользуется вторым.
+const { prNumber } = require('../../frontend-src/session-glyph');
+
 const DEFAULTS = Object.freeze({
   linuxHome: '/home/popstas',
   windowsRoot: 'V:\\',
@@ -54,11 +59,13 @@ const PATH_ACTION_DEFS = [
  * приложение, хуже отсутствующего. Путь нужен лишь первым трём, поэтому сессия
  * вне V: остаётся с пометкой непрочитанным, а не с пустым меню.
  */
-function availableActions({ cwd, cursorRunning, canMarkUnread = false }, opts = {}) {
+function availableActions({ cwd, cursorRunning, canMarkUnread = false, prUrl = '' }, opts = {}) {
   const actions = toWindowsPath(cwd, opts) === null
     ? []
     : PATH_ACTION_DEFS.filter(a => a.id !== 'cursor' || cursorRunning);
   if (canMarkUnread) actions.push({ id: 'unread', label: 'Mark unread' });
+  const prNum = prNumber(prUrl);
+  if (prNum) actions.push({ id: 'pr', label: `Open PR #${prNum}` });
   // Информация о сессии есть всегда: она рисуется из той же строки списка и
   // ничего не запрашивает.
   actions.push({ id: 'info', label: 'Session info' });
@@ -81,6 +88,7 @@ function buildTerminalRemote(cwd) {
  * @param {string} [args.sshHost]
  * @param {string} [args.cursorExe]
  * @param {boolean} [args.useCursorCli=true]
+ * @param {string} [args.prUrl]
  */
 function buildOpenCommands({
   action,
@@ -90,7 +98,15 @@ function buildOpenCommands({
   sshHost,
   cursorExe,
   useCursorCli = true,
+  prUrl,
 }) {
+  if (action === 'pr') {
+    // Проверка формы здесь вторая: первая стоит в normalizeProgress. Эта
+    // функция чистая и вызывается кем угодно, а результат уходит в аргумент
+    // командной строки.
+    if (!prNumber(prUrl)) return null;
+    return { kind: 'spawn', file: 'cmd.exe', args: ['/c', 'start', '', prUrl] };
+  }
   if (!winPath) return null;
   if (action === 'explorer') {
     // Confirmed working on this machine: spawn explorer.exe / exec explorer

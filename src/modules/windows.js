@@ -357,6 +357,7 @@ module.exports = async (mqtt, config, log) => {
         cwd: session.cwd,
         cursorRunning: !!cursorExe,
         canMarkUnread: !!session.agentState,
+        prUrl: session.pr_url,
       },
       opts,
     );
@@ -384,6 +385,21 @@ module.exports = async (mqtt, config, log) => {
       // Session may already be open on screen — restoring would just refuse
       // (already-open guard in claudeRestoreOne), so focus it instead.
       await focusOrRestoreClaudeSession(id, session);
+      return;
+    }
+    if (action === 'pr') {
+      const cmd = buildOpenCommands({action, prUrl: session.pr_url});
+      if (!cmd) {
+        notifyPicker('claude-wt: no pull request for this session');
+        return;
+      }
+      try {
+        await runOpenCommand(cmd, {});
+        log(`claude-wt open pr: ${session.pr_url}`);
+      } catch (e) {
+        log(`claude-wt open pr failed: ${e.message}`, 'error');
+        notifyPicker(`claude-wt: open PR failed — ${e.message}`);
+      }
       return;
     }
     const opts = sessionOpenOpts();
