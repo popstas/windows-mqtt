@@ -76,3 +76,41 @@ test('buildSessionInfoRows reports whether the state was seen', () => {
     'yes',
   );
 });
+
+test('buildSessionInfoRows formats recent activity as now, not seconds', () => {
+  const rows = buildSessionInfoRows(
+    { ...session, lastActivity: 3459 }, // менее 1 сек назад
+    3460,
+  );
+  assert.match(valueOf(rows, 'last activity'), /^\d{2}:\d{2} · now$/);
+});
+
+test('buildSessionInfoRows skips explicit null bounds and zero timestamps', () => {
+  const rows = buildSessionInfoRows(
+    {
+      id: 'x',
+      label: 'x',
+      cwd: '/p',
+      open: false,
+      bounds: null,
+      agentStarted: 0,
+      lastActivity: 0,
+      focusedAt: 0,
+    },
+    100,
+  );
+  const labels = rows.map(r => r.label);
+  assert.ok(!labels.includes('bounds'));
+  assert.ok(!labels.includes('started'));
+  assert.ok(!labels.includes('last activity'));
+  assert.ok(!labels.includes('focused'));
+});
+
+test('buildSessionInfoRows omits agent field when background is true but sessionId is missing', () => {
+  const rows = buildSessionInfoRows(
+    { ...session, agentBackground: true, agentSessionId: undefined },
+    3460,
+  );
+  const labels = rows.map(r => r.label);
+  assert.ok(!labels.includes('agent'));
+});

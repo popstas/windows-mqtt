@@ -2,28 +2,29 @@
 // The project has no bundler, and duplicating this logic to make it testable
 // would be worse than this shim.
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.SessionInfo = factory();
-})(typeof self !== 'undefined' ? self : this, function () {
-  /** Возраст в том же виде, что в правой колонке списка: 45s, 12m, 3h, 2d. */
-  function age(sec) {
-    if (sec < 60) return `${sec}s`;
-    if (sec < 3600) return `${Math.floor(sec / 60)}m`;
-    if (sec < 86400) return `${Math.floor(sec / 3600)}h`;
-    return `${Math.floor(sec / 86400)}d`;
+  if (typeof module === 'object' && module.exports) {
+    // В Node: требуем зависимость из соседнего модуля.
+    module.exports = factory(require('./session-glyph'));
+  } else {
+    // В браузере: получаем зависимость из глобального объекта SessionGlyph,
+    // который был загружен раньше как <script>.
+    root.SessionInfo = factory(root.SessionGlyph);
   }
-
+})(typeof self !== 'undefined' ? self : this, function (SessionGlyph) {
   /**
-   * Отметка времени — часы плюс возраст: «14:32 · 5m».
+   * Отметка времени — часы плюс возраст: «14:32 · 5m» или «14:32 · now».
    *
-   * Одних часов мало (вчерашние 14:32 выглядят как сегодняшние), одного
-   * возраста тоже (по нему не сопоставить с историей терминала).
+   * Формат совпадает с тем, что показывает правая колонка списка, благодаря
+   * переиспользованию formatAge из session-glyph.js. Одних часов мало
+   * (вчерашние 14:32 выглядят как сегодняшние), одного возраста тоже (по нему
+   * не сопоставить с историей терминала).
    */
   function stamp(epochSec, nowSec) {
     if (!epochSec) return '';
     const d = new Date(epochSec * 1000);
     const p = n => String(n).padStart(2, '0');
-    return `${p(d.getHours())}:${p(d.getMinutes())} · ${age(Math.max(0, nowSec - epochSec))}`;
+    const age = SessionGlyph.formatAge(epochSec, nowSec);
+    return `${p(d.getHours())}:${p(d.getMinutes())} · ${age}`;
   }
 
   /**
@@ -53,7 +54,7 @@
       ['context', s.agentContextPct ? `${s.agentContextPct}%` : ''],
       ['branch', s.branch ?? ''],
       ['pr_url', s.pr_url ?? ''],
-      ['agent', s.agentBackground ? `background · ${s.agentSessionId ?? ''}` : ''],
+      ['agent', s.agentBackground && s.agentSessionId ? `background · ${s.agentSessionId}` : ''],
       ['started', stamp(s.agentStarted ?? 0, nowSec)],
       ['last activity', stamp(s.lastActivity ?? 0, nowSec)],
       ['focused', stamp(s.focusedAt ?? 0, nowSec)],
