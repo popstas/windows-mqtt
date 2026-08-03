@@ -39,7 +39,7 @@ const STATUS_GLYPH = {
  *
  * Пустой слот — `-`, не пустая строка: openHASP не стирает текст пустым
  * payload, а HA ещё обрезает пробел из шаблона — карточка залипала бы
- * предыдущей сессией. То же правило, что у `slotUsage` / `slotSummary`.
+ * предыдущей сессией. То же правило, что у `slotUsage` / `slotDescription`.
  */
 function slotText(slot) {
   if (!slot || slot.status === 'empty') return '-';
@@ -73,11 +73,18 @@ function slotUsage(slot, nowSec = Math.floor(Date.now() / 1000)) {
 }
 
 /**
- * Нижняя строка карточки (сводка). Пусто / пустой слот → `-`, иначе залипает.
+ * Нижняя строка карточки: что сессия говорит о себе.
+ *
+ * Это `description` из windows11-manager — сводка, а у работающей сессии
+ * последняя известная. Раньше здесь стоял голый `summary`, и у всего, что
+ * работает прямо сейчас, строка на плате была пустой: свежей сводки у такой
+ * сессии нет по определению, а сказать ей есть что.
+ *
+ * Пусто / пустой слот → `-`, иначе залипает предыдущей сессией.
  */
-function slotSummary(slot) {
+function slotDescription(slot) {
   if (!slot || slot.status === 'empty') return '-';
-  const s = typeof slot.summary === 'string' ? slot.summary.trim() : '';
+  const s = typeof slot.description === 'string' ? slot.description.trim() : '';
   return s || '-';
 }
 
@@ -113,10 +120,13 @@ function sessionEntity(slot, nowSec = Math.floor(Date.now() / 1000)) {
       monitor: slot.monitor,
       last_activity: slot.lastActivity,
       message: slot.message,
-      // Чем сессия закончила. В строку панели не влезает — там уже значок и
-      // заголовок, — но доступна автоматизациям и нижней строке состояния.
-      // Пустое → `-`: иначе openHASP не стирает прежнюю сводку.
-      summary: slotSummary(slot),
+      // Чем сессия закончила — или, пока она работает, на чём остановилась в
+      // прошлый раз. Имя атрибута историческое: под ним строку читают шаблоны
+      // панели в conf/openhasp.yaml, и переименование стоило бы правки на пять
+      // кнопок ради ничего. Пустое → `-`: иначе openHASP не стирает прежнюю.
+      summary: slotDescription(slot),
+      // Сырые поля хука рядом — автоматизациям иногда нужно именно «что сейчас»
+      // против «что было», а склейка этого различия не хранит.
       last_summary: slot.lastSummary,
       // Готовая строка для правого верхнего угла кнопки: «$12 47%» или «5m».
       usage: slotUsage(slot, nowSec),
@@ -163,6 +173,6 @@ function buildSummaryEntity(sessions) {
 }
 
 module.exports = {
-  SLOT_PREFIX, STATUS_GLYPH, slotText, slotUsage, slotSummary,
+  SLOT_PREFIX, STATUS_GLYPH, slotText, slotUsage, slotDescription,
   sessionEntity, buildSessionEntities, buildSummaryEntity,
 };

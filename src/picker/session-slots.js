@@ -61,6 +61,7 @@ function emptySlot(index) {
     message: '',
     summary: '',
     lastSummary: '',
+    description: '',
     costUsd: 0,
     contextPct: 0,
   };
@@ -88,6 +89,10 @@ function buildSlots(sessions, count = DEFAULT_SLOTS, sort = DEFAULT_SORT) {
       // Не стирается у работающей сессии, в отличие от summary: «на чём
       // остановилась в прошлый раз» — вопрос отдельный от «что говорит сейчас».
       lastSummary: s.agentLastSummary ?? '',
+      // Что показывать строкой: сводка, а у работающей — последняя известная.
+      // Склейку считает windows11-manager (`sessionDescription`), чтобы плата и
+      // пикер говорили одно и то же.
+      description: s.agentDescription ?? '',
       // Во что обошлась сессия и сколько от контекста съедено. Ноль — данных
       // нет: перехват статуслайна стоит не у всех.
       costUsd: s.agentCostUsd ?? 0,

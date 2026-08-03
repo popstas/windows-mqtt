@@ -13,6 +13,16 @@ test('buildSlots carries what the agent last said, and leaves it blank for an em
   assert.strictEqual(empty.summary, '');
 });
 
+test('buildSlots carries the ready-made description, not its own glue', () => {
+  // Склейку «сводка, а у работающей — последняя» считает windows11-manager:
+  // здесь она только переезжает в слот, чтобы пикер и панель не разошлись.
+  const [filled, empty] = buildSlots([s({
+    agentSummary: '', agentLastSummary: 'Готовлю бриф', agentDescription: 'Готовлю бриф',
+  })], 2);
+  assert.strictEqual(filled.description, 'Готовлю бриф');
+  assert.strictEqual(empty.description, '');
+});
+
 test('orderSessions puts live sessions first', () => {
   const out = orderSessions([
     s({ id: 'closed', open: false, lastActivity: 999 }),

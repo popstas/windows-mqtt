@@ -241,11 +241,12 @@
             ? `<div class="cwd">${escapeHtml(shortPath(session.cwd))}</div>` : '') +
           // Две строки под карточкой: что спросили и чем ответили. Пустой div
           // всё равно занял бы высоту, поэтому рисуем только то, что есть.
-          // У работающей сессии свежей сводки нет — берём последнюю известную.
+          // Склейку «сводка, а у работающей — последняя» считает windows11-manager
+          // (`agentDescription`): та же строка уходит в Home Assistant и на плату.
           (session.agentPrompt
             ? `<div class="prompt">${escapeHtml(session.agentPrompt)}</div>` : '') +
-          ((session.agentSummary || session.agentLastSummary)
-            ? `<div class="summary">${escapeHtml(session.agentSummary || session.agentLastSummary)}</div>` : '') +
+          (session.agentDescription
+            ? `<div class="summary">${escapeHtml(session.agentDescription)}</div>` : '') +
           `</div>` +
           (showEvent ? stateHtml(session) : '') + usageHtml(session) + ageHtml(session, nowSec) + `</div>`;
       }

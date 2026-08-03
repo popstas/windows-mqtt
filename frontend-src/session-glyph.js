@@ -183,10 +183,11 @@
     // из 5».
     //
     // У работающей сессии свежей сводки нет — она отвечает за текущий ход, а он
-    // ещё идёт. Тогда показывается последняя известная: в строке её нет, а в
-    // подсказке она к месту, там и спрашивают «на чём эта сессия встала».
+    // ещё идёт. Тогда показывается последняя известная; склейку считает
+    // windows11-manager (`agentDescription`), и ту же строку видят Home Assistant
+    // и плата — три копии одного `||` уже разъезжались между собой.
     // Если промпт уже открыл блок — сводку не отбиваем пустой строкой снова.
-    const summary = session.agentSummary || session.agentLastSummary;
+    const summary = session.agentDescription ?? '';
     if (summary) {
       if (lines.length && !session.agentPrompt) lines.push('');
       lines.push(summary);

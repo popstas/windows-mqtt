@@ -199,7 +199,7 @@ test('rowTitle puts the user prompt above the agent summary', () => {
     rowTitle({
       cwd: '/home/popstas',
       agentPrompt: 'добавь тесты',
-      agentSummary: 'Готово.',
+      agentDescription: 'Готово.',
     }),
     '~\n\nдобавь тесты\nГотово.'
   );
@@ -207,17 +207,18 @@ test('rowTitle puts the user prompt above the agent summary', () => {
 
 test('rowTitle separates the path from what the agent last said with a blank line', () => {
   assert.strictEqual(
-    rowTitle({ cwd: '/home/popstas', agentSummary: 'Закоммитил — ea527f0', agentMessage: 'Claude needs your permission' }),
+    rowTitle({ cwd: '/home/popstas', agentDescription: 'Закоммитил — ea527f0', agentMessage: 'Claude needs your permission' }),
     '~\n\nЗакоммитил — ea527f0\nClaude needs your permission'
   );
 });
 
-test('rowTitle falls back to the last known summary while the agent is working', () => {
-  // A busy session has no fresh summary: the current turn is not finished. The
-  // row shows nothing, but the tooltip is exactly where 'what did it stop on'
-  // gets asked.
+test('rowTitle shows the description a working session came with', () => {
+  // Свежей сводки у неё нет: ход ещё идёт. Подставить последнюю — дело
+  // windows11-manager (`agentDescription`), здесь строка только показывается;
+  // сырые summary / lastSummary подсказка не склеивает, чтобы не разойтись с
+  // Home Assistant и платой.
   assert.strictEqual(
-    rowTitle({ cwd: '/home/popstas', agentSummary: '', agentLastSummary: 'Оба сделано.' }),
+    rowTitle({ cwd: '/home/popstas', agentSummary: '', agentDescription: 'Оба сделано.' }),
     '~\n\nОба сделано.'
   );
 });
@@ -236,7 +237,7 @@ test('rowTitle drops whichever part is missing', () => {
   assert.strictEqual(rowTitle({ cwd: '/home/popstas' }), '~');
   assert.strictEqual(rowTitle({ agentMessage: 'Claude needs your permission' }), 'Claude needs your permission');
   // Без пути пустая строка впереди не нужна — отбивать не от чего.
-  assert.strictEqual(rowTitle({ agentSummary: 'Оба сделано.' }), 'Оба сделано.');
+  assert.strictEqual(rowTitle({ agentDescription: 'Оба сделано.' }), 'Оба сделано.');
   assert.strictEqual(rowTitle({}), '');
   assert.strictEqual(rowTitle(undefined), '');
 });

@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { HomeAssistantApi, mergeHaConfig } = require('../src/homeassistant/api');
 const {
-  slotText, slotUsage, slotSummary, sessionEntity, buildSessionEntities, buildSummaryEntity,
+  slotText, slotUsage, slotDescription, sessionEntity, buildSessionEntities, buildSummaryEntity,
 } = require('../src/homeassistant/claude-sessions');
 const { buildSlots } = require('../src/picker/session-slots');
 const { stateMessages } = require('../src/homeassistant/discovery');
@@ -118,12 +118,22 @@ test('slotText clears an empty slot with a dash', () => {
   assert.strictEqual(slotText({ status: 'idle', title: '' }), '-');
 });
 
-test('slotSummary clears empty and blank summaries with a dash', () => {
-  assert.strictEqual(slotSummary({ status: 'empty', summary: '' }), '-');
-  assert.strictEqual(slotSummary({ status: 'idle', summary: '' }), '-');
-  assert.strictEqual(slotSummary({ status: 'idle', summary: '  ' }), '-');
-  assert.strictEqual(slotSummary({ status: 'idle', summary: 'Готово' }), 'Готово');
-  assert.strictEqual(slotSummary(undefined), '-');
+test('slotDescription clears empty and blank descriptions with a dash', () => {
+  assert.strictEqual(slotDescription({ status: 'empty', description: '' }), '-');
+  assert.strictEqual(slotDescription({ status: 'idle', description: '' }), '-');
+  assert.strictEqual(slotDescription({ status: 'idle', description: '  ' }), '-');
+  assert.strictEqual(slotDescription({ status: 'idle', description: 'Готово' }), 'Готово');
+  assert.strictEqual(slotDescription(undefined), '-');
+});
+
+test('a working session shows what it stopped on last time', () => {
+  // Свежей сводки у неё нет, и панель показывала `-`, хотя сказать ей было что.
+  const [slot] = buildSessionEntities([s({
+    agentState: 'active', agentSummary: '', agentLastSummary: 'Готовлю бриф',
+    agentDescription: 'Готовлю бриф',
+  })], 1);
+  assert.strictEqual(slot.attributes.summary, 'Готовлю бриф');
+  assert.strictEqual(slot.attributes.last_summary, 'Готовлю бриф');
 });
 
 test('slotUsage puts money before context in the corner of the row', () => {
@@ -166,7 +176,7 @@ test('switching a slot off keeps everything the panel reads from it', () => {
   // стёрла бы текст и сводку, и строка на панели опустела бы до следующего тика.
   const sessions = [s({
     id: 'a', title: 'home', agentState: 'review', agentEvent: 'stop',
-    agentSummary: 'Готово', agentCostUsd: 12, agentContextPct: 47,
+    agentDescription: 'Готово', agentCostUsd: 12, agentContextPct: 47,
   })];
   const [lit] = buildSessionEntities(sessions, 1);
   assert.strictEqual(lit.state, 'on');
