@@ -155,6 +155,47 @@ test('every non-gitignored subdirectory of src/ is fully covered by bundle.resou
   }
 });
 
+// The subdirectory-coverage test above only catches a *missing* glob — it
+// says nothing about a file that does exist inside src/ and still throws
+// MODULE_NOT_FOUND in the installed app because its own require() reaches
+// *outside* src/ (bundle.resources ships `../src/*` and per-subdirectory
+// globs, nothing from the repo root or frontend-src/). That's exactly what
+// happened: src/picker/session-open-helpers.js required
+// '../../frontend-src/session-glyph', which is covered by neither
+// `../src/*` nor any `../src/<subdir>/**/*` entry, and the installed app
+// failed with "Cannot find module '../../frontend-src/session-glyph'" —
+// silently, because initModules() catches and logs the exception. This walks
+// every .js file under src/ and flags any relative require() whose target
+// resolves outside src/, so a future copy of this mistake fails a test
+// instead of an install.
+test('no relative require() in src/ resolves to a path outside src/', () => {
+  const srcDir = path.join(repoRoot, 'src');
+  const jsFiles = fs.globSync('src/**/*.js', { cwd: repoRoot })
+    .filter(p => fs.statSync(path.join(repoRoot, p)).isFile());
+
+  const offenders = [];
+  const requireRe = /require\(\s*['"](\.\.?\/[^'"]+)['"]\s*\)/g;
+  for (const rel of jsFiles) {
+    const abs = path.join(repoRoot, rel);
+    const content = fs.readFileSync(abs, 'utf8');
+    let m;
+    while ((m = requireRe.exec(content))) {
+      const target = path.resolve(path.dirname(abs), m[1]);
+      const relToSrc = path.relative(srcDir, target);
+      if (relToSrc === '..' || relToSrc.startsWith(`..${path.sep}`)) {
+        offenders.push(`  ${rel}: require('${m[1]}') -> src/${relToSrc}`);
+      }
+    }
+  }
+
+  assert.deepStrictEqual(
+    offenders,
+    [],
+    `relative require() must stay inside src/ (bundle.resources ships only ` +
+    `../src/* and its subdirectory globs, not the repo root):\n${offenders.join('\n')}`
+  );
+});
+
 // The dev overlay empties resources (RFC 7396 merge replaces arrays), keeping
 // `dev` out of the slow node_modules/junction walk.
 test('dev overlay empties bundle.resources', () => {
@@ -205,6 +246,7 @@ test('prepare-frontend copies both pages and the picker filter to the right dest
     { from: 'sessions.html', to: 'frontend/sessions.html' },
     { from: 'frontend-src/picker-filter.js', to: 'frontend/picker-filter.js' },
     { from: 'frontend-src/session-glyph.js', to: 'frontend/session-glyph.js' },
+    { from: 'frontend-src/session-info.js', to: 'frontend/session-info.js' },
     { from: 'frontend-src/picker-snapshots.js', to: 'frontend/picker-snapshots.js' },
   ];
   for (const pair of required) {

@@ -1,9 +1,8 @@
 /** Pure helpers for opening a session cwd from the picker. No I/O. */
 
-// Номер PR считает тот же модуль, что рисует метку в строке: правило одно, и
-// разъехаться ему негде. Файл фронтенда грузится и как <script>, и как модуль —
-// require здесь пользуется вторым.
-const { prNumber } = require('../../frontend-src/session-glyph');
+// Серверная копия разбора номера PR — см. комментарий в src/picker/pr-url.js
+// о том, почему это отдельный файл, а не require из frontend-src.
+const { prNumber } = require('./pr-url');
 
 const DEFAULTS = Object.freeze({
   linuxHome: '/home/popstas',
