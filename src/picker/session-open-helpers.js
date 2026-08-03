@@ -59,6 +59,9 @@ function availableActions({ cwd, cursorRunning, canMarkUnread = false }, opts = 
     ? []
     : PATH_ACTION_DEFS.filter(a => a.id !== 'cursor' || cursorRunning);
   if (canMarkUnread) actions.push({ id: 'unread', label: 'Mark unread' });
+  // Информация о сессии есть всегда: она рисуется из той же строки списка и
+  // ничего не запрашивает.
+  actions.push({ id: 'info', label: 'Session info' });
   return actions;
 }
 

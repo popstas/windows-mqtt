@@ -65,20 +65,28 @@ test('isCursorProcessPath matches Cursor.exe case-insensitively', () => {
 
 test('availableActions always includes explorer and terminal when cwd maps', () => {
   const actions = availableActions({ cwd: '/home/popstas/p', cursorRunning: false });
-  assert.deepStrictEqual(actions.map(a => a.id), ['explorer', 'terminal']);
+  assert.deepStrictEqual(actions.map(a => a.id), ['explorer', 'terminal', 'info']);
 });
 
 test('availableActions puts explorer first, then cursor when Cursor is running', () => {
   const actions = availableActions({ cwd: '/home/popstas/p', cursorRunning: true });
-  assert.deepStrictEqual(actions.map(a => a.id), ['explorer', 'cursor', 'terminal']);
+  assert.deepStrictEqual(actions.map(a => a.id), ['explorer', 'cursor', 'terminal', 'info']);
   assert.strictEqual(actions[0].label, 'Open in Explorer');
   assert.strictEqual(actions[1].label, 'Open in Cursor');
   assert.strictEqual(actions[2].label, 'Open in Terminal');
 });
 
-test('availableActions is empty when cwd cannot be mapped', () => {
-  assert.deepStrictEqual(availableActions({ cwd: '/opt/x', cursorRunning: true }), []);
-  assert.deepStrictEqual(availableActions({ cwd: '', cursorRunning: true }), []);
+test('availableActions offers only session info when cwd cannot be mapped', () => {
+  // Информация о сессии не открывает ничего на диске: путь ей не нужен, и
+  // пустое меню у такой сессии было бы просто тупиком.
+  assert.deepStrictEqual(
+    availableActions({ cwd: '/opt/x', cursorRunning: true }).map(a => a.id),
+    ['info'],
+  );
+  assert.deepStrictEqual(
+    availableActions({ cwd: '', cursorRunning: true }).map(a => a.id),
+    ['info'],
+  );
 });
 
 test('availableActions offers mark-unread when the session has an agent record', () => {
@@ -87,7 +95,7 @@ test('availableActions offers mark-unread when the session has an agent record',
   });
   assert.deepStrictEqual(
     actions.map(a => a.id),
-    ['explorer', 'terminal', 'unread'],
+    ['explorer', 'terminal', 'unread', 'info'],
   );
   assert.strictEqual(actions.find(a => a.id === 'unread').label, 'Mark unread');
 });
@@ -96,14 +104,19 @@ test('availableActions omits mark-unread without an agent record', () => {
   const actions = availableActions({
     cwd: '/home/popstas/projects/x', cursorRunning: false, canMarkUnread: false,
   });
-  assert.deepStrictEqual(actions.map(a => a.id), ['explorer', 'terminal']);
+  assert.deepStrictEqual(actions.map(a => a.id), ['explorer', 'terminal', 'info']);
 });
 
-test('availableActions still offers mark-unread when cwd cannot be mapped to Windows', () => {
-  // Пометка не открывает папку: путь ей не нужен, и сессия вне V: не должна
-  // оставаться без единственного действия, которое ей доступно.
+test('availableActions still offers mark-unread when cwd cannot be mapped', () => {
   const actions = availableActions({ cwd: '/opt/elsewhere', canMarkUnread: true });
-  assert.deepStrictEqual(actions.map(a => a.id), ['unread']);
+  assert.deepStrictEqual(actions.map(a => a.id), ['unread', 'info']);
+});
+
+test('availableActions labels the session info entry', () => {
+  assert.strictEqual(
+    availableActions({ cwd: '/home/popstas/x' }).find(a => a.id === 'info').label,
+    'Session info',
+  );
 });
 
 test('buildTerminalRemote sets SSH_STARTDIR then exec zsh -l', () => {

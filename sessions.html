@@ -125,6 +125,28 @@
         #actions-empty {
             display: none; padding: 16px; font-size: 13px; color: #868c95;
         }
+        /* Session info — тот же модал, что и меню действий: разные только
+           содержимое и ширина. */
+        #info-backdrop {
+            display: none; position: absolute; inset: 0; z-index: 10;
+            background: rgba(0, 0, 0, .45);
+            align-items: center; justify-content: center; padding: 24px;
+        }
+        #info-backdrop.open { display: flex; }
+        #info-card {
+            width: min(560px, 100%); max-height: 100%; overflow-y: auto;
+            background: #25262a; border: 1px solid #3a3d42; border-radius: 10px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, .45);
+        }
+        #info-title {
+            padding: 12px 16px 8px; font-size: 11px; color: #7d838c;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            border-bottom: 1px solid #3a3d42;
+        }
+        #info-rows { padding: 8px 0; }
+        .info-row { display: flex; gap: 12px; padding: 3px 16px; font-size: 12px; }
+        .info-row .k { flex: 0 0 96px; color: #7d838c; }
+        .info-row .v { min-width: 0; word-break: break-word; }
     </style>
 </head>
 <body>
@@ -145,9 +167,16 @@
     <div id="actions-empty">No open actions for this session.</div>
   </div>
 </div>
+<div id="info-backdrop" aria-hidden="true">
+  <div id="info-card" role="dialog">
+    <div id="info-title"></div>
+    <div id="info-rows"></div>
+  </div>
+</div>
 <script src="picker-filter.js"></script>
 <script src="picker-snapshots.js"></script>
 <script src="session-glyph.js"></script>
+<script src="session-info.js"></script>
 <script>
   let groups = [];
   let rows = [];
@@ -161,6 +190,7 @@
   let menuActions = [];
   let menuActive = 0;
   let menuSessionId = null;
+  let infoOpen = false;
 
   const search = document.getElementById('search');
   const list = document.getElementById('list');
@@ -174,6 +204,9 @@
   const actionsTitle = document.getElementById('actions-title');
   const actionsList = document.getElementById('actions-list');
   const actionsEmpty = document.getElementById('actions-empty');
+  const infoBackdrop = document.getElementById('info-backdrop');
+  const infoTitle = document.getElementById('info-title');
+  const infoRows = document.getElementById('info-rows');
 
   function paintSort() {
     sortLabel.textContent = sortMode;
@@ -329,6 +362,27 @@
     search.focus();
   }
 
+  function closeInfo() {
+    infoOpen = false;
+    infoBackdrop.classList.remove('open');
+    infoBackdrop.setAttribute('aria-hidden', 'true');
+    search.focus();
+  }
+
+  function openInfo(session) {
+    if (!session) return;
+    const nowSec = Math.floor(Date.now() / 1000);
+    infoTitle.textContent = `${session.label || session.id} — ${shortPath(session.cwd || '')}`;
+    infoRows.innerHTML = window.SessionInfo.buildSessionInfoRows(session, nowSec)
+      .map(row => `<div class="info-row"><span class="k">${escapeHtml(row.label)}</span>`
+        + `<span class="v">${escapeHtml(row.value)}</span></div>`)
+      .join('');
+    infoOpen = true;
+    infoBackdrop.classList.add('open');
+    infoBackdrop.setAttribute('aria-hidden', 'false');
+    search.blur();
+  }
+
   function paintMenu() {
     const nodes = actionsList.querySelectorAll('.action-row');
     nodes.forEach((node, i) => node.classList.toggle('active', i === menuActive));
@@ -384,6 +438,10 @@
       });
       return;
     }
+    if (actionId === 'info') {
+      openInfo(rows[active]);
+      return;
+    }
     await invoke('hide_picker');
     await invoke('picker_send', {
       action: 'windows/claude-session-open',
@@ -400,6 +458,11 @@
   search.addEventListener('input', onSearchInput);
 
   document.addEventListener('keydown', (e) => {
+    if (infoOpen) {
+      if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); closeInfo(); }
+      else if (!(e.ctrlKey || e.metaKey || e.altKey)) { e.preventDefault(); }
+      return;
+    }
     if (menuOpen) {
       if (e.key === 'ArrowDown') { e.preventDefault(); moveMenu(1); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); moveMenu(-1); }
@@ -411,6 +474,12 @@
     if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
       e.preventDefault();
       openMenu();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'i' || e.key === 'I')) {
+      e.preventDefault();
+      if (window.PickerSnapshots.isSnapshotsCommand(search.value)) return;
+      openInfo(rows[active]);
       return;
     }
     if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
@@ -451,6 +520,10 @@
     if (e.target === actionsBackdrop) closeMenu();
   });
 
+  infoBackdrop.addEventListener('click', (e) => {
+    if (e.target === infoBackdrop) closeInfo();
+  });
+
   sortControl.addEventListener('click', (e) => {
     e.preventDefault();
     if (menuOpen) return;
@@ -489,6 +562,7 @@
   // ahead of this webview finishing DOMContentLoaded (see start()).
   function beginShow() {
     closeMenu();
+    closeInfo();
     search.value = '';
     active = 0;
     snapshotRows = [];
@@ -575,6 +649,7 @@
 
     await listen('picker-hidden', () => {
       closeMenu();
+      closeInfo();
       invoke('picker_send', { action: 'windows/claude-sessions-stop' });
     });
 
