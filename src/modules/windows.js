@@ -29,6 +29,7 @@ const {
 } = require('../homeassistant/claude-sessions');
 const {throttlePress} = require('./press-throttle');
 const {createDelayedSlotOff} = require('./delayed-slot-off');
+const {createClaudeWtWatchdog, CHECK_INTERVAL_MS} = require('./claude-wt-watchdog');
 
 function claudeProjects() {
   try {
@@ -42,6 +43,7 @@ module.exports = async (mqtt, config, log) => {
   let lastStats = {};
   let statsIntervalId = null;
   let restoreTimeoutId = null;
+  let claudeWtWatchdogId = null;
 
   if (config.restoreOnStart) {
     await restoreWindows();
@@ -57,6 +59,17 @@ module.exports = async (mqtt, config, log) => {
 
   if (config.claudeWt) {
     winMan.startClaudeWt();
+    // Сторож рядом со стартом, а не в onStart(): onStart в этой кодовой базе
+    // никто не вызывает, и повешенный туда сторож никогда бы не завёлся.
+    const check = createClaudeWtWatchdog({
+      status: () => winMan.claudeWtStatus(),
+      health: (args) => winMan.claudeWtHealth(args),
+      restart: () => winMan.startClaudeWt(),
+      log,
+      silenceMs: winMan.TICK_SILENCE_MS,
+      graceMs: winMan.TICK_GRACE_MS,
+    });
+    claudeWtWatchdogId = setInterval(check, CHECK_INTERVAL_MS);
   }
 
   if (config.placeWindowOnStart) {
@@ -78,6 +91,10 @@ module.exports = async (mqtt, config, log) => {
       restoreTimeoutId = null;
     }
     if (config.placeWindowOnOpen) winMan.stopPlaceNewWindows();
+    if (claudeWtWatchdogId !== null) {
+      clearInterval(claudeWtWatchdogId);
+      claudeWtWatchdogId = null;
+    }
     if (config.claudeWt) winMan.stopClaudeWt();
     stopSessionsFeed();
     stopHomeAssistantExport();
