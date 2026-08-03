@@ -52,6 +52,7 @@ Publish to:
 
 ### keys
 - `home/room/pc/keys/press` - press a single key, you can pass several keys, space delimeted
+- `home/room/pc/keys/press-throttled` - same, but at most once a second per key combination, for physical panel buttons that bounce
 - `home/room/pc/keys/type` - type a string
 
 Keys:

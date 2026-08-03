@@ -62,6 +62,32 @@ test('each wrapper keeps its own window', () => {
   assert.deepStrictEqual(seen, ['rows', 'snapshot']);
 });
 
+test('with keyOf each value keeps its own window', () => {
+  // Топик синтеза клавиш один на все кнопки платы: без ключа нажатие на одну
+  // съедало бы нажатие на соседнюю, сделанное следом.
+  const seen = [];
+  const c = clock();
+  const press = throttlePress((topic, message) => seen.push(message),
+    { now: c.now, keyOf: (topic, message) => message });
+  press('topic', '(win)f10');
+  c.tick(100);
+  press('topic', 'audio_next');
+  c.tick(100);
+  press('topic', '(win)f10');
+  assert.deepStrictEqual(seen, ['(win)f10', 'audio_next']);
+});
+
+test('with keyOf a value returns after its own window has passed', () => {
+  const seen = [];
+  const c = clock();
+  const press = throttlePress((topic, message) => seen.push(message),
+    { now: c.now, keyOf: (topic, message) => message });
+  press('topic', '(win)f10');
+  c.tick(DEFAULT_INTERVAL_MS);
+  press('topic', '(win)f10');
+  assert.deepStrictEqual(seen, ['(win)f10', '(win)f10']);
+});
+
 test('the handler result reaches the caller, and a dropped press yields nothing', () => {
   // Обработчики подписок асинхронные: диспетчер ждёт возвращённый промис.
   const c = clock();
