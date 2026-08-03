@@ -5,13 +5,13 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+const { stopApp } = require('./stop-app');
+
 const projectRoot = path.resolve(__dirname, '..');
 const nsisDir = path.join(projectRoot, 'src-tauri', 'target', 'release', 'bundle', 'nsis');
-const installedExe = path.join(
-  process.env.LOCALAPPDATA || '',
-  'windows-mqtt',
-  'windows-mqtt.exe'
-);
+const installDir = path.join(process.env.LOCALAPPDATA || '', 'windows-mqtt');
+const installedExe = path.join(installDir, 'windows-mqtt.exe');
+const resourceRoot = path.join(installDir, '_up_');
 
 function findInstaller() {
   if (!fs.existsSync(nsisDir)) return null;
@@ -35,7 +35,7 @@ if (!installer) {
 }
 
 console.log(`Stopping windows-mqtt (with its node child)...`);
-spawnSync('taskkill', ['/IM', 'windows-mqtt.exe', '/T', '/F'], { stdio: 'inherit' });
+stopApp(resourceRoot);
 
 console.log(`Installing ${path.basename(installer)} silently...`);
 const install = spawnSync(installer, ['/S'], { stdio: 'inherit' });

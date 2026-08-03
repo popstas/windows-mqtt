@@ -13,6 +13,7 @@
 const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { stopApp } = require('./stop-app');
 
 const projectRoot = path.resolve(__dirname, '..');
 const installDir = path.join(process.env.LOCALAPPDATA || '', 'windows-mqtt');
@@ -80,7 +81,7 @@ if (stale.length) {
 }
 
 console.log('Stopping windows-mqtt (with its node child)...');
-spawnSync('taskkill', ['/IM', 'windows-mqtt.exe', '/T', '/F'], { stdio: 'inherit' });
+stopApp(resourceRoot);
 
 let copied = 0;
 for (const rel of COPY) {
