@@ -67,6 +67,15 @@
         /* Закрытая сессия — кружка нет, но место под него остаётся,
            иначе текст закрытых строк съезжает относительно живых. */
         .dot.closed { background: transparent; }
+        /* Пока держат Shift, строка под курсором показывает, что с ней сделает
+           клик: кружок становится пустой оранжевой рамкой — тем же оранжевым,
+           каким горит непросмотренная сессия. Только у строк, которые есть чем
+           пометить: обещать пометку там, где Shift+клик ничего не делает,
+           хуже, чем не обещать ничего. */
+        body.shift .row.markable:hover .dot {
+            background: transparent;
+            box-shadow: inset 0 0 0 2px #db6d28;
+        }
         .row.closed .name { color: #a8adb5; }
         .text { min-width: 0; }
         .name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -269,7 +278,7 @@
       for (const session of group.sessions) {
         const index = rows.length;
         rows.push(session);
-        html += `<div class="row ${session.open ? '' : 'closed'}" data-index="${index}"${titleAttr(session)}>` +
+        html += `<div class="row ${session.open ? '' : 'closed'}${session.agentState ? ' markable' : ''}" data-index="${index}"${titleAttr(session)}>` +
           statusDotHtml(session) +
           `<div class="text"><div class="name">${escapeHtml(session.label)}` +
           `${session.hotkey ? `<span class="hotkey">${escapeHtml(session.hotkey)}</span>` : ''}` +
@@ -462,6 +471,22 @@
 
   search.addEventListener('input', onSearchInput);
 
+  // Подсказка «что сделает Shift+клик» держится отдельно от основного
+  // обработчика keydown ниже: у того есть ранние выходы для открытых
+  // оверлеев (menuOpen/infoOpen), а подсветка от режима оверлея не зависит —
+  // Shift остаётся Shift'ом независимо от того, что сейчас открыто.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Shift') document.body.classList.add('shift');
+  });
+  document.addEventListener('keyup', (e) => {
+    if (e.key === 'Shift') document.body.classList.remove('shift');
+  });
+  // Alt+Tab с зажатым Shift уводит фокус из окна без keyup: без этого класс
+  // остался бы висеть до следующего нажатия Shift после возврата.
+  window.addEventListener('blur', () => {
+    document.body.classList.remove('shift');
+  });
+
   document.addEventListener('keydown', (e) => {
     if (infoOpen) {
       if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); closeInfo(); }
@@ -572,6 +597,10 @@
     active = 0;
     snapshotRows = [];
     snapshotsLoading = false;
+    // Показ начинается с чистого состояния: Shift, зажатый перед вызовом
+    // пикера (или отпущенный, пока окно было скрыто и события до него не
+    // доходили), не должен продолжать рисовать подсказку в новом сеансе.
+    document.body.classList.remove('shift');
     search.focus();
     search.select();
     // Clear the previous show's session list before anything else. Without
