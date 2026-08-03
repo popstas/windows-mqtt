@@ -374,6 +374,16 @@
     const id = menuSessionId;
     const actionId = action.id;
     closeMenu();
+    // Пометка непрочитанным — единственное действие, после которого смотреть
+    // надо на этот же список: кружок перекрашивается в ближайшую секунду, и
+    // сессий за раз помечают несколько.
+    if (actionId === 'unread') {
+      await invoke('picker_send', {
+        action: 'windows/claude-session-unread',
+        payload: { id },
+      });
+      return;
+    }
     await invoke('hide_picker');
     await invoke('picker_send', {
       action: 'windows/claude-session-open',
@@ -414,6 +424,19 @@
     const row = e.target.closest('.row');
     if (!row) return;
     active = Number(row.dataset.index);
+    // Shift+клик помечает непрочитанным вместо открытия. Промах по Shift не
+    // должен превращаться в открытие сессии, поэтому строка без записи агента
+    // (снимки, сессия без хука) просто ничего не делает.
+    if (e.shiftKey) {
+      if (window.PickerSnapshots.isSnapshotsCommand(search.value)) return;
+      const session = rows[active];
+      if (!session || !session.agentState) return;
+      invoke('picker_send', {
+        action: 'windows/claude-session-unread',
+        payload: { id: session.id },
+      });
+      return;
+    }
     choose();
   });
 
