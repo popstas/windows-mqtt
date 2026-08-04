@@ -47,6 +47,9 @@
             cursor: pointer; color: #7d838c;
         }
         .status-check:hover { color: #a8adb5; }
+        /* Левая половина чекбоксов (то, что рисуется под именем сессии) отбита
+           от правой (колонки справа) — к обычным 12px ещё столько же. */
+        .status-check.gap { margin-left: 12px; }
         .status-check input {
             margin: 0; accent-color: #7d838c; cursor: pointer;
         }
@@ -94,8 +97,7 @@
            не опознание — строку ищут глазами по названию и каталогу. */
         .summary { font-size: 11px; color: #6f757e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .prompt { font-size: 11px; color: #868c95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .name .hotkey { margin-left: 6px; font-size: 11px; color: #7d838c; font-weight: normal; }
-        /* Метка PR — той же тусклостью, что и подпись хоткея: опознают строку
+        /* Метка PR — той же тусклостью, что и колонка хоткея: опознают строку
            по имени и пути, это подсказка рядом. */
         .name .pr { margin-left: 6px; font-size: 11px; color: #7d838c; font-weight: normal; }
         /* Правые колонки одной группой: статус, id, контекст с деньгами,
@@ -119,6 +121,12 @@
             flex: 0 0 auto; padding-left: 10px;
             font-size: 11px; color: #7d838c; white-space: nowrap;
             font-variant-numeric: tabular-nums;
+        }
+        /* Хоткей проекта (`^F12`). Раньше стоял подписью внутри имени сессии,
+           теперь колонка — см. hotkeyHtml в session-glyph.js. */
+        .hk {
+            flex: 0 0 auto; padding-left: 10px;
+            font-size: 11px; color: #7d838c; white-space: nowrap;
         }
         /* Контекст и деньги, между статусом и возрастом. */
         .usage {
@@ -167,7 +175,7 @@
             flex: 1 1 auto; min-width: 0; overflow: hidden;
             text-overflow: ellipsis; white-space: nowrap;
         }
-        /* Прямая клавиша действия, тусклым — тем же цветом, что и .name .hotkey. */
+        /* Прямая клавиша действия, тусклым — тем же цветом, что и колонка .hk. */
         .action-hotkey {
             flex: 0 0 auto; margin-left: auto; padding-left: 12px;
             font-size: 11px; color: #7d838c;
@@ -238,15 +246,25 @@
   // Чекбоксы statusline. Ключи и умолчания те же, что в PICKER_TOGGLES
   // (src/picker/sessions-sort-config.js): оттуда они приезжают с каждым
   // списком, туда же уходят при клике и там же сохраняются в config.yml.
+  // Порядок и группы — как в самой строке списка: сначала то, что рисуется
+  // слева под именем сессии, потом, через отбивку, правые колонки. Иначе
+  // чекбоксы перечисляют то же самое в третьем порядке, и глазами их каждый
+  // раз приходится искать заново.
   const TOGGLE_CHECKS = [
-    { key: 'showPaths', label: 'paths' },
-    { key: 'showEvent', label: 'events' },
-    { key: 'showId', label: 'id' },
-    { key: 'showCost', label: 'cost' },
-    { key: 'showContext', label: 'context' },
+    { key: 'showPrompt', label: 'prompt', side: 'left' },
+    { key: 'showAnswer', label: 'answer', side: 'left' },
+    { key: 'showPaths', label: 'paths', side: 'left' },
+    { key: 'showHotkey', label: 'hotkeys', side: 'right' },
+    { key: 'showEvent', label: 'events', side: 'right' },
+    { key: 'showId', label: 'id', side: 'right' },
+    { key: 'showCost', label: 'cost', side: 'right' },
+    { key: 'showContext', label: 'context', side: 'right' },
   ];
   let toggles = {
+    showPrompt: true,
+    showAnswer: true,
     showPaths: true,
+    showHotkey: true,
     showEvent: true,
     showId: false,
     showCost: true,
@@ -301,16 +319,19 @@
   }
 
   const {
-    statusDotHtml, ageHtml, stateHtml, sessionIdHtml, usageHtml, shortPath, titleAttr,
-    escapeHtml, prBadgeHtml,
+    statusDotHtml, ageHtml, stateHtml, sessionIdHtml, sessionName, hotkeyHtml, usageHtml,
+    shortPath, titleAttr, escapeHtml, prBadgeHtml,
   } = window.SessionGlyph;
 
   // Чекбоксы статуслайна и их обработчики — из одной таблицы. Клик по самому
   // чекбоксу не должен всплывать до statusline: там висит смена сортировки.
   const toggleInputs = new Map();
-  statusChecks.innerHTML = TOGGLE_CHECKS.map(({ key, label }) =>
-    `<label class="status-check"><input type="checkbox" data-toggle="${key}"> ${escapeHtml(label)}</label>`
-  ).join('');
+  // Отбивка между половинами — на первом чекбоксе правой группы: отдельный
+  // пустой элемент-разделитель пришлось бы ещё и прятать, когда группа пуста.
+  statusChecks.innerHTML = TOGGLE_CHECKS.map(({ key, label, side }, i) => {
+    const gap = side === 'right' && TOGGLE_CHECKS[i - 1]?.side === 'left' ? ' gap' : '';
+    return `<label class="status-check${gap}"><input type="checkbox" data-toggle="${key}"> ${escapeHtml(label)}</label>`;
+  }).join('');
   for (const input of statusChecks.querySelectorAll('input[data-toggle]')) {
     const key = input.dataset.toggle;
     toggleInputs.set(key, input);
@@ -394,7 +415,6 @@
         const html = `<div class="row ${session.open ? '' : 'closed'}${session.agentState ? ' markable' : ''}" data-index="${index}"${titleAttr(session)}>` +
           statusDotHtml(session) +
           `<div class="text"><div class="name">${escapeHtml(session.label)}` +
-          `${session.hotkey ? `<span class="hotkey">${escapeHtml(session.hotkey)}</span>` : ''}` +
           `${prBadgeHtml(session)}` +
           `</div>` +
           (toggles.showPaths
@@ -403,9 +423,9 @@
           // всё равно занял бы высоту, поэтому рисуем только то, что есть.
           // Склейку «сводка, а у работающей — последняя» считает windows11-manager
           // (`agentDescription`): та же строка уходит в Home Assistant и на плату.
-          (session.agentPrompt
+          (toggles.showPrompt && session.agentPrompt
             ? `<div class="prompt">${escapeHtml(session.agentPrompt)}</div>` : '') +
-          (session.agentDescription
+          (toggles.showAnswer && session.agentDescription
             ? `<div class="summary">${escapeHtml(session.agentDescription)}</div>` : '') +
           `</div>` +
           // Правые колонки — одной группой: она и прижимает их вправо. Порознь
@@ -414,6 +434,7 @@
           `<div class="meta">` +
           stateHtml(session, toggles.showEvent) +
           sessionIdHtml(session, toggles.showId) +
+          hotkeyHtml(session, toggles.showHotkey) +
           usageHtml(session, toggles) +
           ageHtml(session, nowSec) +
           `</div></div>`;
@@ -508,7 +529,9 @@
   function openInfo(session) {
     if (!session) return;
     const nowSec = Math.floor(Date.now() / 1000);
-    infoTitle.textContent = `${session.label || session.id} — ${shortPath(session.cwd || '')}`;
+    // Не label: в нём у сессий-двойников висит хвост «(abcd)», а полный id
+    // и так стоит первой строкой таблицы — см. sessionName.
+    infoTitle.textContent = `${sessionName(session)} — ${shortPath(session.cwd || '')}`;
     infoRows.innerHTML = window.SessionInfo.buildSessionInfoRows(session, nowSec)
       .map(row => `<div class="info-row"><span class="k">${escapeHtml(row.label)}</span>`
         + `<span class="v">${escapeHtml(row.value)}</span></div>`)
@@ -528,8 +551,9 @@
     menuSessionId = data.id;
     menuActions = data.actions || [];
     menuActive = 0;
-    const title = data.label
-      ? `${data.label} — ${shortPath(data.cwd || '')}`
+    const name = data.label ? sessionName(data) : '';
+    const title = name
+      ? `${name} — ${shortPath(data.cwd || '')}`
       : shortPath(data.cwd || '') || 'Session';
     actionsTitle.textContent = title;
     if (!menuActions.length) {

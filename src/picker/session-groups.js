@@ -1,7 +1,5 @@
 /** Pure shaping of the claude-wt session list for the picker. No I/O. */
 
-const SEP = '\u0000';
-
 // Сессия с неизвестным столом сортируется перед всеми настоящими.
 const DESKTOP_UNKNOWN = -1;
 
@@ -19,23 +17,20 @@ function cycleSort(mode) {
 }
 
 /**
- * Disambiguate rows that would read identically.
+ * Имя, под которым сессию видно везде: строка списка, поиск, заголовок диалога,
+ * текст слота на панели openHASP.
  *
- * Two slots can share both name and project — the same session reopened, or one
- * live and one stale. Nothing else on the row differs, so choosing between them
- * becomes a guess; a short id prefix is the cheapest thing that does not.
+ * Раньше здесь же двойники — одинаковые имя и проект, то есть переоткрытая
+ * сессия или пара «живая и протухшая» — получали к имени хвост из четырёх
+ * знаков id: больше на строке ничего не различалось. Теперь у короткого id своя
+ * колонка со своим чекбоксом, и хвост стал вторым способом показать то же самое
+ * — в имени, где он мешает и в списке, и в заголовках диалогов, и на панели.
+ *
+ * Ничего, кроме показа, на label не завязано: строки списка узнаются по
+ * `s:<id>`, слоты панели носят с собой `id`, фокус уходит тоже по id.
  */
 function labelSessions(sessions) {
-  const counts = new Map();
-  for (const s of sessions) {
-    const key = `${s.title}${SEP}${s.cwd}`;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  return sessions.map(s => {
-    const key = `${s.title}${SEP}${s.cwd}`;
-    const label = counts.get(key) > 1 ? `${s.title} (${String(s.id).slice(0, 4)})` : s.title;
-    return { ...s, label };
-  });
+  return sessions.map(s => ({ ...s, label: s.title }));
 }
 
 function desktopLabel(desktop) {

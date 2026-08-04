@@ -81,7 +81,10 @@ test('setSessionsSortInYaml round-trips through a real file', () => {
 // событие, деньги и контекст были видны всегда, id — нет.
 test('PICKER_TOGGLES keeps the pre-checkbox look as the default', () => {
   assert.deepStrictEqual(PICKER_TOGGLES, {
+    showPrompt: true,
+    showAnswer: true,
     showPaths: true,
+    showHotkey: true,
     showEvent: true,
     showId: false,
     showCost: true,
@@ -107,7 +110,10 @@ test('readToggleFromConfig honours each key own default', () => {
 
 test('readTogglesFromConfig returns every toggle at once', () => {
   assert.deepStrictEqual(readTogglesFromConfig({ showEvent: false, showId: true }), {
+    showPrompt: true,
+    showAnswer: true,
     showPaths: true,
+    showHotkey: true,
     showEvent: false,
     showId: true,
     showCost: true,

@@ -16,13 +16,17 @@ test('labelSessions leaves a unique name alone', () => {
   assert.strictEqual(out[0].label, 'ccfzf');
 });
 
-test('labelSessions disambiguates identical name and project with an id prefix', () => {
+// Двойников — переоткрытую сессию или пару «живая и протухшая» — раньше
+// различал хвост из четырёх знаков id прямо в имени. Теперь это делает колонка
+// короткого id со своим чекбоксом, а имя остаётся именем: тот же хвост тянулся
+// в заголовки диалогов и в текст слота на панели, где он не нужен вовсе.
+test('labelSessions leaves duplicates to the id column', () => {
   const out = labelSessions([
     s({ id: 'aaaa1111', title: 'agent', cwd: '/p/agent' }),
     s({ id: 'bbbb2222', title: 'agent', cwd: '/p/agent' }),
   ]);
-  assert.strictEqual(out[0].label, 'agent (aaaa)');
-  assert.strictEqual(out[1].label, 'agent (bbbb)');
+  assert.strictEqual(out[0].label, 'agent');
+  assert.strictEqual(out[1].label, 'agent');
 });
 
 test('labelSessions leaves same name in different projects alone', () => {
@@ -163,10 +167,9 @@ test('buildSessionsPayload labels and groups sessions on the ok path', () => {
   // groupSessions ran: two closed sessions on different desktops became two
   // groups, sorted ascending (2 before 1 in the input, 1 before 2 in output).
   assert.deepStrictEqual(payload.groups.map(g => g.label), ['Desktop 1', 'Desktop 2']);
-  // labelSessions ran: the duplicate title+cwd pair got disambiguated with an id
-  // prefix rather than passing the raw sessions through untouched.
-  assert.strictEqual(payload.groups[0].sessions[0].label, 'agent (bbbb)');
-  assert.strictEqual(payload.groups[1].sessions[0].label, 'agent (aaaa)');
+  // labelSessions ran: у каждой строки есть label, а не только заголовок окна.
+  assert.strictEqual(payload.groups[0].sessions[0].label, 'agent');
+  assert.strictEqual(payload.groups[1].sessions[0].label, 'agent');
 });
 
 test('buildSessionsPayload carries the chosen sort mode', () => {

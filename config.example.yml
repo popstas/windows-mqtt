@@ -234,9 +234,16 @@ modules:
     # statusline внизу списка и пишется сюда же без перезаписи всего файла.
     sessionsSort: cost
     # Чекбоксы в statusline пикера. Каждый переключается кликом и пишется сюда
-    # же; подписи в списке — paths, events, id, cost, context.
+    # же. Слева, под именем сессии — prompt, answer, paths; справа отдельными
+    # колонками — hotkeys, events, id, cost, context.
+    # Последний запрос человека.
+    showPrompt: true
+    # Сводка последнего ответа агента.
+    showAnswer: true
     # Строка cwd под именем сессии.
     showPaths: true
+    # Хоткей проекта из claudeWt.projects (^F11, ^F12) отдельной колонкой.
+    showHotkey: true
     # Текст agent state/event (idle, attention, …).
     showEvent: true
     # Короткий id сессии — то же, чем её называет claude --resume.

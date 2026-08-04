@@ -130,6 +130,33 @@
     return `<div class="sid">${escapeHtml(shortSessionId(session))}</div>`;
   }
 
+  /**
+   * Имя сессии для заголовка диалога.
+   *
+   * Меню действий приходит с одним `label` и без заголовка окна, список — с
+   * обоими; безымянная сессия остаётся с id, потому что пустой заголовок не
+   * сообщает ничего.
+   */
+  function sessionName(session) {
+    return session?.title || session?.label || String(session?.id ?? '');
+  }
+
+  /**
+   * Хоткей проекта (`^F12`) отдельной колонкой.
+   *
+   * Раньше он висел подписью прямо в имени сессии и рвал её на двух местах: имя
+   * обрезается многоточием, и подпись то уезжала за край, то отталкивала метку
+   * PR. У проекта хоткей один на все его сессии, так что читается он как
+   * признак строки, а не как часть названия, — и колонка ему подходит больше.
+   *
+   * Пустой элемент вместо пропуска у сессий без хоткея: колонки справа стоят
+   * друг за другом, и дырка сдвинула бы соседние строки.
+   */
+  function hotkeyHtml(session, showHotkey = true) {
+    if (!showHotkey) return '';
+    return `<div class="hk">${escapeHtml(session?.hotkey ?? '')}</div>`;
+  }
+
   // Пороги подсветки контекста. До тридцати процентов заполненность ничего не
   // значит — она такая у любой сессии после пары ходов, и красить её значило бы
   // красить весь список. Дальше это уже предупреждение: за сорока процентами
@@ -279,7 +306,7 @@
 
   return {
     statusDotHtml, formatAge, ageHtml, stateText, shortSessionId, stateHtml,
-    sessionIdHtml, contextLevel, usageHtml,
+    sessionIdHtml, sessionName, hotkeyHtml, contextLevel, usageHtml,
     shortPath, rowTitle, titleAttr, escapeHtml,
     prNumber, prBadgeHtml,
   };

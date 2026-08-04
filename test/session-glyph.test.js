@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const {
   escapeHtml, statusDotHtml, formatAge, ageHtml, stateText, shortSessionId, stateHtml,
-  sessionIdHtml, contextLevel, usageHtml,
+  sessionIdHtml, sessionName, hotkeyHtml, contextLevel, usageHtml,
   shortPath, rowTitle, titleAttr,
   prNumber, prBadgeHtml,
 } = require('../frontend-src/session-glyph');
@@ -367,6 +367,27 @@ test('a toggled-off column leaves no element behind', () => {
     usageHtml(session, { showCost: true, showContext: false }),
     '<div class="usage"><span class="cost">$2</span></div>'
   );
+});
+
+// Заголовок диалога рисуется и из строки списка (есть и title, и label), и из
+// ответа меню действий (только label). Скобки с id в него больше не приезжают:
+// их не приписывает и labelSessions.
+test('sessionName takes whatever name the caller has', () => {
+  assert.strictEqual(sessionName({ title: 'ExpertizeMe', label: 'ExpertizeMe' }), 'ExpertizeMe');
+  assert.strictEqual(sessionName({ label: 'ExpertizeMe' }), 'ExpertizeMe');
+  assert.strictEqual(sessionName({ title: 'build (nightly)' }), 'build (nightly)');
+  // Имени нет вовсе — остаётся id: пустой заголовок ничего не сообщает.
+  assert.strictEqual(sessionName({ label: '', id: 'ea567ed1-4308' }), 'ea567ed1-4308');
+  assert.strictEqual(sessionName(undefined), '');
+});
+
+// Хоткей проекта переехал из имени сессии в свою колонку: у сессий без проекта
+// элемент остаётся пустым, иначе соседние колонки разъезжались бы по строкам.
+test('hotkeyHtml is a column of its own, empty when the project has no key', () => {
+  assert.strictEqual(hotkeyHtml({ hotkey: '^F12' }, true), '<div class="hk">^F12</div>');
+  assert.strictEqual(hotkeyHtml({}, true), '<div class="hk"></div>');
+  assert.strictEqual(hotkeyHtml({ hotkey: '^F12' }), '<div class="hk">^F12</div>');
+  assert.strictEqual(hotkeyHtml({ hotkey: '^F12' }, false), '');
 });
 
 test('shortSessionId names the agent that is writing, not the one it forked from', () => {
