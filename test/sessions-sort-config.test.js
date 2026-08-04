@@ -3,7 +3,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { setSessionsSortInYaml, readSessionsSortFromConfig, readHaSessionsSort, readShowPathsFromConfig, setShowPathsInYaml, readShowEventFromConfig, setShowEventInYaml } = require('../src/picker/sessions-sort-config');
+const { setSessionsSortInYaml, readSessionsSortFromConfig, readHaSessionsSort, PICKER_TOGGLES, isPickerToggle, readToggleFromConfig, readTogglesFromConfig, normalizeToggle, setToggleInYaml } = require('../src/picker/sessions-sort-config');
 
 test('setSessionsSortInYaml replaces an existing sessionsSort line', () => {
   const src =
@@ -77,46 +77,79 @@ test('setSessionsSortInYaml round-trips through a real file', () => {
   }
 });
 
-test('readShowPathsFromConfig defaults to true', () => {
-  assert.strictEqual(readShowPathsFromConfig(null), true);
-  assert.strictEqual(readShowPathsFromConfig({}), true);
-  assert.strictEqual(readShowPathsFromConfig({ showPaths: false }), false);
-  assert.strictEqual(readShowPathsFromConfig({ modules: { windows: { showPaths: false } } }), false);
-  assert.strictEqual(readShowPathsFromConfig({ showPaths: true }), true);
+// Умолчания — это ещё и вид списка до того, как чекбоксы появились: путь,
+// событие, деньги и контекст были видны всегда, id — нет.
+test('PICKER_TOGGLES keeps the pre-checkbox look as the default', () => {
+  assert.deepStrictEqual(PICKER_TOGGLES, {
+    showPaths: true,
+    showEvent: true,
+    showId: false,
+    showCost: true,
+    showContext: true,
+  });
 });
 
-test('setShowPathsInYaml replaces or inserts under windows', () => {
+test('readToggleFromConfig takes either the windows slice or the full config', () => {
+  assert.strictEqual(readToggleFromConfig(null, 'showPaths'), true);
+  assert.strictEqual(readToggleFromConfig({}, 'showPaths'), true);
+  assert.strictEqual(readToggleFromConfig({ showPaths: false }, 'showPaths'), false);
+  assert.strictEqual(
+    readToggleFromConfig({ modules: { windows: { showPaths: false } } }, 'showPaths'), false);
+  assert.strictEqual(readToggleFromConfig({ showPaths: true }, 'showPaths'), true);
+});
+
+test('readToggleFromConfig honours each key own default', () => {
+  assert.strictEqual(readToggleFromConfig({}, 'showId'), false);
+  assert.strictEqual(readToggleFromConfig({ showId: true }, 'showId'), true);
+  assert.strictEqual(readToggleFromConfig({}, 'showCost'), true);
+  assert.strictEqual(readToggleFromConfig({ showContext: false }, 'showContext'), false);
+});
+
+test('readTogglesFromConfig returns every toggle at once', () => {
+  assert.deepStrictEqual(readTogglesFromConfig({ showEvent: false, showId: true }), {
+    showPaths: true,
+    showEvent: false,
+    showId: true,
+    showCost: true,
+    showContext: true,
+  });
+  assert.deepStrictEqual(Object.keys(readTogglesFromConfig({})), Object.keys(PICKER_TOGGLES));
+});
+
+// Ключ приходит из payload пикера, а по нему потом пишут в config.yml.
+test('isPickerToggle rejects anything not in the table', () => {
+  assert.strictEqual(isPickerToggle('showPaths'), true);
+  assert.strictEqual(isPickerToggle('showContext'), true);
+  assert.strictEqual(isPickerToggle('sessionsSort'), false);
+  assert.strictEqual(isPickerToggle('__proto__'), false);
+  assert.strictEqual(isPickerToggle('toString'), false);
+  assert.strictEqual(isPickerToggle(undefined), false);
+});
+
+test('normalizeToggle falls back to the key own default', () => {
+  assert.strictEqual(normalizeToggle('showId', undefined), false);
+  assert.strictEqual(normalizeToggle('showPaths', undefined), true);
+  assert.strictEqual(normalizeToggle('showId', 'true'), true);
+  assert.strictEqual(normalizeToggle('showCost', 'off'), false);
+});
+
+test('setToggleInYaml replaces or inserts under windows', () => {
   const withKey =
     'modules:\n' +
     '  windows:\n' +
     '    sessionsSort: cost\n' +
     '    showPaths: true\n';
-  assert.match(setShowPathsInYaml(withKey, false), /^\s*showPaths:\s*false\s*$/m);
-  assert.doesNotMatch(setShowPathsInYaml(withKey, false), /showPaths:\s*true/);
+  assert.match(setToggleInYaml(withKey, 'showPaths', false), /^\s*showPaths:\s*false\s*$/m);
+  assert.doesNotMatch(setToggleInYaml(withKey, 'showPaths', false), /showPaths:\s*true/);
 
   const missing =
     'modules:\n' +
     '  windows:\n' +
     '    sessionsSort: cost\n';
-  assert.match(setShowPathsInYaml(missing, false), /windows:\n\s+showPaths: false\n\s+sessionsSort: cost/);
-});
-
-test('readShowEventFromConfig defaults to true', () => {
-  assert.strictEqual(readShowEventFromConfig(null), true);
-  assert.strictEqual(readShowEventFromConfig({ showEvent: false }), false);
-  assert.strictEqual(readShowEventFromConfig({ modules: { windows: { showEvent: false } } }), false);
-});
-
-test('setShowEventInYaml replaces or inserts under windows', () => {
-  const withKey =
-    'modules:\n' +
-    '  windows:\n' +
-    '    showEvent: true\n';
-  assert.match(setShowEventInYaml(withKey, false), /^\s*showEvent:\s*false\s*$/m);
-
-  const missing =
-    'modules:\n' +
-    '  windows:\n' +
-    '    sessionsSort: cost\n';
-  assert.match(setShowEventInYaml(missing, false), /windows:\n\s+showEvent: false\n\s+sessionsSort: cost/);
+  assert.match(setToggleInYaml(missing, 'showEvent', false),
+    /windows:\n\s+showEvent: false\n\s+sessionsSort: cost/);
+  assert.match(setToggleInYaml(missing, 'showContext', false),
+    /windows:\n\s+showContext: false\n\s+sessionsSort: cost/);
+  assert.match(setToggleInYaml(missing, 'showId', true),
+    /windows:\n\s+showId: true\n\s+sessionsSort: cost/);
 });

@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const {
   escapeHtml, statusDotHtml, formatAge, ageHtml, stateText, shortSessionId, stateHtml,
-  contextLevel, usageHtml,
+  sessionIdHtml, contextLevel, usageHtml,
   shortPath, rowTitle, titleAttr,
   prNumber, prBadgeHtml,
 } = require('../frontend-src/session-glyph');
@@ -343,12 +343,30 @@ test('statusDotHtml keeps a stopped session orange until its window is focused',
   );
 });
 
-test('stateHtml shows the session id in place of the event when events are off', () => {
-  // Одно место на два вопроса «что это за строка»: колонка та же, чтобы
-  // остальные справа не разъезжались от переключателя.
+// Раньше id и событие делили одну колонку: выключенное событие показывало id.
+// Теперь у каждого свой чекбокс, и они независимы — в том числе оба сразу.
+test('sessionIdHtml is its own column, independent of the event one', () => {
   const session = { open: true, id: 'e8afde49-4254-4c64-970e-46c05bf5d516', agentState: 'active' };
-  assert.strictEqual(stateHtml(session, false), '<div class="state">e8af</div>');
+  assert.strictEqual(sessionIdHtml(session, true), '<div class="sid">e8af</div>');
+  assert.strictEqual(sessionIdHtml(session, false), '');
+  assert.strictEqual(sessionIdHtml(session), '', 'id занимает место — по умолчанию выключен');
   assert.strictEqual(stateHtml(session, true), '<div class="state">active</div>');
+});
+
+// Выключенный чекбокс убирает колонку сразу у всего списка, и распорка под неё
+// не нужна — в отличие от строки, у которой просто нет данных.
+test('a toggled-off column leaves no element behind', () => {
+  const session = { open: true, agentState: 'active', agentContextPct: 13, agentCostUsd: 2 };
+  assert.strictEqual(stateHtml(session, false), '');
+  assert.strictEqual(usageHtml(session, { showCost: false, showContext: false }), '');
+  assert.strictEqual(
+    usageHtml(session, { showCost: false, showContext: true }),
+    '<div class="usage"><span class="ctx">13%</span></div>'
+  );
+  assert.strictEqual(
+    usageHtml(session, { showCost: true, showContext: false }),
+    '<div class="usage"><span class="cost">$2</span></div>'
+  );
 });
 
 test('shortSessionId names the agent that is writing, not the one it forked from', () => {

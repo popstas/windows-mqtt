@@ -98,10 +98,27 @@
         /* Метка PR — той же тусклостью, что и подпись хоткея: опознают строку
            по имени и пути, это подсказка рядом. */
         .name .pr { margin-left: 6px; font-size: 11px; color: #7d838c; font-weight: normal; }
-        /* Текстовый статус агента, прижат вправо вместе с возрастом. */
+        /* Правые колонки одной группой: статус, id, контекст с деньгами,
+           возраст. Прижимает их сюда именно она — раньше это делала `.state`
+           своим margin-left: auto, и выключенный чекбокс события уносил
+           остальные колонки к названию сессии. Теперь любая колонка может
+           пропасть, а группа останется справа. */
+        .meta {
+            flex: 0 0 auto; margin-left: auto;
+            display: flex; align-items: center; gap: 12px;
+        }
+        /* Текстовый статус агента. */
         .state {
-            flex: 0 0 auto; margin-left: auto; padding-left: 10px;
+            flex: 0 0 auto; padding-left: 10px;
             font-size: 11px; color: #7d838c; white-space: nowrap;
+        }
+        /* Короткий id сессии — тем же, чем `claude --resume` и имя транскрипта.
+           Моноширинные цифры, как у контекста и возраста: колонка из четырёх
+           знаков не должна дышать от строки к строке. */
+        .sid {
+            flex: 0 0 auto; padding-left: 10px;
+            font-size: 11px; color: #7d838c; white-space: nowrap;
+            font-variant-numeric: tabular-nums;
         }
         /* Контекст и деньги, между статусом и возрастом. */
         .usage {
@@ -189,10 +206,9 @@
 <div id="statusline">
   <span id="sort-control" title="Click to change sort"><span class="icon">⇅</span><span id="sort-label">cost</span></span>
   <span id="menu-hint">^K - Session menu</span>
-  <span class="status-checks">
-    <label class="status-check"><input type="checkbox" id="show-paths" checked> Show paths</label>
-    <label class="status-check"><input type="checkbox" id="show-event" checked> Show event</label>
-  </span>
+  <!-- Наполняется из TOGGLE_CHECKS: разметка и обработчики не должны
+       расходиться в именах ключей. -->
+  <span class="status-checks" id="status-checks"></span>
 </div>
 <div id="actions-backdrop" aria-hidden="true">
   <div id="actions-menu" role="menu">
@@ -219,8 +235,23 @@
   let snapshotsLoading = false;
   let active = 0;
   let sortMode = 'cost';
-  let showPaths = true;
-  let showEvent = true;
+  // Чекбоксы statusline. Ключи и умолчания те же, что в PICKER_TOGGLES
+  // (src/picker/sessions-sort-config.js): оттуда они приезжают с каждым
+  // списком, туда же уходят при клике и там же сохраняются в config.yml.
+  const TOGGLE_CHECKS = [
+    { key: 'showPaths', label: 'paths' },
+    { key: 'showEvent', label: 'events' },
+    { key: 'showId', label: 'id' },
+    { key: 'showCost', label: 'cost' },
+    { key: 'showContext', label: 'context' },
+  ];
+  let toggles = {
+    showPaths: true,
+    showEvent: true,
+    showId: false,
+    showCost: true,
+    showContext: true,
+  };
   let menuOpen = false;
   let menuActions = [];
   let menuActive = 0;
@@ -251,8 +282,7 @@
   const statusline = document.getElementById('statusline');
   const sortControl = document.getElementById('sort-control');
   const sortLabel = document.getElementById('sort-label');
-  const showPathsCheckbox = document.getElementById('show-paths');
-  const showEventCheckbox = document.getElementById('show-event');
+  const statusChecks = document.getElementById('status-checks');
   const actionsBackdrop = document.getElementById('actions-backdrop');
   const actionsTitle = document.getElementById('actions-title');
   const actionsList = document.getElementById('actions-list');
@@ -265,23 +295,41 @@
     sortLabel.textContent = sortMode;
   }
 
-  function paintShowPaths() {
-    showPathsCheckbox.checked = showPaths;
-  }
-
-  function paintShowEvent() {
-    showEventCheckbox.checked = showEvent;
-  }
-
   function invoke(cmd, args) {
     if (!window.__TAURI__) return Promise.resolve();
     return window.__TAURI__.core.invoke(cmd, args);
   }
 
   const {
-    statusDotHtml, ageHtml, stateHtml, usageHtml, shortPath, titleAttr, escapeHtml,
-    prBadgeHtml,
+    statusDotHtml, ageHtml, stateHtml, sessionIdHtml, usageHtml, shortPath, titleAttr,
+    escapeHtml, prBadgeHtml,
   } = window.SessionGlyph;
+
+  // Чекбоксы статуслайна и их обработчики — из одной таблицы. Клик по самому
+  // чекбоксу не должен всплывать до statusline: там висит смена сортировки.
+  const toggleInputs = new Map();
+  statusChecks.innerHTML = TOGGLE_CHECKS.map(({ key, label }) =>
+    `<label class="status-check"><input type="checkbox" data-toggle="${key}"> ${escapeHtml(label)}</label>`
+  ).join('');
+  for (const input of statusChecks.querySelectorAll('input[data-toggle]')) {
+    const key = input.dataset.toggle;
+    toggleInputs.set(key, input);
+    input.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+    input.addEventListener('change', () => {
+      toggles[key] = input.checked;
+      render();
+      invoke('picker_send', {
+        action: 'windows/claude-sessions-toggle',
+        payload: { key, value: input.checked },
+      });
+    });
+  }
+
+  function paintToggles() {
+    for (const [key, input] of toggleInputs) input.checked = !!toggles[key];
+  }
 
   // Что сейчас нарисовано: ключи в порядке DOM и разметка каждого элемента.
   // Решение, что из этого менять, считает planListSync (picker-list-sync.js);
@@ -349,7 +397,7 @@
           `${session.hotkey ? `<span class="hotkey">${escapeHtml(session.hotkey)}</span>` : ''}` +
           `${prBadgeHtml(session)}` +
           `</div>` +
-          (showPaths
+          (toggles.showPaths
             ? `<div class="cwd">${escapeHtml(shortPath(session.cwd))}</div>` : '') +
           // Две строки под карточкой: что спросили и чем ответили. Пустой div
           // всё равно занял бы высоту, поэтому рисуем только то, что есть.
@@ -360,7 +408,15 @@
           (session.agentDescription
             ? `<div class="summary">${escapeHtml(session.agentDescription)}</div>` : '') +
           `</div>` +
-          stateHtml(session, showEvent) + usageHtml(session) + ageHtml(session, nowSec) + `</div>`;
+          // Правые колонки — одной группой: она и прижимает их вправо. Порознь
+          // это делала `.state` своим margin-left: auto, и стоило снять с неё
+          // чекбокс, как всё съезжало к названию сессии.
+          `<div class="meta">` +
+          stateHtml(session, toggles.showEvent) +
+          sessionIdHtml(session, toggles.showId) +
+          usageHtml(session, toggles) +
+          ageHtml(session, nowSec) +
+          `</div></div>`;
         items.push({ key: `s:${session.id}`, html });
       }
     }
@@ -679,32 +735,6 @@
     invoke('picker_send', { action: 'windows/claude-sessions-sort-cycle' });
   });
 
-  showPathsCheckbox.addEventListener('click', (e) => {
-    e.stopPropagation();
-  });
-
-  showPathsCheckbox.addEventListener('change', () => {
-    showPaths = showPathsCheckbox.checked;
-    render();
-    invoke('picker_send', {
-      action: 'windows/claude-sessions-show-paths',
-      payload: { showPaths },
-    });
-  });
-
-  showEventCheckbox.addEventListener('click', (e) => {
-    e.stopPropagation();
-  });
-
-  showEventCheckbox.addEventListener('change', () => {
-    showEvent = showEventCheckbox.checked;
-    render();
-    invoke('picker_send', {
-      action: 'windows/claude-sessions-show-event',
-      payload: { showEvent },
-    });
-  });
-
   // Reset the palette for a show and (re)start the feed. Called both from the
   // 'picker-shown' listener (every show after the window has finished
   // loading) and, once, directly from start() to cover the show that raced
@@ -775,11 +805,13 @@
       }
       groups = data.groups || [];
       if (data.sort) sortMode = data.sort;
-      if (typeof data.showPaths === 'boolean') showPaths = data.showPaths;
-      if (typeof data.showEvent === 'boolean') showEvent = data.showEvent;
+      // Состояние чекбоксов — из конфига, а не из того, что помнит страница:
+      // пикер живёт между показами, а config.yml могли поправить руками.
+      for (const { key } of TOGGLE_CHECKS) {
+        if (typeof data[key] === 'boolean') toggles[key] = data[key];
+      }
       paintSort();
-      paintShowPaths();
-      paintShowEvent();
+      paintToggles();
       render();
     });
 

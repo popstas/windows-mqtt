@@ -8,8 +8,7 @@ const {labelSessions} = require('../picker/session-groups');
 const {buildSlots, sessionIdForSlot} = require('../picker/session-slots');
 const {
   readSessionsSortFromConfig, readHaSessionsSort, persistSessionsSort,
-  readShowPathsFromConfig, persistShowPaths,
-  readShowEventFromConfig, persistShowEvent,
+  readTogglesFromConfig, isPickerToggle, normalizeToggle, persistToggle,
 } = require('../picker/sessions-sort-config');
 const {
   DEFAULTS: sessionOpenDefaults,
@@ -719,8 +718,7 @@ module.exports = async (mqtt, config, log) => {
     };
     mqtt.sendEvent('claude-wt-sessions', {
       ...buildSessionsPayload(withHotkeys, sort),
-      showPaths: readShowPathsFromConfig(config),
-      showEvent: readShowEventFromConfig(config),
+      ...readTogglesFromConfig(config),
     });
   }
 
@@ -745,34 +743,33 @@ module.exports = async (mqtt, config, log) => {
     scheduleHaRefresh(0);
   }
 
-  function setSessionsShowPaths(payload) {
-    const next = readShowPathsFromConfig({ showPaths: payload?.showPaths });
-    try {
-      persistShowPaths({
-        moduleConfig: config,
-        globalConfig,
-        showPaths: next,
-        configPath: resolveAppFile('config.yml', 'CONFIG'),
-      });
-    } catch (e) {
-      log(`claude-wt showPaths persist failed: ${e.message}`, 'error');
-      config.showPaths = next;
+  /**
+   * Чекбокс statusline пикера: `{key, value}`, ключ — из PICKER_TOGGLES.
+   *
+   * Одна точка на все чекбоксы: у каждого иначе был бы свой почти одинаковый
+   * обработчик и своё действие. Незнакомый ключ отбрасывается — payload
+   * приходит снаружи, а `config[key] = …` записал бы в конфиг что угодно.
+   */
+  function setSessionsToggle(payload) {
+    const key = payload?.key;
+    if (!isPickerToggle(key)) {
+      log(`claude-wt unknown picker toggle: ${key}`, 'warn');
+      return;
     }
-    sendSessions();
-  }
-
-  function setSessionsShowEvent(payload) {
-    const next = readShowEventFromConfig({ showEvent: payload?.showEvent });
+    const next = normalizeToggle(key, payload?.value);
     try {
-      persistShowEvent({
+      persistToggle({
+        key,
+        value: next,
         moduleConfig: config,
         globalConfig,
-        showEvent: next,
         configPath: resolveAppFile('config.yml', 'CONFIG'),
       });
     } catch (e) {
-      log(`claude-wt showEvent persist failed: ${e.message}`, 'error');
-      config.showEvent = next;
+      // In-memory still updated so the UI reflects the click even if the file
+      // write failed (read-only install, missing config.yml, …).
+      log(`claude-wt ${key} persist failed: ${e.message}`, 'error');
+      config[key] = next;
     }
     sendSessions();
   }
@@ -1034,8 +1031,7 @@ module.exports = async (mqtt, config, log) => {
     'windows/claude-sessions-start': () => startSessionsFeed(),
     'windows/claude-sessions-stop': () => stopSessionsFeed(),
     'windows/claude-sessions-sort-cycle': () => cycleSessionsSort(),
-    'windows/claude-sessions-show-paths': (payload) => setSessionsShowPaths(payload),
-    'windows/claude-sessions-show-event': (payload) => setSessionsShowEvent(payload),
+    'windows/claude-sessions-toggle': (payload) => setSessionsToggle(payload),
     'windows/claude-restore-one': (payload) => claudeRestoreOne(payload),
     'windows/claude-snapshots': () => sendSnapshots(),
     'windows/claude-snapshot-restore': (payload) => claudeSnapshotRestorePayload(payload),

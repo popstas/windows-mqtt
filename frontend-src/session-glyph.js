@@ -108,13 +108,26 @@
   }
 
   /**
-   * Правая колонка перед контекстом: статус агента, а с выключенным «show
-   * event» — id сессии. Место одно и то же, потому что вопрос один: «что это за
-   * строка». Пустой элемент вместо пропуска — иначе колонки справа разъедутся.
+   * Статус агента в правой колонке.
+   *
+   * Выключенный чекбокс убирает колонку целиком, а не рисует пустую. Пустой
+   * элемент нужен там, где у соседних строк колонка есть: без него правые
+   * колонки разъезжаются. Чекбокс же выключен сразу у всего списка — и
+   * разъезжаться нечему.
+   *
+   * Раньше эта колонка с выключенным «show event» показывала id: место одно,
+   * вопрос один — «что это за строка». Теперь у id свой чекбокс, и обе величины
+   * могут стоять рядом.
    */
   function stateHtml(session, showEvent = true) {
-    const text = showEvent ? stateText(session) : shortSessionId(session);
-    return `<div class="state">${escapeHtml(text)}</div>`;
+    if (!showEvent) return '';
+    return `<div class="state">${escapeHtml(stateText(session))}</div>`;
+  }
+
+  /** Короткий id сессии отдельной колонкой; чем он полезен — см. shortSessionId. */
+  function sessionIdHtml(session, showId = false) {
+    if (!showId) return '';
+    return `<div class="sid">${escapeHtml(shortSessionId(session))}</div>`;
   }
 
   // Пороги подсветки контекста. До тридцати процентов заполненность ничего не
@@ -142,13 +155,16 @@
    * статуслайна стоит не у каждой сессии (см. claude-wt-statusline.sh). Такая
    * часть просто не показывается.
    */
-  function usageHtml(session) {
+  function usageHtml(session, { showCost = true, showContext = true } = {}) {
+    // Обе величины выключены — колонки нет вовсе; см. stateHtml о том, почему
+    // выключенный чекбокс не оставляет за собой пустой элемент.
+    if (!showCost && !showContext) return '';
     const pct = Number.isFinite(session?.agentContextPct) ? session.agentContextPct : 0;
     const cost = Number.isFinite(session?.agentCostUsd) ? session.agentCostUsd : 0;
     const parts = [];
     const level = contextLevel(pct);
-    if (cost > 0) parts.push(`<span class="cost">$${cost}</span>`);
-    if (pct > 0) parts.push(`<span class="ctx${level ? ` ${level}` : ''}">${pct}%</span>`);
+    if (showCost && cost > 0) parts.push(`<span class="cost">$${cost}</span>`);
+    if (showContext && pct > 0) parts.push(`<span class="ctx${level ? ` ${level}` : ''}">${pct}%</span>`);
     // Разделитель тот же, что у stateText: это две независимые величины, а не
     // одно число из двух частей, и пробела для такого мало. На панель он не
     // уезжает — во встроенном шрифте openHASP точки нет, там пустой квадрат.
@@ -263,7 +279,7 @@
 
   return {
     statusDotHtml, formatAge, ageHtml, stateText, shortSessionId, stateHtml,
-    contextLevel, usageHtml,
+    sessionIdHtml, contextLevel, usageHtml,
     shortPath, rowTitle, titleAttr, escapeHtml,
     prNumber, prBadgeHtml,
   };

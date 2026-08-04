@@ -5,6 +5,30 @@ const DEFAULT_SHOW_PATHS = true;
 const DEFAULT_SHOW_EVENT = true;
 
 /**
+ * Чекбоксы statusline пикера: ключ в `modules.windows` конфига → умолчание.
+ *
+ * Таблица, а не пятёрка одинаковых функций рядом: каждый чекбокс иначе тянул
+ * бы за собой свои normalize/read/setInYaml/write/persist, свой обработчик в
+ * windows.js и свою пару слушателей в пикере — восемь мест на переключатель,
+ * и все восемь надо не забыть.
+ *
+ * Умолчания повторяют вид списка до появления чекбоксов: путь, событие,
+ * деньги и контекст показывались всегда, короткий id — только вместо события.
+ */
+const PICKER_TOGGLES = {
+  showPaths: DEFAULT_SHOW_PATHS,
+  showEvent: DEFAULT_SHOW_EVENT,
+  showId: false,
+  showCost: true,
+  showContext: true,
+};
+
+/** Ключ из внешнего payload — сюда попадает то, что прислал пикер. */
+function isPickerToggle(key) {
+  return Object.prototype.hasOwnProperty.call(PICKER_TOGGLES, key);
+}
+
+/**
  * Read the picker sort mode. Accepts either the module opts slice
  * (`modules.windows`) or the full loaded config.
  */
@@ -36,27 +60,25 @@ function normalizeBool(raw, defaultValue) {
   return defaultValue;
 }
 
-function normalizeShowPaths(raw) {
-  return normalizeBool(raw, DEFAULT_SHOW_PATHS);
-}
-
-function normalizeShowEvent(raw) {
-  return normalizeBool(raw, DEFAULT_SHOW_EVENT);
-}
-
 function readWindowsBool(config, key, defaultValue) {
   const raw = config?.[key] ?? config?.modules?.windows?.[key];
   return normalizeBool(raw, defaultValue);
 }
 
-/** Whether the picker shows the cwd line under each session. Default on. */
-function readShowPathsFromConfig(config) {
-  return readWindowsBool(config, 'showPaths', DEFAULT_SHOW_PATHS);
+function normalizeToggle(key, raw) {
+  return normalizeBool(raw, PICKER_TOGGLES[key]);
 }
 
-/** Whether the picker shows agent state/event text (idle, attention, …). Default on. */
-function readShowEventFromConfig(config) {
-  return readWindowsBool(config, 'showEvent', DEFAULT_SHOW_EVENT);
+/** Значение одного чекбокса. Принимает и срез `modules.windows`, и весь конфиг. */
+function readToggleFromConfig(config, key) {
+  return readWindowsBool(config, key, PICKER_TOGGLES[key]);
+}
+
+/** Все чекбоксы разом — в таком виде они и уезжают в пикер вместе со списком. */
+function readTogglesFromConfig(config) {
+  const out = {};
+  for (const key of Object.keys(PICKER_TOGGLES)) out[key] = readToggleFromConfig(config, key);
+  return out;
 }
 
 /**
@@ -95,12 +117,8 @@ function setSessionsSortInYaml(text, sort) {
   return setWindowsScalarInYaml(text, 'sessionsSort', normalizeSort(sort));
 }
 
-function setShowPathsInYaml(text, showPaths) {
-  return setWindowsScalarInYaml(text, 'showPaths', normalizeShowPaths(showPaths));
-}
-
-function setShowEventInYaml(text, showEvent) {
-  return setWindowsScalarInYaml(text, 'showEvent', normalizeShowEvent(showEvent));
+function setToggleInYaml(text, key, value) {
+  return setWindowsScalarInYaml(text, key, normalizeToggle(key, value));
 }
 
 function writeSessionsSortFile(configPath, sort) {
@@ -119,12 +137,8 @@ function writeWindowsBoolFile(configPath, key, value, normalize) {
   return nextValue;
 }
 
-function writeShowPathsFile(configPath, showPaths) {
-  return writeWindowsBoolFile(configPath, 'showPaths', showPaths, normalizeShowPaths);
-}
-
-function writeShowEventFile(configPath, showEvent) {
-  return writeWindowsBoolFile(configPath, 'showEvent', showEvent, normalizeShowEvent);
+function writeToggleFile(configPath, key, value) {
+  return writeWindowsBoolFile(configPath, key, value, raw => normalizeToggle(key, raw));
 }
 
 function persistWindowsBool({
@@ -153,27 +167,17 @@ function persistSessionsSort({ moduleConfig, globalConfig, sort, configPath, wri
   return mode;
 }
 
-function persistShowPaths({ moduleConfig, globalConfig, showPaths, configPath, writeFile = writeShowPathsFile }) {
+function persistToggle({
+  key, value, moduleConfig, globalConfig, configPath, writeFile = writeToggleFile,
+}) {
   return persistWindowsBool({
-    key: 'showPaths',
-    value: showPaths,
-    normalize: normalizeShowPaths,
+    key,
+    value,
+    normalize: raw => normalizeToggle(key, raw),
     moduleConfig,
     globalConfig,
     configPath,
-    writeFile,
-  });
-}
-
-function persistShowEvent({ moduleConfig, globalConfig, showEvent, configPath, writeFile = writeShowEventFile }) {
-  return persistWindowsBool({
-    key: 'showEvent',
-    value: showEvent,
-    normalize: normalizeShowEvent,
-    moduleConfig,
-    globalConfig,
-    configPath,
-    writeFile,
+    writeFile: (path, next) => writeFile(path, key, next),
   });
 }
 
@@ -181,19 +185,17 @@ module.exports = {
   DEFAULT_SORT,
   DEFAULT_SHOW_PATHS,
   DEFAULT_SHOW_EVENT,
+  PICKER_TOGGLES,
+  isPickerToggle,
   readSessionsSortFromConfig,
   readHaSessionsSort,
-  readShowPathsFromConfig,
-  readShowEventFromConfig,
-  normalizeShowPaths,
-  normalizeShowEvent,
+  readToggleFromConfig,
+  readTogglesFromConfig,
+  normalizeToggle,
   setSessionsSortInYaml,
-  setShowPathsInYaml,
-  setShowEventInYaml,
+  setToggleInYaml,
   writeSessionsSortFile,
-  writeShowPathsFile,
-  writeShowEventFile,
+  writeToggleFile,
   persistSessionsSort,
-  persistShowPaths,
-  persistShowEvent,
+  persistToggle,
 };

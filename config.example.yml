@@ -233,10 +233,18 @@ modules:
     # Пикер сессий: cost | oldest | newest | recent | name. Меняется кликом по
     # statusline внизу списка и пишется сюда же без перезаписи всего файла.
     sessionsSort: cost
-    # Строка cwd под именем сессии. Чекбокс Show paths в statusline.
+    # Чекбоксы в statusline пикера. Каждый переключается кликом и пишется сюда
+    # же; подписи в списке — paths, events, id, cost, context.
+    # Строка cwd под именем сессии.
     showPaths: true
-    # Текст agent state/event (idle, attention, …). Чекбокс Show event.
+    # Текст agent state/event (idle, attention, …).
     showEvent: true
+    # Короткий id сессии — то же, чем её называет claude --resume.
+    showId: false
+    # Потрачено за сессию, $.
+    showCost: true
+    # Заполненность контекста, % (жёлтый с 30, красный с 40).
+    showContext: true
     # Ctrl+K в пикере: открыть cwd сессии в Cursor / Explorer / ssh-терминале.
     # Linux cwd (/home/popstas/...) мапится на SMB-диск V:. ssh_app берётся из
     # modules.exec, если здесь не задан.
