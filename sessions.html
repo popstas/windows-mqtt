@@ -208,6 +208,7 @@
   </div>
 </div>
 <script src="picker-filter.js"></script>
+<script src="picker-list-sync.js"></script>
 <script src="picker-snapshots.js"></script>
 <script src="session-glyph.js"></script>
 <script src="session-info.js"></script>
@@ -225,6 +226,12 @@
   let menuActive = 0;
   let menuSessionId = null;
   let infoOpen = false;
+  // Показ ждёт первого свежего пакета сессий. Пока ждёт, на экране список
+  // прошлого показа — см. beginShow().
+  let awaitingSessions = false;
+  // Номер показа: сторож «бэкенд молчит» должен гаснуть вместе со своим
+  // показом, а не срабатывать в следующий.
+  let showToken = 0;
 
   // Одна таблица «id действия ⇄ клавиша» на всё: подписи в меню Ctrl+K и
   // обработчики прямых клавиш ниже читают именно её. Раньше клавиша была
@@ -276,23 +283,44 @@
     prBadgeHtml,
   } = window.SessionGlyph;
 
+  // Что сейчас нарисовано: ключи в порядке DOM и разметка каждого элемента.
+  // Решение, что из этого менять, считает planListSync (picker-list-sync.js);
+  // здесь остаётся только запись в DOM.
+  let rendered = { keys: [], html: [] };
+
+  function syncList(items) {
+    const plan = window.PickerListSync.planListSync(rendered, items, list.children.length);
+    if (plan.mode === 'rebuild') {
+      list.innerHTML = plan.html.join('');
+    } else {
+      // Снимок детей до правок: outerHTML заменяет элемент, а живая коллекция
+      // list.children отдала бы уже новый узел на следующей итерации.
+      const nodes = Array.from(list.children);
+      for (const update of plan.updates) nodes[update.index].outerHTML = update.html;
+    }
+    rendered = { keys: plan.keys, html: plan.html };
+  }
+
   function render() {
     const nowSec = Math.floor(Date.now() / 1000);
     rows = [];
-    let html = '';
+    const items = [];
 
     if (window.PickerSnapshots.isSnapshotsCommand(search.value)) {
       for (const snap of snapshotRows) {
         const index = rows.length;
         rows.push(snap);
-        html += `<div class="row" data-index="${index}">` +
-          `<div class="text">` +
-          `<div class="name">${escapeHtml(snap.line1)}</div>` +
-          `<div class="snap-meta">${escapeHtml(snap.line2)}</div>` +
-          `<div class="snap-restore">${escapeHtml(snap.line3)}</div>` +
-          `</div></div>`;
+        items.push({
+          key: `snap:${snap.id || index}`,
+          html: `<div class="row" data-index="${index}">` +
+            `<div class="text">` +
+            `<div class="name">${escapeHtml(snap.line1)}</div>` +
+            `<div class="snap-meta">${escapeHtml(snap.line2)}</div>` +
+            `<div class="snap-restore">${escapeHtml(snap.line3)}</div>` +
+            `</div></div>`,
+        });
       }
-      list.innerHTML = html;
+      syncList(items);
       if (!rows.length) {
         message.style.display = 'block';
         message.textContent = snapshotsLoading ? 'Loading snapshots…' : 'No snapshots yet.';
@@ -308,11 +336,14 @@
     // Одна отметка времени на всю отрисовку: иначе строки одного и того же
     // списка считали бы возраст от чуть разных «сейчас».
     for (const group of visible) {
-      html += `<div class="group-label">${escapeHtml(group.label)}</div>`;
+      items.push({
+        key: `g:${group.label}`,
+        html: `<div class="group-label">${escapeHtml(group.label)}</div>`,
+      });
       for (const session of group.sessions) {
         const index = rows.length;
         rows.push(session);
-        html += `<div class="row ${session.open ? '' : 'closed'}${session.agentState ? ' markable' : ''}" data-index="${index}"${titleAttr(session)}>` +
+        const html = `<div class="row ${session.open ? '' : 'closed'}${session.agentState ? ' markable' : ''}" data-index="${index}"${titleAttr(session)}>` +
           statusDotHtml(session) +
           `<div class="text"><div class="name">${escapeHtml(session.label)}` +
           `${session.hotkey ? `<span class="hotkey">${escapeHtml(session.hotkey)}</span>` : ''}` +
@@ -330,9 +361,10 @@
             ? `<div class="summary">${escapeHtml(session.agentDescription)}</div>` : '') +
           `</div>` +
           stateHtml(session, showEvent) + usageHtml(session) + ageHtml(session, nowSec) + `</div>`;
+        items.push({ key: `s:${session.id}`, html });
       }
     }
-    list.innerHTML = html;
+    syncList(items);
     message.style.display = rows.length ? 'none' : 'block';
     if (!rows.length) message.textContent = groups.length ? 'Nothing matches.' : 'No claude sessions yet.';
     if (active >= rows.length) active = Math.max(0, rows.length - 1);
@@ -690,23 +722,35 @@
     document.body.classList.remove('shift');
     search.focus();
     search.select();
-    // Clear the previous show's session list before anything else. Without
-    // this, two things go wrong: the '!groups.length' watchdog guard below
-    // stays permanently false once any show ever received data (so it can
-    // never fire again), and the palette renders seconds-old rows the user
-    // could click before the fresh 'claude-wt-sessions' event arrives.
-    groups = [];
+    // Список предыдущего показа остаётся на экране до первого свежего пакета.
+    // Здесь стояло `groups = []` — окно открывалось пустым, с «Loading…», и
+    // настоящий список дорисовывался только через ~300 мс (столько стоит
+    // claudeWtSessions() на сетевом диске). Этот пустой кадр и мелькал при
+    // каждом открытии. Строки в нём те же самые, а выбор всё равно уходит по
+    // id через claude-focus, который перечитывает живое состояние (см.
+    // choose()), — то есть устаревший кадр никуда не уводит по ошибке.
+    //
+    // Свою отрисовку показ всё же делает: search.value только что очищен, и
+    // фильтр предыдущего показа надо снять. Строки при этом на месте, syncList
+    // трогает только те, что изменились.
+    awaitingSessions = true;
+    showToken += 1;
+    const token = showToken;
     render();
-    // Reset the watchdog's target state on every show, not just once at page
-    // load: a stale 'Backend not responding.' from a previous show must not
-    // linger into the next one, and a fresh 2s window is what actually
-    // reflects "the backend hasn't answered since the picker last opened".
-    message.textContent = 'Loading…';
+    // Первый показ за загрузку страницы: рисовать нечего, и «Loading…» стоит
+    // вместо пустоты. Дальше сюда не попадаем — список уже есть.
+    if (!rows.length) message.textContent = 'Loading…';
     invoke('picker_send', { action: 'windows/claude-sessions-start' });
     setTimeout(() => {
-      if (!groups.length && message.textContent === 'Loading…') {
-        message.textContent = 'Backend not responding.';
-      }
+      // Сторож своего показа, а не вообще: за две секунды пикер могли закрыть
+      // и открыть заново, и тогда молчание относится к прошлому показу.
+      // Строки к этому моменту заведомо устарели — снимаем их вместе с
+      // сообщением, иначе «не отвечает» осталось бы невидимым под списком.
+      if (token !== showToken || !awaitingSessions) return;
+      groups = [];
+      render();
+      message.style.display = 'block';
+      message.textContent = 'Backend not responding.';
     }, 2000);
   }
 
@@ -717,6 +761,10 @@
 
     await listen('claude-wt-sessions', (event) => {
       const data = event.payload || {};
+      // Бэкенд ответил — сторож показа больше не нужен, даже если ответ
+      // ошибочный или пришёл в режиме снимков: там своё сообщение, и затирать
+      // его через две секунды словами «не отвечает» неверно.
+      awaitingSessions = false;
       if (window.PickerSnapshots.isSnapshotsCommand(search.value)) return;
       if (!data.ok) {
         groups = [];

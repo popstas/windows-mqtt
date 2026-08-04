@@ -241,14 +241,20 @@ test('prepare-frontend copies both pages and the picker filter to the right dest
   const calls = [...src.matchAll(/copyFileSync\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\)/g)]
     .map(m => ({ from: m[1], to: m[2] }));
 
-  const required = [
-    { from: 'index.html', to: 'frontend/index.html' },
-    { from: 'sessions.html', to: 'frontend/sessions.html' },
-    { from: 'frontend-src/picker-filter.js', to: 'frontend/picker-filter.js' },
-    { from: 'frontend-src/session-glyph.js', to: 'frontend/session-glyph.js' },
-    { from: 'frontend-src/session-info.js', to: 'frontend/session-info.js' },
-    { from: 'frontend-src/picker-snapshots.js', to: 'frontend/picker-snapshots.js' },
-  ];
+  // Список скриптов берётся из самих страниц, а не переписывается сюда руками:
+  // иначе новый <script src> в пикере проезжает мимо prepare-frontend, и в
+  // собранном приложении страница валится на первом же обращении к нему —
+  // тогда как в репозитории и в тестах всё на месте.
+  const pages = ['index.html', 'sessions.html'];
+  const required = pages.map(page => ({ from: page, to: `frontend/${page}` }));
+  for (const page of pages) {
+    const html = fs.readFileSync(path.join(repoRoot, page), 'utf8');
+    for (const m of html.matchAll(/<script\s+src="([^"]+)"/g)) {
+      const file = m[1];
+      if (/^(https?:)?\/\//.test(file)) continue;
+      required.push({ from: `frontend-src/${file}`, to: `frontend/${file}` });
+    }
+  }
   for (const pair of required) {
     assert.ok(
       calls.some(c => c.from === pair.from && c.to === pair.to),
