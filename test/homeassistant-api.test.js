@@ -136,8 +136,10 @@ test('a working session shows what it stopped on last time', () => {
   assert.strictEqual(slot.attributes.last_summary, 'Готовлю бриф');
 });
 
-test('slotUsage puts money before context in the corner of the row', () => {
-  assert.strictEqual(slotUsage({ status: 'idle', costUsd: 12, contextPct: 47 }), '$12 47%');
+test('slotUsage keeps only the context in the corner of the row', () => {
+  // Стоимость из угла убрана: в 75 px «$12 47%» читалось кашей, а решение по
+  // строке принимается по одному проценту. Деньги остались в атрибуте cost_usd.
+  assert.strictEqual(slotUsage({ status: 'idle', costUsd: 12, contextPct: 47 }), '47%');
 });
 
 test('slotUsage falls back to last-action age when nothing was measured', () => {
@@ -186,7 +188,9 @@ test('switching a slot off keeps everything the panel reads from it', () => {
   assert.strictEqual(payload.state, 'off');
   assert.strictEqual(payload.text, '! home');
   assert.strictEqual(payload.summary, 'Готово');
-  assert.strictEqual(payload.usage, '$12 47%');
+  // Только контекст: стоимость в 75 px панели не помещалась и уехала в атрибут.
+  assert.strictEqual(payload.usage, '47%');
+  assert.strictEqual(payload.cost_usd, 12);
 });
 
 test('buildSessionEntities pins each entity to a row, not to a session', () => {
