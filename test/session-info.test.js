@@ -77,12 +77,12 @@ test('buildSessionInfoRows reports whether the state was seen', () => {
   );
 });
 
-test('buildSessionInfoRows formats recent activity as now, not seconds', () => {
+test('buildSessionInfoRows spells recent activity in seconds', () => {
   const rows = buildSessionInfoRows(
-    { ...session, lastActivity: 3459 }, // менее 1 сек назад
+    { ...session, lastActivity: 3459 }, // 1 сек назад
     3460,
   );
-  assert.match(valueOf(rows, 'last activity'), /^\d{2}:\d{2} · now$/);
+  assert.match(valueOf(rows, 'last activity'), /^\d{2}:\d{2} · 1s$/);
 });
 
 test('buildSessionInfoRows skips explicit null bounds and zero timestamps', () => {

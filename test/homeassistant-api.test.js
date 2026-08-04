@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { HomeAssistantApi, mergeHaConfig } = require('../src/homeassistant/api');
 const {
-  slotText, slotUsage, slotDescription, sessionEntity, buildSessionEntities, buildSummaryEntity,
+  slotText, slotUsage, slotTime, slotDescription, sessionEntity, buildSessionEntities, buildSummaryEntity,
 } = require('../src/homeassistant/claude-sessions');
 const { buildSlots } = require('../src/picker/session-slots');
 const { stateMessages } = require('../src/homeassistant/discovery');
@@ -142,13 +142,14 @@ test('slotUsage keeps only the context in the corner of the row', () => {
   assert.strictEqual(slotUsage({ status: 'idle', costUsd: 12, contextPct: 47 }), '47%');
 });
 
-test('slotUsage falls back to last-action age when nothing was measured', () => {
-  // Пустая строка на openHASP не стирает предыдущий текст (HA ещё и обрезает
-  // пробел из шаблона). Возраст всегда непустой — угол перезаписывается.
+test('slotUsage says nothing but a dash when the context was never measured', () => {
+  // Возраст отсюда уехал в свой блок ниже. Пустую строку сюда класть всё так же
+  // нельзя: openHASP не стирает текст пустым payload, HA обрезает пробел из
+  // шаблона — угол залипал бы прежней сессией. Прочерк непустой.
   const NOW = 1_000_000;
   assert.strictEqual(
     slotUsage({ status: 'idle', costUsd: 0, contextPct: 0, lastActivity: NOW - 300 }, NOW),
-    '5m',
+    '-',
   );
   assert.strictEqual(
     slotUsage({ status: 'idle', costUsd: 0, contextPct: 47, lastActivity: NOW - 300 }, NOW),
@@ -159,10 +160,28 @@ test('slotUsage falls back to last-action age when nothing was measured', () => 
     '-',
   );
   assert.strictEqual(slotUsage(undefined, NOW), '-');
+});
+
+test('slotTime shows the running turn, and the last activity for everyone else', () => {
+  const NOW = 1_000_000;
+  // Работающая сессия: сколько идёт ход. lastActivity у неё бесполезен — хук
+  // дёргается на каждый вызов инструмента.
   assert.strictEqual(
-    slotUsage({ status: 'idle', costUsd: 0, contextPct: 0, lastActivity: null }, NOW),
-    '-',
+    slotTime({ status: 'active', turnAt: NOW - 570, lastActivity: NOW - 4 }, NOW),
+    '9m',
   );
+  // Ход кончился: отметка осталась стоять на прошлом промпте, показывать её
+  // значило бы врать — блок снова про активность.
+  assert.strictEqual(
+    slotTime({ status: 'review', turnAt: NOW - 570, lastActivity: NOW - 7200 }, NOW),
+    '2h',
+  );
+  // Сессия старше правки в хуке: отметки нет, остаётся активность.
+  assert.strictEqual(slotTime({ status: 'active', turnAt: 0, lastActivity: NOW - 31 }, NOW), '31s');
+  // Прочерк вместо пустоты — по тому же правилу, что у slotUsage.
+  assert.strictEqual(slotTime({ status: 'empty', turnAt: NOW, lastActivity: NOW }, NOW), '-');
+  assert.strictEqual(slotTime({ status: 'idle', lastActivity: null }, NOW), '-');
+  assert.strictEqual(slotTime(undefined, NOW), '-');
 });
 
 test('one slot on its own is the same entity as in the bulk export', () => {

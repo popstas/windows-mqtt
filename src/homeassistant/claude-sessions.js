@@ -50,8 +50,10 @@ function slotText(slot) {
 }
 
 /**
- * Правый верхний угол строки: сколько съедено от контекста — или, если цифры
- * нет, сколько назад было последнее действие.
+ * Правый верхний угол строки: сколько съедено от контекста.
+ *
+ * Возраста здесь больше нет — он переехал в свой блок ниже (`slotTime`), и
+ * показывать одно и то же двумя строками подряд незачем.
  *
  * Собирается здесь, а не шаблоном в конфиге панели: в Home Assistant это была
  * бы склейка из двух state_attr с проверками на пустоту в каждой кнопке, то
@@ -70,6 +72,28 @@ function slotText(slot) {
 function slotUsage(slot, nowSec = Math.floor(Date.now() / 1000)) {
   if (!slot || slot.status === 'empty') return '-';
   if (slot.contextPct > 0) return `${slot.contextPct}%`;
+  return '-';
+}
+
+/**
+ * Под контекстом: сколько идёт текущий ход — или, если сессия не работает,
+ * сколько назад она шевелилась в последний раз.
+ *
+ * Два вопроса в одном блоке, и это не лень: у работающей сессии второй ответ
+ * бесполезен (её хук дёргается по десять раз в минуту, там всегда «0s»), а у
+ * отдохнувшей бесполезен первый — он показал бы, когда начался её последний
+ * ход, а не сколько она стоит. Одна строка отвечает всегда на тот из двух,
+ * который в этот момент что-то значит.
+ *
+ * Пусто сюда класть нельзя по тому же правилу, что у `slotUsage`: openHASP не
+ * стирает текст пустым payload, а Home Assistant обрезает пробел из шаблона —
+ * блок залипал бы значением предыдущей сессии при смене порядка строк.
+ */
+function slotTime(slot, nowSec = Math.floor(Date.now() / 1000)) {
+  if (!slot || slot.status === 'empty') return '-';
+  if (slot.status === 'active' && slot.turnAt > 0) {
+    return formatAge(slot.turnAt, nowSec) || '-';
+  }
   return formatAge(slot.lastActivity, nowSec) || '-';
 }
 
@@ -129,8 +153,13 @@ function sessionEntity(slot, nowSec = Math.floor(Date.now() / 1000)) {
       // Сырые поля хука рядом — автоматизациям иногда нужно именно «что сейчас»
       // против «что было», а склейка этого различия не хранит.
       last_summary: slot.lastSummary,
-      // Готовая строка для правого верхнего угла кнопки: «$12 47%» или «5m».
+      // Готовая строка для правого верхнего угла кнопки: «47%».
       usage: slotUsage(slot, nowSec),
+      // Блок под ним: время текущего хода у работающей сессии, время последней
+      // активности у всех прочих. Считается здесь, а не шаблоном на панели: в
+      // YAML это была бы одна и та же развилка, размноженная по пяти кнопкам.
+      time: slotTime(slot, nowSec),
+      turn_at: slot.turnAt,
       cost_usd: slot.costUsd,
       context_pct: slot.contextPct,
     },
@@ -174,6 +203,6 @@ function buildSummaryEntity(sessions) {
 }
 
 module.exports = {
-  SLOT_PREFIX, STATUS_GLYPH, slotText, slotUsage, slotDescription,
+  SLOT_PREFIX, STATUS_GLYPH, slotText, slotUsage, slotTime, slotDescription,
   sessionEntity, buildSessionEntities, buildSummaryEntity,
 };

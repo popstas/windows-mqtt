@@ -58,6 +58,7 @@ function emptySlot(index) {
     desktop: null,
     monitor: null,
     lastActivity: null,
+    turnAt: 0,
     message: '',
     summary: '',
     lastSummary: '',
@@ -82,6 +83,9 @@ function buildSlots(sessions, count = DEFAULT_SLOTS, sort = DEFAULT_SORT) {
       desktop: s.desktop ?? null,
       monitor: s.monitor ?? null,
       lastActivity: s.lastActivity ?? null,
+      // Начало текущего хода. Отдельно от lastActivity: та у работающей сессии
+      // всегда «только что», её двигает каждый вызов инструмента.
+      turnAt: s.agentTurnAt ?? 0,
       message: s.agentMessage ?? '',
       // Чем сессия закончила: первая строка последнего ответа агента. В строку
       // панели не влезает, но годится в подсказку и в нижнюю строку состояния.

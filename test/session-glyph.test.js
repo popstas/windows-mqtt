@@ -160,9 +160,10 @@ test('statusDotHtml ignores the geometry fields the row no longer draws', () => 
 
 const NOW = 1785600000;
 
-test('formatAge steps through now, minutes, hours and days', () => {
-  assert.strictEqual(formatAge(NOW, NOW), 'now');
-  assert.strictEqual(formatAge(NOW - 59, NOW), 'now');
+test('formatAge steps through seconds, minutes, hours and days', () => {
+  assert.strictEqual(formatAge(NOW, NOW), '0s');
+  assert.strictEqual(formatAge(NOW - 31, NOW), '31s');
+  assert.strictEqual(formatAge(NOW - 59, NOW), '59s');
   assert.strictEqual(formatAge(NOW - 60, NOW), '1m');
   assert.strictEqual(formatAge(NOW - 59 * 60, NOW), '59m');
   assert.strictEqual(formatAge(NOW - 3600, NOW), '1h');
@@ -177,10 +178,10 @@ test('formatAge returns nothing for a session that never reported activity', () 
   assert.strictEqual(formatAge(undefined, NOW), '');
 });
 
-test('formatAge clamps a timestamp from the future to now', () => {
+test('formatAge clamps a timestamp from the future to zero', () => {
   // Clocks on the two machines need not agree, and a negative age would
-  // render as "-1m".
-  assert.strictEqual(formatAge(NOW + 120, NOW), 'now');
+  // render as "-2m".
+  assert.strictEqual(formatAge(NOW + 120, NOW), '0s');
 });
 
 test('rowTitle shortens the agent home directory to a tilde', () => {
@@ -263,6 +264,24 @@ test('ageHtml always emits the element so the column cannot jump', () => {
   assert.strictEqual(ageHtml({ lastActivity: NOW - 7200 }, NOW), '<div class="age">2h</div>');
   assert.strictEqual(ageHtml({}, NOW), '<div class="age"></div>');
   assert.strictEqual(ageHtml(undefined, NOW), '<div class="age"></div>');
+});
+
+test('ageHtml shows the running turn, not the seconds since the last tool call', () => {
+  // Работающая сессия дёргает хук десятки раз в минуту, поэтому lastActivity у
+  // неё всегда «now» — вопрос «сколько уже крутится команда» отвечает turnAt.
+  const working = { agentState: 'active', agentTurnAt: NOW - 570, lastActivity: NOW - 4 };
+  assert.strictEqual(ageHtml(working, NOW), '<div class="age">9m</div>');
+  // Ход кончился — колонка снова про активность: отметка хода остаётся стоять
+  // на прошлом промпте, и показывать её у отдохнувшей сессии значило бы врать.
+  assert.strictEqual(
+    ageHtml({ agentState: 'review', agentTurnAt: NOW - 570, lastActivity: NOW - 7200 }, NOW),
+    '<div class="age">2h</div>'
+  );
+  // Сессия старше правки в хуке: поля нет, колонка прежняя.
+  assert.strictEqual(
+    ageHtml({ agentState: 'active', lastActivity: NOW - 300 }, NOW),
+    '<div class="age">5m</div>'
+  );
 });
 
 test('contextLevel warns at thirty per cent and turns hot at forty', () => {

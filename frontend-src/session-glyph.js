@@ -56,16 +56,21 @@
   }
 
   /**
-   * Возраст последней активности: now, 5m, 2h, 3d.
+   * Возраст последней активности: 31s, 5m, 2h, 3d.
    *
    * `timestamp` — epoch-секунды, как их отдаёт claude-wt: и слоты, и хуки
    * пишут время в секундах. `nowSec` передаётся снаружи, чтобы функция
    * осталась чистой и проверяемой.
+   *
+   * Первая минута — в секундах, а не словом `now`. Слово отвечало «недавно» на
+   * вопрос «сколько», и у работающей сессии, где колонка показывает длину
+   * текущего хода, оно съедало ровно ту минуту, за которую по строке и видно,
+   * началась работа только что или уже идёт.
    */
   function formatAge(timestamp, nowSec) {
     if (!timestamp || !Number.isFinite(timestamp)) return '';
     const delta = Math.max(0, Math.floor(nowSec - timestamp));
-    if (delta < 60) return 'now';
+    if (delta < 60) return `${delta}s`;
     if (delta < 3600) return `${Math.floor(delta / 60)}m`;
     if (delta < 86400) return `${Math.floor(delta / 3600)}h`;
     return `${Math.floor(delta / 86400)}d`;
@@ -201,9 +206,23 @@
     return `<div class="usage">${parts.join(' · ')}</div>`;
   }
 
-  /** Пустой элемент вместо пропуска: колонка возраста не должна прыгать. */
+  /**
+   * Возраст в строке. У работающей сессии — время текущего хода.
+   *
+   * Колонка отвечает на вопрос «сколько уже», и у работающей сессии прежний
+   * ответ был бесполезен: `lastActivity` двигает каждый вызов инструмента, а их
+   * десятки в минуту, — там вечно стояло `now`. Спрашивают же про другое:
+   * сколько крутится текущая команда. Возраст всей сессии для этого тоже не
+   * годится, он про «46m» независимо от того, работает она или спит час.
+   *
+   * Метка есть только у сессий, поднятых после правки в хуке; без неё колонка
+   * остаётся прежней. Пустой элемент вместо пропуска: колонки справа стоят
+   * друг за другом и не должны разъезжаться.
+   */
   function ageHtml(session, nowSec) {
-    const age = formatAge(session && session.lastActivity, nowSec);
+    const working = Boolean(session) && session.agentState === 'active';
+    const turnAt = working && Number.isFinite(session.agentTurnAt) ? session.agentTurnAt : 0;
+    const age = formatAge(turnAt || (session && session.lastActivity), nowSec);
     return `<div class="age">${age}</div>`;
   }
 
