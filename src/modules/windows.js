@@ -213,6 +213,27 @@ module.exports = async (mqtt, config, log) => {
     scheduleHaRefresh();
   }
 
+  /**
+   * Тело просьбы о подъёме окна: `{"id": …}` либо голый id строкой.
+   *
+   * Обработчику подписки достаётся сырое сообщение, а `claudeFocus` ждёт
+   * разобранный объект — тот же разрыв, что у `claudeFocusSlot`, и закрыт он
+   * так же. Голый id принимается ради вызова руками из автоматизации.
+   *
+   * Строка в лог пишется здесь, а не в `claudeFocus`: у той же функции есть
+   * второй вызыватель (stdin от своего Tauri-процесса), и он про себя
+   * отчитывается сам.
+   */
+  function parseFocusPayload(topic, message) {
+    const raw = String(message ?? '').trim();
+    log(`< ${topic}: ${raw}`);
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch { /* не JSON — значит сам id */ }
+    return { id: raw };
+  }
+
   async function claudeFocus(payload) {
     const id = payload?.id;
     if (!id) return;
@@ -1063,6 +1084,20 @@ module.exports = async (mqtt, config, log) => {
         // в Windows, то есть настоящая работа, а не запись в переменную.
         topics: [config.base + '/claude-focus-slot'],
         handler: throttlePress(claudeFocusSlot, {onDrop: pressDropped})
+      },
+      {
+        // Пикер с другой машины просит поднять окно сессии: тело `{"id": …}`.
+        //
+        // Дверь не та же, что у ключа `windows/claude-focus` в stdinActions:
+        // stdin слушает свой Tauri-процесс, а сюда стучится ccfzf-picker через
+        // брокера. Пока этой подписки не было, публикация пропадала молча —
+        // ответа у просьбы нет по замыслу, и тишина выглядела как рабочий
+        // Enter, который ничего не делает.
+        //
+        // Без ограничителя, в отличие от соседней строки: источник здесь —
+        // Enter в списке, а не физическая кнопка платы, дребезжать нечему.
+        topics: [config.base + '/claude-focus'],
+        handler: (topic, message) => claudeFocus(parseFocusPayload(topic, message)),
       },
       {
         // Своё окно, а не общее со строками: восстановление снимка — другое
