@@ -230,11 +230,6 @@ modules:
     # start the claude-wt window position watcher (needs a claudeWt block with
     # statePath in %APPDATA%\windows-mqtt\windows11-manager.config.js)
     claudeWt: false
-    # HTTP-сервер библиотеки внутри этого же процесса: у кого из сессий открыто
-    # окно (POST /claude-wt/status) и подъём окна (POST /claude-wt/focus).
-    # Спрашивает его пикер ccfzf-picker. Умолчания нет намеренно — сервер
-    # открывает порт наружу. Работает только вместе с claudeWt.
-    # claudeWtHttpPort: 9722
     # Пикер сессий: cost | oldest | newest | recent | name. Меняется кликом по
     # statusline внизу списка и пишется сюда же без перезаписи всего файла.
     sessionsSort: cost

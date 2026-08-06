@@ -43,7 +43,6 @@ module.exports = async (mqtt, config, log) => {
   let statsIntervalId = null;
   let restoreTimeoutId = null;
   let claudeWtWatchdogId = null;
-  let claudeWtHttpServer = null;
 
   if (config.restoreOnStart) {
     await restoreWindows();
@@ -83,30 +82,11 @@ module.exports = async (mqtt, config, log) => {
       claudeWtWatchdogId = setInterval(check, CHECK_INTERVAL_MS);
     }
 
-    // HTTP-сервер библиотеки поднимается здесь, внутри процесса демона, а не
-    // отдельной командой `node src http-server` рядом. Причина одна и
-    // существенная: `claudeWtStatus()` отдаёт `liveState` из памяти этого
-    // процесса, а в чужом тот же вызов читал бы состояние с диска — то есть
-    // расклад на момент последней записи, а не текущий.
-    //
-    // Порт задаётся явно и умолчания не имеет: сервер открывает порт наружу, и
-    // делать это на машинах, которым он не нужен, было бы невежливо. Пикер
-    // ccfzf-picker спрашивает его о том, у какой сессии открыто окно.
-    //
-    // Соседним ключом, а не полем внутри `claudeWt`: тот здесь — выключатель
-    // (`claudeWt: false`), а не объект, и поле в нём жить не может.
-    const httpPort = Number(config.claudeWtHttpPort);
-    if (Number.isInteger(httpPort) && httpPort > 0) {
-      if (typeof winMan.startHttpServer !== 'function') {
-        log('claude-wt: библиотека без startHttpServer — сервер не поднят', 'error');
-      } else {
-        try {
-          claudeWtHttpServer = winMan.startHttpServer(httpPort);
-        } catch (e) {
-          log(`claude-wt: http-сервер не поднялся на ${httpPort}: ${e.message}`, 'error');
-        }
-      }
-    }
+    // Здесь стоял http-сервер библиотеки, поднятый внутри этого же процесса, —
+    // чтобы пикер спрашивал, у какой сессии открыто окно. Он вешал событийный
+    // цикл через две-три минуты после старта; разбор — docs/windows-mqtt-http-bug.md.
+    // Те же данные теперь уезжают файлом (claudeWt.windowsFile), а просьба о
+    // подъёме окна приходит туда же, куда и с панели, — по MQTT.
   }
 
   if (config.placeWindowOnStart) {
@@ -131,12 +111,6 @@ module.exports = async (mqtt, config, log) => {
     if (claudeWtWatchdogId !== null) {
       clearInterval(claudeWtWatchdogId);
       claudeWtWatchdogId = null;
-    }
-    if (claudeWtHttpServer !== null) {
-      // Порт должен освободиться до перезапуска модуля: иначе следующий подъём
-      // упадёт на EADDRINUSE, и сервера не станет вовсе.
-      claudeWtHttpServer.close();
-      claudeWtHttpServer = null;
     }
     if (config.claudeWt) winMan.stopClaudeWt();
     stopSessionsFeed();
