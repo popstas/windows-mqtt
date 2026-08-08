@@ -137,8 +137,10 @@ function getModulesEnabled() {
   // такого блока не существовало. Включает его флаг windows.enabled, а не
   // собственная запись, поэтому проверить нужно и тогда, когда ключа power в
   // конфиге вообще нет — иначе на нетронутом config.yml флаг молча ничего не
-  // переключает.
-  const names = new Set(Object.keys(config.modules));
+  // переключает. Секции `modules:` целиком тоже может не быть (config.modules
+  // === undefined) — раньше `for...in` по undefined молча ничего не делал,
+  // Object.keys() на нём бросает TypeError, поэтому подстраховка нужна и тут.
+  const names = new Set(Object.keys(config.modules || {}));
   names.add('power');
   for (const name of names) {
     if (isModuleEnabled(name, config.modules))

@@ -114,6 +114,21 @@ test('явный power.base в конфиге не переопределяет�
   assert.equal(power.base, 'some/custom/base');
 });
 
+test('config.yml вовсе без секции modules: не роняет getModulesEnabled()', () => {
+  // Object.keys(config.modules) бросал TypeError, когда config.modules ===
+  // undefined (секции `modules:` в файле нет вовсе). Раньше на её месте стоял
+  // `for...in`, который на undefined молча не делал ничего, — регрессия
+  // именно в этом переходе.
+  const { helpers, config } = loadHelpersWithConfig([
+    'mqtt:',
+    '  base: home/room/pc',
+  ]);
+  assert.equal(config.modules, undefined, 'секции modules в конфиге действительно нет');
+  assert.doesNotThrow(() => helpers.getModulesEnabled());
+  const enabled = helpers.getModulesEnabled();
+  assert.deepEqual(enabled, [], 'без секции modules ничего, включая power, не включается');
+});
+
 test('config.example.yml: windows.enabled: false включает power и выключает windows', () => {
   const { helpers, config } = loadHelpersWithConfig(
     fs.readFileSync(path.join(__dirname, '..', 'config.example.yml'), 'utf8')
