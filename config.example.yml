@@ -236,8 +236,21 @@ modules:
     # numThreads: 1
   windows:
     # Оконные команды и claude-wt переехали в windows11-manager. false отдаёт их
-    # ему и оставляет здесь только питание машины (модуль power). Это выключатель
-    # перехода: при неполадке вернуть true и перезапустить.
+    # ему и оставляет здесь только питание машины (модуль power).
+    #
+    # Откат — это ДВА шага, оба обязательны:
+    #   1. вернуть тут enabled: true и перезапустить windows-mqtt;
+    #   2. остановить MQTT-процесс windows11-manager (`node src/index.js mqtt`) —
+    #      трей-переключатель в windows11-manager, либо снять W11M_MQTT_HOST.
+    # windows11-manager подписан на home/room/pc/windows/# безусловно и о
+    # существовании этого флага не знает. Сделать только шаг 1 (или только
+    # шаг 2) — получить машину в состоянии хуже обеих настроек по отдельности:
+    # оба процесса разбирают одни и те же топики разом. windows/restore
+    # запускает restoreWindows()+openStore() в обоих — каждое сохранённое
+    # приложение открывается дважды; оба публикуют
+    # home/room/pc/windows/claude/slot/N с разным порядком — строка на панели
+    # дёргается между двумя сессиями, а нажатие попадает туда, что последним
+    # успел опубликовать.
     enabled: true
     placeWindowOnOpen: true
     # start the claude-wt window position watcher (needs a claudeWt block with
