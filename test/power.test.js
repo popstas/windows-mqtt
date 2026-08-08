@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { storeThen } = require('../src/modules/power');
+const { storeThen, createAckQueue } = require('../src/modules/power');
 
 test('storeThen публикует просьбу сохранить раскладку', async () => {
   const published = [];
@@ -47,4 +47,57 @@ test('storeThen не ждёт вечно, если ответа нет', async (
   });
   timeoutFn();
   await p;
+});
+
+// createAckQueue: два одновременных storeAndThen не должны отвечать друг
+// другу. Баг был в том, что один store/done снимал разом всех ожидающих —
+// второй перезагружался по чужому подтверждению сохранения.
+test('createAckQueue отдаёт ответ только самому старому ожидающему', async () => {
+  const q = createAckQueue();
+  const first = q.wait();
+  const second = q.wait();
+  let firstResolved = false;
+  let secondResolved = false;
+  first.promise.then(() => { firstResolved = true; });
+  second.promise.then(() => { secondResolved = true; });
+
+  q.resolveNext();
+  await first.promise;
+
+  assert.equal(firstResolved, true, 'первый (самый старый) получает ответ');
+  assert.equal(secondResolved, false, 'второй ещё ждёт — ему чужой ответ не достался');
+});
+
+test('createAckQueue: второй store/done обслуживает второго ожидающего', async () => {
+  const q = createAckQueue();
+  const first = q.wait();
+  const second = q.wait();
+
+  q.resolveNext();
+  await first.promise;
+  q.resolveNext();
+  await second.promise;
+});
+
+test('createAckQueue: cancel убирает ожидающего, и следующий ответ ему не достаётся', async () => {
+  const q = createAckQueue();
+  const first = q.wait(); // симулирует того, кто уже ушёл по таймауту storeThen
+  first.cancel();
+  let firstResolved = false;
+  first.promise.then(() => { firstResolved = true; });
+
+  const second = q.wait();
+  let secondResolved = false;
+  second.promise.then(() => { secondResolved = true; });
+
+  q.resolveNext();
+  await second.promise;
+
+  assert.equal(secondResolved, true, 'ответ достался второму, а не отменённому первому');
+  assert.equal(firstResolved, false, 'отменённый резолвер не наступает никогда');
+});
+
+test('createAckQueue: лишний resolveNext без ожидающих ничего не ломает', () => {
+  const q = createAckQueue();
+  assert.doesNotThrow(() => q.resolveNext());
 });

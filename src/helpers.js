@@ -133,7 +133,14 @@ function logConsoleLine(level, msg) {
 
 function getModulesEnabled() {
   const modulesEnabled = [];
-  for (let name in config.modules) {
+  // power не заводит собственного ключа в старых config.yml — до этой задачи
+  // такого блока не существовало. Включает его флаг windows.enabled, а не
+  // собственная запись, поэтому проверить нужно и тогда, когда ключа power в
+  // конфиге вообще нет — иначе на нетронутом config.yml флаг молча ничего не
+  // переключает.
+  const names = new Set(Object.keys(config.modules));
+  names.add('power');
+  for (const name of names) {
     if (isModuleEnabled(name, config.modules))
       modulesEnabled.push(name);
   }
@@ -148,8 +155,15 @@ async function initModules(modulesEnabled, mqtt) {
     const opts = config.modules[name] || {};
 
     // default mqtt base
-    if (!opts.base)
-      opts.base = `${config.mqtt.base}/${name}`;
+    if (!opts.base) {
+      opts.base = name === 'power'
+        // power продолжает топики windows, а не заводит свои: кнопки, панель
+        // и физические выключатели адресованы старой базе, и после флага она
+        // не должна смениться. Общий шаблон ${mqtt.base}/power дал бы другой
+        // топик — ту самую поломку, которую однажды уже поймали здесь.
+        ? (config.modules.windows || {}).base || `${config.mqtt.base}/windows`
+        : `${config.mqtt.base}/${name}`;
+    }
 
     try {
       const mod = loadModule(name);

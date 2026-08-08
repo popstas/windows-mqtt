@@ -26,6 +26,38 @@ function storeThen({
   });
 }
 
+/**
+ * Очередь ожидающих store/done в порядке FIFO.
+ *
+ * У store/done нет ничего, что связывало бы ответ с конкретным запросом — ни
+ * payload, ни topic это не несут, а трогать протокол на стороне менеджера в
+ * этой задаче нельзя. FIFO — лучшее доступное приближение: пока запросы не
+ * идут внахлёст, это точное соответствие. Если же второй storeAndThen
+ * стартовал раньше, чем пришёл ответ на первый, и менеджер ответит не в том
+ * порядке, в котором запросы ушли, резолвер достанется не своему
+ * ожидающему — этого FIFO принципиально не умеет.
+ */
+function createAckQueue() {
+  let waiters = [];
+  function wait() {
+    let waiter;
+    const promise = new Promise((resolve) => { waiter = resolve; });
+    waiters.push(waiter);
+    return {
+      promise,
+      // Снять себя из очереди даже без ответа (по таймауту storeThen) — иначе
+      // резолвер висел бы вечно и его увёл бы следующий, никак не связанный
+      // store/done.
+      cancel: () => { waiters = waiters.filter((w) => w !== waiter); },
+    };
+  }
+  function resolveNext() {
+    const resolve = waiters.shift();
+    if (resolve) resolve();
+  }
+  return { wait, resolveNext };
+}
+
 function sleep() {
   setTimeout(() => exec('D:/prog/SysinternalsSuite/psshutdown.exe -d -t 0'), 1000);
 }
@@ -39,28 +71,27 @@ function shutdown() {
 }
 
 module.exports = async (mqtt, config, log) => {
-  // Ответ менеджера ловится одной подпиской на всё время жизни модуля: своей
-  // на каждую перезагрузку было бы столько же, сколько перезагрузок.
-  let ackResolvers = [];
-  function nextAck() {
-    return new Promise((resolve) => ackResolvers.push(resolve));
-  }
-  function onStoreDone() {
-    const pending = ackResolvers;
-    ackResolvers = [];
-    for (const r of pending) r();
-  }
+  // Одна подписка на всё время жизни модуля: своей на каждую перезагрузку
+  // было бы столько же, сколько перезагрузок. Очередь FIFO раздаёт ответы по
+  // порядку — см. createAckQueue().
+  const ackQueue = createAckQueue();
 
   const publish = (topic, payload) => mqtt.publish(topic, payload);
 
   async function storeAndThen(action) {
-    await storeThen({publish, base: config.base, ack: nextAck()});
+    const {promise: ack, cancel} = ackQueue.wait();
+    await storeThen({publish, base: config.base, ack});
+    // Снимает себя из очереди в обоих случаях: и когда ответ пришёл (тогда
+    // resolveNext() уже убрал его сам, и cancel() ничего не находит), и когда
+    // сработал таймаут — иначе резолвер остался бы висеть и его забрал бы
+    // следующий, никак не связанный store/done.
+    cancel();
     action();
   }
 
   return {
     subscriptions: [
-      {topics: [`${config.base}/store/done`], handler: onStoreDone},
+      {topics: [`${config.base}/store/done`], handler: () => ackQueue.resolveNext()},
       {topics: [`${config.base}/sleep`], handler: () => sleep()},
       {
         topics: [`${config.base}/restart`],
@@ -90,3 +121,4 @@ module.exports = async (mqtt, config, log) => {
 };
 
 module.exports.storeThen = storeThen;
+module.exports.createAckQueue = createAckQueue;
