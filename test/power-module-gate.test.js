@@ -129,7 +129,29 @@ test('config.yml вовсе без секции modules: не роняет getMo
   assert.deepEqual(enabled, [], 'без секции modules ничего, включая power, не включается');
 });
 
-test('config.example.yml: windows.enabled: false включает power и выключает windows', () => {
+test('config.yml с modules: без ключа, но с закомментированным телом (config.modules === null) не роняет getModulesEnabled()/initModules()', () => {
+  // Ловушка тоньше, чем «секции modules нет вовсе»: ключ `modules:` в файле
+  // ЕСТЬ, но все его строки — комментарии, и yaml разбирает такое тело в
+  // null, а не в undefined. `= {}` в сигнатуре isEnabled() на явный null не
+  // срабатывает — default-параметр подставляется только вместо undefined, —
+  // и `config.modules[name]`/`config.modules.windows` в initModules() падали
+  // бы тем же TypeError. Именно эта форма уже используется в живом проекте:
+  // блок `power:` в config.example.yml — ключ на месте, тело сплошь из
+  // комментариев.
+  const { helpers, config } = loadHelpersWithConfig([
+    'mqtt:',
+    '  base: home/room/pc',
+    'modules:',
+    '  # windows: {}',
+  ]);
+  assert.equal(config.modules, null, 'ключ modules есть, но тело целиком закомментировано — yaml даёт null');
+  assert.doesNotThrow(() => helpers.getModulesEnabled());
+  const enabled = helpers.getModulesEnabled();
+  assert.deepEqual(enabled, [], 'при null-секции modules ничего, включая power, не включается');
+  return assert.doesNotReject(() => helpers.initModules(enabled, fakeMqtt));
+});
+
+test('config.example.yml: windows.enabled: false включает power и выключает windows', async () => {
   const { helpers, config } = loadHelpersWithConfig(
     fs.readFileSync(path.join(__dirname, '..', 'config.example.yml'), 'utf8')
       .replace('    enabled: true\n    placeWindowOnOpen: true', '    enabled: false\n    placeWindowOnOpen: true')
@@ -139,4 +161,18 @@ test('config.example.yml: windows.enabled: false включает power и вы�
   const enabled = helpers.getModulesEnabled();
   assert.ok(enabled.includes('power'));
   assert.ok(!enabled.includes('windows'));
+
+  // Ловушка наследования базы уже дважды ломала power в этой миграции: пример
+  // из config.example.yml должен резолвиться на базу windows
+  // (home/room/pc/windows), а не на отдельный ${mqtt.base}/power.
+  //
+  // initModules() вызывается только с ['power'], а не с полным `enabled`:
+  // config.example.yml включает ещё audio, tabs и другие модули с реальными
+  // побочными эффектами (audio заводит setInterval, который не снят и держит
+  // процесс живым; tabs слушает порт) — грузить их тут ради проверки одного
+  // поля base не нужно, а раньше это вешало `node --test` до внешнего таймаута.
+  const modules = await helpers.initModules(['power'], fakeMqtt);
+  const power = modules.find((m) => m.name === 'power');
+  assert.ok(power, 'power должен загрузиться из config.example.yml');
+  assert.equal(power.base, 'home/room/pc/windows', 'база наследуется от windows, а не от ${mqtt.base}/power');
 });

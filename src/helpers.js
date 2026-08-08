@@ -138,12 +138,18 @@ function getModulesEnabled() {
   // собственная запись, поэтому проверить нужно и тогда, когда ключа power в
   // конфиге вообще нет — иначе на нетронутом config.yml флаг молча ничего не
   // переключает. Секции `modules:` целиком тоже может не быть (config.modules
-  // === undefined) — раньше `for...in` по undefined молча ничего не делал,
-  // Object.keys() на нём бросает TypeError, поэтому подстраховка нужна и тут.
-  const names = new Set(Object.keys(config.modules || {}));
+  // === undefined), а если ключ `modules:` есть, но всё его тело закомментировано
+  // (так уже сделано с `power:` в config.example.yml), yaml даёт config.modules
+  // === null — `= {}` в сигнатуре isEnabled() на явный null не срабатывает,
+  // default-параметр подставляется только вместо undefined. Раньше `for...in`
+  // по undefined/null молча ничего не делал, Object.keys() и любое обращение
+  // к свойству на них бросает TypeError, поэтому modulesConfig нормализуем
+  // здесь один раз и используем везде ниже вместо сырого config.modules.
+  const modulesConfig = config.modules || {};
+  const names = new Set(Object.keys(modulesConfig));
   names.add('power');
   for (const name of names) {
-    if (isModuleEnabled(name, config.modules))
+    if (isModuleEnabled(name, modulesConfig))
       modulesEnabled.push(name);
   }
   return modulesEnabled;
@@ -151,10 +157,14 @@ function getModulesEnabled() {
 
 async function initModules(modulesEnabled, mqtt) {
   const modules = [];
+  // Та же нормализация null/undefined, что и в getModulesEnabled(): initModules()
+  // может быть вызван отдельно (см. тесты), и config.modules[name] на null упал
+  // бы раньше, чем цикл дойдёт до первого модуля.
+  const modulesConfig = config.modules || {};
   for (let name of modulesEnabled) {
     log('load module: ' + name);
 
-    const opts = config.modules[name] || {};
+    const opts = modulesConfig[name] || {};
 
     // default mqtt base
     if (!opts.base) {
@@ -163,7 +173,7 @@ async function initModules(modulesEnabled, mqtt) {
         // и физические выключатели адресованы старой базе, и после флага она
         // не должна смениться. Общий шаблон ${mqtt.base}/power дал бы другой
         // топик — ту самую поломку, которую однажды уже поймали здесь.
-        ? (config.modules.windows || {}).base || `${config.mqtt.base}/windows`
+        ? (modulesConfig.windows || {}).base || `${config.mqtt.base}/windows`
         : `${config.mqtt.base}/${name}`;
     }
 
