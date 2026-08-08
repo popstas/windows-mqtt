@@ -19,6 +19,7 @@ const {
   buildDumpRefreshCommand,
 } = require('../picker/session-open-helpers');
 const { resolveClaudeProject, attachProjectHotkeys } = require('../picker/claude-project-helpers');
+const {parseRestorePayload} = require('../picker/restore-payload');
 const {resolveAppFile} = require('../paths');
 const {
   discoveryMessages, namesFingerprint, stateMessages, topics: haTopics,
@@ -655,13 +656,10 @@ module.exports = async (mqtt, config, log) => {
    * человек видел на экране в момент нажатия.
    */
   async function claudeSnapshotRestore(topic, message) {
-    // Пустое сообщение означает самый свежий снимок. Снимок, а не lastLayout:
-    // последний обнуляется через секунду после закрытия окон, потому что демон
-    // переписывает его тем, что видит на экране.
-    const id = String(message ?? '').trim() || 'last';
-    log(`< ${topic}: ${id}`);
+    const { id, sessionIds } = parseRestorePayload(message);
+    log(`< ${topic}: ${id}${sessionIds.length ? ` (${sessionIds.length})` : ''}`);
     try {
-      const {restored, skipped} = await winMan.restoreSnapshot({id});
+      const {restored, skipped} = await winMan.restoreSnapshot({id, sessionIds});
       log(`claude-wt snapshot ${id}: restored ${restored.length}, skipped ${skipped.length}`);
       if (!restored.length && !skipped.length) notifyPicker('claude-wt: нечего восстанавливать');
     } catch (e) {
