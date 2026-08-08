@@ -198,6 +198,11 @@ modules:
     # host: 'localhost'
     # port: 4455
     password: 'your_obs_password'
+  power:
+    # Свой enabled не нужен: включается автоматически, когда windows.enabled
+    # выключен. Топик тот же, что был у windows, — кнопки и панель шлют на
+    # home/room/pc/windows, при переключении модулей адрес не меняется.
+    base: 'home/room/pc/windows'
   reaper: {}
     # base: 'home/room/pc/reaper'
     # host: 'localhost'
@@ -225,7 +230,10 @@ modules:
     # sampleRate: 16000
     # numThreads: 1
   windows:
-    # enabled: false
+    # Оконные команды и claude-wt переехали в windows11-manager. false отдаёт их
+    # ему и оставляет здесь только питание машины (модуль power). Это выключатель
+    # перехода: при неполадке вернуть true и перезапустить.
+    enabled: true
     placeWindowOnOpen: true
     # start the claude-wt window position watcher (needs a claudeWt block with
     # statePath in %APPDATA%\windows-mqtt\windows11-manager.config.js)

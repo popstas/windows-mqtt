@@ -13,6 +13,7 @@ const registry = {
   mouse: './mouse',
   notify: './notify',
   obs: './obs',
+  power: './power',
   reaper: './reaper',
   tabs: './tabs',
   tts: './tts',
@@ -25,4 +26,18 @@ function load(name) {
   return require(modulePath);
 }
 
-module.exports = { registry, load };
+/**
+ * Грузить ли модуль `name` при данном config.modules.
+ *
+ * windows и power — два взаимоисключающих обработчика питания за одним
+ * флагом windows.enabled: при true (по умолчанию) перезагрузку обслуживает
+ * старый windows.js, при false — новый power. У power нет собственного
+ * enabled — иначе оба слушали бы windows/restart и отвечали дважды.
+ */
+function isEnabled(name, modulesConfig = {}) {
+  if (name === 'power') return (modulesConfig.windows || {}).enabled === false;
+  const mod = modulesConfig[name] || {};
+  return mod.enabled !== undefined ? !!mod.enabled : true;
+}
+
+module.exports = { registry, load, isEnabled };

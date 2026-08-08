@@ -1,5 +1,5 @@
 const config = require("./config");
-const { load: loadModule } = require('./modules');
+const { load: loadModule, isEnabled: isModuleEnabled } = require('./modules');
 const os = require("os");
 const fs = require("fs");
 const path = require("path");
@@ -134,9 +134,7 @@ function logConsoleLine(level, msg) {
 function getModulesEnabled() {
   const modulesEnabled = [];
   for (let name in config.modules) {
-    const mod = config.modules[name];
-    const isEnabled = mod.enabled !== undefined ? !!mod.enabled : true;
-    if (isEnabled)
+    if (isModuleEnabled(name, config.modules))
       modulesEnabled.push(name);
   }
   return modulesEnabled;
