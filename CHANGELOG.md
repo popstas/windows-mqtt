@@ -1,3 +1,25 @@
+## Unreleased
+
+**claude-wt, the session picker window and Home Assistant export moved out**
+of this repo entirely — into `windows11-manager` and `ccfzf-picker`. Removed:
+`src/modules/windows.js`, `src/modules/claude-wt-watchdog.js`,
+`src/homeassistant/`, `src/picker/`, `frontend-src/` and `sessions.html` (the
+in-app palette window), plus their tests. This was already dead code in the
+live config (`modules.windows.enabled: false`): the whole point was to free
+`Ctrl+F11`/`Ctrl+F12` and the picker's own hotkey, which `windows.js` kept
+losing the registration race for even though nothing here still handled them.
+
+The one behavioral change: `power`'s **enablement** no longer shares the
+`modules.windows.enabled` flag with the now-deleted `windows.js` — that
+interlock existed only so the two wouldn't both answer `windows/restart`.
+With `windows.js` gone, `power` is enabled the same way any other module is
+(its own `enabled` key, default on) — live behavior is unchanged, since it
+was already on. Its **MQTT topic base stays the historical one**,
+`<mqtt.base>/windows` rather than `<mqtt.base>/power` — that part is kept
+intentionally, not an oversight: physical buttons, the panel and the openHASP
+config all still address the old `windows/restart` topic, and moving them is
+separate work in another repo.
+
 # 1.0.0 (2026-07-16)
 
 First tagged release. The app moved from Electron to **Tauri v2**, which is the

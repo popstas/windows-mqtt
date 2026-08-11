@@ -6,10 +6,9 @@
 // приложения: тауриевский bundle.resources кладёт `../src/*` в `_up_/src`.
 // Скопировать их и перезапустить приложение — секунды.
 //
-// Так можно не всё. Интерфейс пикера (sessions.html, index.html, frontend-src/)
-// в файлы не попадает: tauri вшивает frontendDist в бинарник. Rust — тем более.
-// Поэтому скрипт сам сверяет отметки времени и говорит, когда быстрым путём
-// обойтись не выйдет.
+// Так можно не всё. index.html в файлы не попадает: tauri вшивает
+// frontendDist в бинарник. Rust — тем более. Поэтому скрипт сам сверяет
+// отметки времени и говорит, когда быстрым путём обойтись не выйдет.
 const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -38,8 +37,6 @@ const COPY = [
 // правку он не увидит и нужен полный `deploy-local`.
 const NEEDS_BUILD = [
   'src-tauri',
-  'frontend-src',
-  'sessions.html',
   'index.html',
   'package.json',
 ];
@@ -76,7 +73,7 @@ const exeMtime = fs.statSync(installedExe).mtimeMs;
 const stale = NEEDS_BUILD.filter((rel) => newestMtime(path.join(projectRoot, rel)) > exeMtime);
 if (stale.length) {
   console.error(`Эти правки быстрым путём не доедут: ${stale.join(', ')}.`);
-  console.error('Интерфейс пикера вшит в бинарник, Rust тоже — нужен npm run deploy-local.');
+  console.error('index.html вшит в бинарник, Rust тоже — нужен npm run deploy-local.');
   process.exit(1);
 }
 

@@ -1,5 +1,0 @@
-{
-  "identifier": "sessions",
-  "windows": ["sessions"],
-  "permissions": ["core:default"]
-}

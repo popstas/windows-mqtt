@@ -77,13 +77,6 @@ struct HotkeyMenuItems(Vec<CheckMenuItem<tauri::Wry>>);
 struct IntervalMenuItems(Vec<CheckMenuItem<tauri::Wry>>);
 struct CurrentShortcut(Mutex<Option<String>>);
 
-// Timestamp of the last time the picker was hidden (by any path: Esc, click-
-// away blur, or an explicit hide). Read from the tray left-click handler,
-// which runs synchronously on the tray's event loop, so a std (non-async)
-// mutex is used rather than the tokio one the rest of the app favors for
-// IPC-guarded state.
-struct LastHidden(std::sync::Mutex<Option<std::time::Instant>>);
-
 // --- Send command to JS child via IPC ---
 
 async fn send_command(app: &tauri::AppHandle, action: &str) {
@@ -117,210 +110,6 @@ async fn send_command_with(
         }
     }
 }
-
-/// Centre `window` on `monitor`, a third of the way down (a palette reads
-/// that way; dead centre reads as a dialog). Reads `window.outer_size()`
-/// itself rather than taking a cached size, so callers can invoke it twice
-/// around a move and pick up Windows' post-move DPI rescale (see
-/// `show_picker`).
-fn position_on_monitor<R: tauri::Runtime>(
-    window: &tauri::WebviewWindow<R>,
-    monitor: &tauri::window::Monitor,
-) -> Result<(), tauri::Error> {
-    let size = window.outer_size()?;
-    let mp = monitor.position();
-    let ms = monitor.size();
-    let x = mp.x + (ms.width as i32 - size.width as i32) / 2;
-    let y = mp.y + (ms.height as i32 - size.height as i32) / 3;
-    window.set_position(tauri::PhysicalPosition { x, y })
-}
-
-/// Show the picker centred on the monitor the cursor is on.
-///
-/// The `center: true` window option centres on the primary monitor, which is
-/// the wrong one whenever the user is working somewhere else, so the position
-/// is computed at every show.
-fn show_picker(app: &tauri::AppHandle) {
-    let window = match app.get_webview_window("sessions") {
-        Some(w) => w,
-        None => return,
-    };
-
-    let log = |message: String| {
-        let _ = app.emit(
-            "server-log",
-            LogPayload {
-                message,
-                level: "warn".into(),
-            },
-        );
-    };
-
-    match app.cursor_position() {
-        Ok(cursor) => match window.monitor_from_point(cursor.x, cursor.y) {
-            Ok(Some(monitor)) => {
-                // Windows rescales a per-monitor-DPI-aware window's physical
-                // size to the target monitor right after a cross-monitor
-                // move, so `outer_size()` read before the move can be stale
-                // on a mixed-DPI multi-monitor setup. Position once to land
-                // on the right monitor (triggering the rescale), then
-                // re-read the now-current size and centre again with it.
-                if let Err(e) = position_on_monitor(&window, &monitor) {
-                    log(format!("Picker show: failed to position window: {e}"));
-                }
-                if let Err(e) = position_on_monitor(&window, &monitor) {
-                    log(format!(
-                        "Picker show: failed to re-position window after DPI rescale: {e}"
-                    ));
-                }
-            }
-            Ok(None) => log("Picker show: no monitor found at cursor position".into()),
-            Err(e) => log(format!("Picker show: monitor_from_point failed: {e}")),
-        },
-        Err(e) => log(format!("Picker show: failed to read cursor position: {e}")),
-    }
-
-    if let Err(e) = window.show() {
-        log(format!("Picker show: window.show() failed: {e}"));
-    }
-    if let Err(e) = window.set_focus() {
-        log(format!("Picker show: set_focus() failed: {e}"));
-    }
-    let _ = window.emit_to("sessions", "picker-shown", ());
-}
-
-/// Hide the picker. Idempotent: only emits `picker-hidden` if the window was
-/// actually visible, so re-entering via the `Focused(false)` handler after an
-/// explicit `hide_picker` (Esc) does not double-emit — Esc hides the window,
-/// which then loses focus and re-enters this function via the blur handler.
-/// Also stamps `LastHidden` so the tray left-click handler can distinguish a
-/// fresh hide (this click just closed it) from a stale one.
-fn hide_picker_window(app: &tauri::AppHandle) {
-    let window = match app.get_webview_window("sessions") {
-        Some(w) => w,
-        None => return,
-    };
-    let was_visible = window.is_visible().unwrap_or(true);
-    let _ = window.hide();
-    if was_visible {
-        let _ = window.emit_to("sessions", "picker-hidden", ());
-    }
-    if let Some(state) = app.try_state::<LastHidden>() {
-        *state.0.lock().unwrap() = Some(std::time::Instant::now());
-    }
-}
-
-/// Итог решения «что сделать с пикером» по одному нажатию (трей или Win+F10).
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-enum PickerToggle {
-    Show,
-    Hide,
-    Nothing,
-}
-
-/// Решает, что делать с пикером: видимое окно скрывается, невидимое
-/// показывается. Третий исход, `Nothing`, существует из-за автоскрытия по
-/// потере фокуса: если окно скрылось только что само (см. `recently_hidden`
-/// в `toggle_picker`), то текущее нажатие — это и есть закрытие, а не новый
-/// запрос показа, и его нужно проигнорировать — иначе пикер немедленно
-/// откроется обратно вместо того, чтобы остаться закрытым.
-fn picker_toggle(visible: bool, recently_hidden: bool) -> PickerToggle {
-    if visible {
-        PickerToggle::Hide
-    } else if recently_hidden {
-        PickerToggle::Nothing
-    } else {
-        PickerToggle::Show
-    }
-}
-
-/// Общая точка «переключить пикер» для трея и горячей клавиши: обе стороны
-/// читают состояние и исполняют исход здесь, а не дублируют это каждая у себя.
-fn toggle_picker(app: &tauri::AppHandle) {
-    let visible = app
-        .get_webview_window("sessions")
-        .and_then(|w| w.is_visible().ok())
-        .unwrap_or(false);
-    // Clicking the tray icon activates the shell's
-    // notification area, which blurs the picker and
-    // queues a Focused(false)-driven hide at
-    // button-DOWN — before this Up-edge handler runs.
-    // By the time `visible` is read above the window
-    // may already be hidden by that race, which would
-    // otherwise make this branch re-show it (a
-    // hide/show flicker) instead of leaving it closed
-    // as the click visually did. Treat a show request
-    // arriving within the race window as the
-    // toggle-close it actually was.
-    //
-    // Горячая клавиша заходит сюда же и делит эту защиту: у неё гонка
-    // другая (двойное срабатывание Pressed/Released, см. фильтр в
-    // register_shortcut_action), но исход нужен тот же — «скрылось
-    // только что само» не должно тут же открыться обратно от того же
-    // нажатия.
-    let recently_hidden = app
-        .try_state::<LastHidden>()
-        .and_then(|state| *state.0.lock().unwrap())
-        .map(|t| t.elapsed() < Duration::from_millis(300))
-        .unwrap_or(false);
-    match picker_toggle(visible, recently_hidden) {
-        PickerToggle::Show => show_picker(app),
-        PickerToggle::Hide => hide_picker_window(app),
-        PickerToggle::Nothing => {}
-    }
-}
-
-#[tauri::command]
-async fn picker_send(
-    app: tauri::AppHandle,
-    action: String,
-    payload: Option<serde_json::Value>,
-) {
-    allow_node_foreground(&app).await;
-    send_command_with(&app, &action, payload).await;
-}
-
-#[tauri::command]
-fn hide_picker(app: tauri::AppHandle) {
-    hide_picker_window(&app);
-}
-
-/// Hand the foreground right to the Node child.
-///
-/// Windows only lets the process that owns the foreground window set it (or
-/// hand that right to another process explicitly). By the time this runs the
-/// picker itself is usually already hidden — `sessions.html` awaits
-/// `hide_picker` before calling `picker_send` — so it is not "us, because the
-/// picker has focus" that grants this. Windows also lets the process that
-/// received the *most recent input event* call AllowSetForegroundWindow, and
-/// that is still us at this point (the click/keypress that triggered the
-/// pick). Without this the Node child's bringToTop() flashes the taskbar
-/// button instead of switching.
-#[cfg(windows)]
-async fn allow_node_foreground(app: &tauri::AppHandle) {
-    use windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow;
-    let state = app.state::<ServerState>();
-    let guard = state.0.lock().await;
-    if let Some(ref child) = *guard {
-        let pid = child.pid();
-        let result = unsafe { AllowSetForegroundWindow(pid) };
-        if let Err(e) = result {
-            let _ = app.emit(
-                "server-log",
-                LogPayload {
-                    message: format!(
-                        "Failed to grant foreground rights to pid {}: {}",
-                        pid, e
-                    ),
-                    level: "error".into(),
-                },
-            );
-        }
-    }
-}
-
-#[cfg(not(windows))]
-async fn allow_node_foreground(_app: &tauri::AppHandle) {}
 
 async fn shutdown_node(app: &tauri::AppHandle) {
     let state = app.state::<ServerState>();
@@ -685,151 +474,6 @@ fn read_enabled_modules(config_path: &PathBuf) -> Result<Vec<String>, String> {
     Ok(enabled)
 }
 
-#[derive(Debug, Clone)]
-struct PickerConfig {
-    hotkey: String,
-    tray_left_click_picker: bool,
-}
-
-const DEFAULT_PICKER_HOTKEY: &str = "Super+F10";
-
-/// Parsed separately from reading the file so the parsing has tests.
-fn parse_picker_config(content: &str) -> PickerConfig {
-    let value: serde_yaml::Value = match serde_yaml::from_str(content) {
-        Ok(v) => v,
-        Err(_) => serde_yaml::Value::Null,
-    };
-    let hotkey = value
-        .get("picker")
-        .and_then(|p| p.get("hotkey"))
-        .and_then(|h| h.as_str())
-        .unwrap_or(DEFAULT_PICKER_HOTKEY)
-        .to_string();
-    let tray_left_click_picker = value
-        .get("tray")
-        .and_then(|t| t.get("leftClick"))
-        .and_then(|v| v.as_str())
-        .map(|s| s == "picker")
-        .unwrap_or(false);
-    PickerConfig {
-        hotkey,
-        tray_left_click_picker,
-    }
-}
-
-fn read_picker_config(config_path: &PathBuf) -> PickerConfig {
-    match std::fs::read_to_string(config_path) {
-        Ok(content) => parse_picker_config(&content),
-        Err(_) => parse_picker_config(""),
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ClaudeProject {
-    name: String,
-    cwd: String,
-    hotkey: String,
-}
-
-/// Parses the JSON array dumped by `claudeWtProjects()` in windows11-manager.
-fn parse_claude_projects_json(content: &str) -> Vec<ClaudeProject> {
-    let value: serde_json::Value = match serde_json::from_str(content) {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
-    };
-    let Some(list) = value.as_array() else {
-        return Vec::new();
-    };
-    let mut out = Vec::new();
-    for item in list {
-        let name = item
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let cwd = item
-            .get("cwd")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let hotkey = item
-            .get("hotkey")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        if name.is_empty() || cwd.is_empty() || hotkey.is_empty() {
-            continue;
-        }
-        out.push(ClaudeProject { name, cwd, hotkey });
-    }
-    out
-}
-
-/// Asks windows11-manager for the merged `claudeWt.projects` list instead of
-/// re-parsing the yaml config here, so this stays in sync with the same
-/// defaults/merge logic the node daemon and picker already use. Namespace
-/// import (`import * as m`), not default: the package only has named exports.
-fn read_claude_projects_from_manager(
-    app_root: &PathBuf,
-    app: &tauri::AppHandle,
-) -> Vec<ClaudeProject> {
-    let mut cmd = std::process::Command::new("node");
-    cmd.args([
-        "--input-type=module",
-        "-e",
-        "import * as m from 'windows11-manager'; process.stdout.write(JSON.stringify(m.claudeWtProjects()))",
-    ])
-    .current_dir(app_root)
-    .stdin(std::process::Stdio::null());
-    // Plain std::process::Command spawns a console app with its own console
-    // window even when the parent is a GUI (windows_subsystem = "windows")
-    // process; suppress that flash explicitly (tauri_plugin_shell does this
-    // internally, but this call is synchronous and runs before the async
-    // runtime is set up).
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-    match cmd.output() {
-        Ok(o) if o.status.success() => {
-            parse_claude_projects_json(&String::from_utf8_lossy(&o.stdout))
-        }
-        Ok(o) => {
-            // A missing/empty list here silently drops every project hotkey
-            // (e.g. Ctrl+F11), so log enough to diagnose it: exit status and
-            // whatever node wrote to stderr.
-            let message = format!(
-                "claude-wt: reading projects from manager exited with {:?}: {}",
-                o.status.code(),
-                String::from_utf8_lossy(&o.stderr).trim()
-            );
-            eprintln!("{message}");
-            let _ = app.emit(
-                "server-log",
-                LogPayload {
-                    message,
-                    level: "warn".into(),
-                },
-            );
-            Vec::new()
-        }
-        Err(e) => {
-            let message = format!("claude-wt: failed to spawn node for projects: {e}");
-            eprintln!("{message}");
-            let _ = app.emit(
-                "server-log",
-                LogPayload {
-                    message,
-                    level: "error".into(),
-                },
-            );
-            Vec::new()
-        }
-    }
-}
-
 fn find_app_root(candidates: &[PathBuf]) -> Option<PathBuf> {
     candidates
         .iter()
@@ -977,14 +621,6 @@ fn build_tray_menu(
         None::<&str>,
     )
     .map_err(m)?;
-    let claude_picker = MenuItem::with_id(
-        app,
-        "win_claude_picker",
-        "Claude sessions…",
-        true,
-        None::<&str>,
-    )
-    .map_err(m)?;
 
     menu.append(&autoplace).map_err(m)?;
     menu.append(&store).map_err(m)?;
@@ -992,7 +628,6 @@ fn build_tray_menu(
     menu.append(&clear).map_err(m)?;
     menu.append(&open_default).map_err(m)?;
     menu.append(&claude_restore).map_err(m)?;
-    menu.append(&claude_picker).map_err(m)?;
     menu.append(&PredefinedMenuItem::separator(app).map_err(m)?)
         .map_err(m)?;
 
@@ -1117,7 +752,6 @@ fn register_shortcut(app: &tauri::AppHandle, shortcut_str: &str) -> Result<(), S
 #[derive(Clone, Copy)]
 enum ShortcutAction {
     Autoplace,
-    ShowPicker,
 }
 
 fn register_shortcut_action(
@@ -1135,11 +769,12 @@ fn register_shortcut_action(
             // прилетает сюда дважды — Pressed и следом Released (HotKeyState
             // из crate global-hotkey, на котором построен
             // tauri-plugin-global-shortcut). Фильтр стоит здесь, на входе в
-            // замыкание, а не в одной из веток `match` — он общий для обеих
-            // команд, и раньше был только у ShowPicker: Autoplace без него
-            // отправлял windows/autoplace дважды на одно нажатие. Реагируем
-            // только на нажатие клавиши вниз, симметрично тому, как трей
-            // реагирует только на Up физического клика.
+            // замыкание, а не внутри `match` — раньше вторая ветка (ShowPicker,
+            // с тех пор удалена вместе с пикером) уже была фильтром сама по
+            // себе, а Autoplace без общего фильтра отправлял windows/autoplace
+            // дважды на одно нажатие. Реагируем только на нажатие клавиши
+            // вниз, симметрично тому, как трей реагирует только на Up
+            // физического клика.
             if event.state() != ShortcutState::Pressed {
                 return;
             }
@@ -1149,9 +784,6 @@ fn register_shortcut_action(
                     tauri::async_runtime::spawn(async move {
                         send_command(&app_handle, "windows/autoplace").await;
                     });
-                }
-                ShortcutAction::ShowPicker => {
-                    toggle_picker(&app_handle);
                 }
             }
         })
@@ -1171,8 +803,7 @@ fn unregister_shortcut(app: &tauri::AppHandle, shortcut_str: &str) {
 /// instance is still tearing down, e.g. `npm run deploy-local`'s kill →
 /// install → relaunch) the old process briefly still owns the shortcut, so a
 /// single attempt can lose it for the whole session. Retry until the old
-/// owner releases it, without blocking startup. Shared by both the autoplace
-/// hotkey and the picker hotkey so they get identical treatment.
+/// owner releases it, without blocking startup.
 fn register_shortcut_with_retry(
     app: tauri::AppHandle,
     shortcut_str: String,
@@ -1208,67 +839,6 @@ fn register_shortcut_with_retry(
     });
 }
 
-/// Project hotkeys carry a name string, so they cannot share the Copy
-/// ShortcutAction enum used by autoplace/picker. Same retry loop otherwise.
-fn register_project_shortcut_with_retry(
-    app: tauri::AppHandle,
-    shortcut_str: String,
-    project_name: String,
-) {
-    if shortcut_str.is_empty() || project_name.is_empty() {
-        return;
-    }
-    std::thread::spawn(move || {
-        const ATTEMPTS: u32 = 10;
-        for attempt in 1..=ATTEMPTS {
-            unregister_shortcut(&app, &shortcut_str);
-            let app_for_handler = app.clone();
-            let name_for_handler = project_name.clone();
-            let result = app.global_shortcut().on_shortcut(
-                shortcut_str.as_str(),
-                move |_app, _shortcut, event| {
-                    // Тот же тумблер Pressed/Released, что и у
-                    // register_shortcut_action: без него windows/claude-focus-project
-                    // уходил дважды на одно нажатие, а на другом конце у
-                    // claudeRestoreOne вся защита от повторного запуска — это
-                    // проверка «окно уже открыто», и два запроса приходят
-                    // вплотную, до того как первый успевает её выставить.
-                    if event.state() != ShortcutState::Pressed {
-                        return;
-                    }
-                    let app_handle = app_for_handler.clone();
-                    let name = name_for_handler.clone();
-                    tauri::async_runtime::spawn(async move {
-                        allow_node_foreground(&app_handle).await;
-                        send_command_with(
-                            &app_handle,
-                            "windows/claude-focus-project",
-                            Some(serde_json::json!({ "name": name })),
-                        )
-                        .await;
-                    });
-                },
-            );
-            match result {
-                Ok(()) => return,
-                Err(e) if attempt == ATTEMPTS => {
-                    let message = format!(
-                        "Failed to register project hotkey '{shortcut_str}' ({project_name}) after {ATTEMPTS} attempts: {e}"
-                    );
-                    eprintln!("{message}");
-                    let _ = app.emit(
-                        "server-log",
-                        LogPayload {
-                            message,
-                            level: "warn".into(),
-                        },
-                    );
-                }
-                Err(_) => std::thread::sleep(Duration::from_millis(300)),
-            }
-        }
-    });
-}
 
 // --- Main ---
 
@@ -1281,35 +851,14 @@ fn main() {
         .manage(CurrentShortcut(Mutex::new(Some(
             "ctrl+alt+shift+p".to_string(),
         ))))
-        .manage(LastHidden(std::sync::Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             start_mqtt_server,
-            get_enabled_modules,
-            picker_send,
-            hide_picker
+            get_enabled_modules
         ])
         .on_window_event(|window, event| match event {
-            // The frameless "sessions" window has no close button, but Alt+F4
-            // (or any other close request) must still go through
-            // hide_picker_window so picker-hidden is emitted and LastHidden
-            // is stamped — otherwise the webview never learns it was hidden,
-            // never sends windows/claude-sessions-stop, and the 1 Hz session
-            // scan keeps running until the next open/close cycle.
-            WindowEvent::CloseRequested { api, .. } if window.label() == "sessions" => {
-                hide_picker_window(window.app_handle());
-                api.prevent_close();
-            }
             WindowEvent::CloseRequested { api, .. } => {
                 let _ = window.hide();
                 api.prevent_close();
-            }
-            // The palette is modal by habit: clicking elsewhere dismisses it.
-            // Routed through hide_picker_window so an explicit hide (Esc)
-            // that re-enters here via the resulting focus loss doesn't
-            // double-emit picker-hidden, and so this hide is recorded in
-            // LastHidden for the tray left-click toggle race below.
-            WindowEvent::Focused(false) if window.label() == "sessions" => {
-                hide_picker_window(window.app_handle());
             }
             _ => {}
         })
@@ -1321,10 +870,8 @@ fn main() {
 
             let app_handle = app.handle().clone();
 
-            // Resolved once and reused below (picker config path) instead of
-            // calling resolve_app_root twice. Kept as a Result rather than
-            // unwrapped here so each downstream use can degrade on its own
-            // terms instead of one failure aborting the other.
+            // Kept as a Result rather than unwrapped here so the MQTT config
+            // below can degrade to its own defaults instead of propagating.
             let app_root_result = resolve_app_root(&app_handle);
 
             // Read MQTT config and create bridge
@@ -1387,74 +934,6 @@ fn main() {
                 }
             });
 
-            // A missing/corrupt install (src/index.js not found under either
-            // resource_dir or resource_dir/_up_) must not turn a diagnosable
-            // degraded launch into a silent startup crash — fall back to the
-            // picker config's own defaults (what parse_picker_config("")
-            // yields) and log it, the same way the MQTT config above
-            // degrades instead of propagating.
-            let picker_cfg = match &app_root_result {
-                Ok(root) => read_picker_config(&resolve_config_path(&app.handle(), root)),
-                Err(e) => {
-                    let _ = app.handle().emit(
-                        "server-log",
-                        LogPayload {
-                            message: format!(
-                                "App root error (picker config falls back to defaults): {e}"
-                            ),
-                            level: "warn".into(),
-                        },
-                    );
-                    parse_picker_config("")
-                }
-            };
-
-            // The picker gets its data exclusively from the `windows` module's
-            // claude-wt session feed. If the tray is wired to open the picker
-            // but that module is off, the picker will show "Backend not
-            // responding" forever with nothing in the log to explain why —
-            // warn at startup instead of leaving that a silent mystery.
-            if picker_cfg.tray_left_click_picker {
-                let modules = app_root_result
-                    .as_ref()
-                    .ok()
-                    .map(|root| {
-                        read_enabled_modules(&resolve_config_path(&app.handle(), root))
-                            .unwrap_or_default()
-                    })
-                    .unwrap_or_default();
-                if !modules.iter().any(|m| m == "windows") {
-                    let _ = app.handle().emit(
-                        "server-log",
-                        LogPayload {
-                            message: "tray.leftClick is 'picker' but the windows module is disabled — the picker will have no data".into(),
-                            level: "warn".into(),
-                        },
-                    );
-                }
-            }
-
-            register_shortcut_with_retry(
-                app.handle().clone(),
-                picker_cfg.hotkey.clone(),
-                ShortcutAction::ShowPicker,
-                "picker",
-            );
-            app.manage(picker_cfg);
-
-            let claude_projects = app_root_result
-                .as_ref()
-                .ok()
-                .map(|root| read_claude_projects_from_manager(root, app.handle()))
-                .unwrap_or_default();
-            for project in claude_projects {
-                register_project_shortcut_with_retry(
-                    app.handle().clone(),
-                    project.hotkey,
-                    project.name,
-                );
-            }
-
             let (menu, hotkey_items, interval_items) =
                 build_tray_menu(&app_handle).expect("failed to build tray menu");
 
@@ -1484,11 +963,6 @@ fn main() {
             let tray = tray_builder
                 .on_menu_event(move |app, event| {
                     let id = event.id().as_ref().to_string();
-
-                    if id == "win_claude_picker" {
-                        show_picker(app);
-                        return;
-                    }
 
                     // Window action commands
                     let action = match id.as_str() {
@@ -1630,13 +1104,7 @@ fn main() {
                     } = event
                     {
                         let app = tray.app_handle();
-                        let opens_picker = app
-                            .try_state::<PickerConfig>()
-                            .map(|cfg| cfg.tray_left_click_picker)
-                            .unwrap_or(false);
-                        if opens_picker {
-                            toggle_picker(app);
-                        } else if let Some(window) = app.get_webview_window("main") {
+                        if let Some(window) = app.get_webview_window("main") {
                             let is_visible = window.is_visible().unwrap_or(false);
                             if is_visible {
                                 let _ = window.hide();
@@ -1661,82 +1129,6 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{describe_child_exit, find_app_root};
-    use super::{parse_claude_projects_json, parse_picker_config};
-    use super::{picker_toggle, PickerToggle};
-
-    #[test]
-    fn picker_toggle_hides_visible_window() {
-        assert_eq!(picker_toggle(true, false), PickerToggle::Hide);
-    }
-
-    #[test]
-    fn picker_toggle_hides_visible_window_even_if_recently_hidden() {
-        // Технически противоречивое сочетание (окно видимо, но метка
-        // «скрылось только что» ещё не сброшена) — видимость всегда решает
-        // первой, `recently_hidden` учитывается только когда окна не видно.
-        assert_eq!(picker_toggle(true, true), PickerToggle::Hide);
-    }
-
-    #[test]
-    fn picker_toggle_shows_hidden_window() {
-        assert_eq!(picker_toggle(false, false), PickerToggle::Show);
-    }
-
-    #[test]
-    fn picker_toggle_ignores_request_right_after_self_hide() {
-        assert_eq!(picker_toggle(false, true), PickerToggle::Nothing);
-    }
-
-    #[test]
-    fn picker_config_falls_back_to_defaults() {
-        let cfg = parse_picker_config("modules:\n  windows:\n    claudeWt: true\n");
-        assert_eq!(cfg.hotkey, "Super+F10");
-        assert!(!cfg.tray_left_click_picker);
-    }
-
-    #[test]
-    fn picker_config_reads_hotkey_and_tray_choice() {
-        let cfg = parse_picker_config("picker:\n  hotkey: 'Ctrl+Alt+J'\ntray:\n  leftClick: picker\n");
-        assert_eq!(cfg.hotkey, "Ctrl+Alt+J");
-        assert!(cfg.tray_left_click_picker);
-    }
-
-    #[test]
-    fn picker_config_treats_any_other_tray_choice_as_log() {
-        let cfg = parse_picker_config("tray:\n  leftClick: log\n");
-        assert!(!cfg.tray_left_click_picker);
-    }
-
-    #[test]
-    fn picker_config_survives_broken_yaml() {
-        let cfg = parse_picker_config("\t\tnot: [valid");
-        assert_eq!(cfg.hotkey, "Super+F10");
-    }
-
-    #[test]
-    fn claude_projects_json_parses_entries() {
-        let projects = parse_claude_projects_json(
-            r#"[{"name":"home","cwd":"/p/home","hotkey":"Ctrl+F11","profile":"home"}]"#,
-        );
-        assert_eq!(projects.len(), 1);
-        assert_eq!(projects[0].name, "home");
-        assert_eq!(projects[0].hotkey, "Ctrl+F11");
-    }
-
-    #[test]
-    fn claude_projects_json_skips_incomplete() {
-        let projects = parse_claude_projects_json(
-            r#"[{"name":"x"},{"name":"ok","cwd":"/p","hotkey":"Ctrl+F12"}]"#,
-        );
-        assert_eq!(projects.len(), 1);
-        assert_eq!(projects[0].name, "ok");
-    }
-
-    #[test]
-    fn claude_projects_json_empty_when_missing_or_broken() {
-        assert!(parse_claude_projects_json("{}").is_empty());
-        assert!(parse_claude_projects_json("not json").is_empty());
-    }
 
     #[test]
     fn reports_access_violation_as_a_native_crash_error() {

@@ -17,7 +17,6 @@ const registry = {
   reaper: './reaper',
   tabs: './tabs',
   tts: './tts',
-  windows: './windows',
 };
 
 function load(name) {
@@ -29,13 +28,13 @@ function load(name) {
 /**
  * Грузить ли модуль `name` при данном config.modules.
  *
- * windows и power — два взаимоисключающих обработчика питания за одним
- * флагом windows.enabled: при true (по умолчанию) перезагрузку обслуживает
- * старый windows.js, при false — новый power. У power нет собственного
- * enabled — иначе оба слушали бы windows/restart и отвечали дважды.
+ * power раньше делил windows/restart со старым windows.js за флагом
+ * windows.enabled — своего enabled ему нарочно не давали, иначе оба слушали
+ * бы один топик и отвечали дважды. Второго обработчика больше нет
+ * (windows.js уехал в windows11-manager), и power стал обычным модулем со
+ * своим enabled, по умолчанию включён.
  */
 function isEnabled(name, modulesConfig = {}) {
-  if (name === 'power') return (modulesConfig.windows || {}).enabled === false;
   const mod = modulesConfig[name] || {};
   return mod.enabled !== undefined ? !!mod.enabled : true;
 }

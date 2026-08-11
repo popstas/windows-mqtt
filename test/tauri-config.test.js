@@ -67,7 +67,6 @@ test('base tauri.conf.json bundles the full resource list', () => {
     '../bin/*',
     '../src/*',
     '../src/modules/**/*',
-    '../src/picker/**/*',
     '../node_modules/**/*',
   ];
   for (const glob of required) {
@@ -232,20 +231,20 @@ test('legacy tauri.bundle.conf.json is removed', () => {
   );
 });
 
-// A plain `src.includes('sessions.html')` would still pass if that copy line
+// A plain `src.includes('index.html')` would still pass if that copy line
 // were commented out, or if the file were copied to the wrong destination
-// (e.g. a stray edit sending it to frontend/index.html). Assert the actual
+// (e.g. a stray edit sending it to frontend/sessions.html). Assert the actual
 // (source, destination) pairs the script passes to copyFileSync instead.
-test('prepare-frontend copies both pages and the picker filter to the right destinations', () => {
+test('prepare-frontend copies index.html and its scripts to the right destinations', () => {
   const src = fs.readFileSync(path.join(repoRoot, 'scripts', 'prepare-frontend.js'), 'utf8');
   const calls = [...src.matchAll(/copyFileSync\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\)/g)]
     .map(m => ({ from: m[1], to: m[2] }));
 
-  // Список скриптов берётся из самих страниц, а не переписывается сюда руками:
-  // иначе новый <script src> в пикере проезжает мимо prepare-frontend, и в
+  // Список скриптов берётся из самой страницы, а не переписывается сюда руками:
+  // иначе новый <script src> в index.html проезжает мимо prepare-frontend, и в
   // собранном приложении страница валится на первом же обращении к нему —
   // тогда как в репозитории и в тестах всё на месте.
-  const pages = ['index.html', 'sessions.html'];
+  const pages = ['index.html'];
   const required = pages.map(page => ({ from: page, to: `frontend/${page}` }));
   for (const page of pages) {
     const html = fs.readFileSync(path.join(repoRoot, page), 'utf8');
@@ -261,26 +260,6 @@ test('prepare-frontend copies both pages and the picker filter to the right dest
       `prepare-frontend.js must copyFileSync('${pair.from}', '${pair.to}')`
     );
   }
-});
-
-// The picker hotkey default is duplicated across two languages: main.rs'
-// DEFAULT_PICKER_HOTKEY (used when picker.hotkey is absent from config.yml)
-// and config.example.yml's documented default. Nothing else catches these
-// drifting apart.
-test('DEFAULT_PICKER_HOTKEY in main.rs matches config.example.yml picker.hotkey', () => {
-  const mainRs = fs.readFileSync(path.join(srcTauri, 'src', 'main.rs'), 'utf8');
-  const m = mainRs.match(/const\s+DEFAULT_PICKER_HOTKEY\s*:\s*&str\s*=\s*"([^"]+)"/);
-  assert.ok(m, 'could not find `const DEFAULT_PICKER_HOTKEY: &str = "..."` in main.rs');
-  const rustDefault = m[1];
-
-  const config = yaml.load(fs.readFileSync(path.join(repoRoot, 'config.example.yml'), 'utf8'));
-  const configHotkey = config && config.picker && config.picker.hotkey;
-
-  assert.strictEqual(
-    configHotkey,
-    rustDefault,
-    'config.example.yml picker.hotkey must match DEFAULT_PICKER_HOTKEY in main.rs'
-  );
 });
 
 test('config.example.yml no longer defines claudeProjects (moved to windows11-manager)', () => {
