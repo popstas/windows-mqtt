@@ -29,7 +29,6 @@ The Node child is spawned with `TAURI_BRIDGE=1` env var. In this mode:
 | `subscribe` | `topics: string[]` |
 | `unsubscribe` | `topics: string[]` |
 | `publish` | `topic, payload, options?: {retain, qos}` |
-| `event` | `name, payload` (arbitrary data for the webview; Rust re-emits it as a Tauri event of that `name`, targeted at the `sessions` window via `emit_to`. Used by `mqtt-bridge.js`'s `sendEvent`, e.g. the `claude-wt-sessions` feed) |
 
 ### Rust → JS (stdin)
 
@@ -38,7 +37,7 @@ The Node child is spawned with `TAURI_BRIDGE=1` env var. In this mode:
 | `message` | `topic, payload` |
 | `connected` | — |
 | `disconnected` | `reason` |
-| `action` | `action, payload?` (tray menu commands and picker actions; `payload` carries e.g. `{id}` for `windows/claude-focus`; `app/shutdown` = graceful exit: Node runs cleanup() and exits) |
+| `action` | `action, payload?` (tray menu commands; `app/shutdown` = graceful exit: Node runs cleanup() and exits. Window-management actions are relayed on to MQTT by `src/tray-relay.js` — windows11-manager executes them) |
 
 ## Key Structs
 

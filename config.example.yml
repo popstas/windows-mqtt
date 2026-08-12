@@ -19,16 +19,6 @@ mqtt:
   password: 'your_password'
   base: 'home/room/pc'
 
-# Export state to Home Assistant over its REST API. Entities pushed this way
-# live until Home Assistant restarts and come back with the next export, so the
-# exporter runs on a timer rather than once at startup.
-homeassistant:
-  enabled: false
-  url: 'http://homeassistant.local:8123'
-  # Long-lived access token: Home Assistant profile page, bottom of the list.
-  token: ''
-  timeoutMs: 5000
-
 modules:
   audio:
     interval: 5   # loudness fallback polling period (seconds), used only when

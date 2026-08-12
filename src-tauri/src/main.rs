@@ -28,11 +28,6 @@ enum IpcFromJs {
         #[serde(default)]
         options: PublishOptions,
     },
-    Event {
-        name: String,
-        #[serde(default)]
-        payload: serde_json::Value,
-    },
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -294,9 +289,6 @@ fn spawn_node_server(
                                 bridge
                                     .publish(&topic, &payload, options.retain, qos)
                                     .await;
-                            }
-                            IpcFromJs::Event { name, payload } => {
-                                let _ = app_handle.emit_to("sessions", &name, payload);
                             }
                         },
                         Err(_) => {
@@ -596,6 +588,12 @@ fn build_tray_menu(
         .map_err(m)?;
 
     // Windows actions
+    //
+    // Исполняет их не этот процесс: код раскладки уехал в windows11-manager, и
+    // нажатие пункта уходит туда публикацией в MQTT (`src/tray-relay.js`).
+    // Поэтому здесь остались только те, что у него есть в роутере. Пунктов
+    // «Open default apps» и «Restore claude terminals» не осталось: первому
+    // там нечего вызвать, второй был про claude-wt, а он уехал целиком.
     let autoplace = MenuItem::with_id(
         app,
         "win_autoplace",
@@ -610,24 +608,11 @@ fn build_tray_menu(
         MenuItem::with_id(app, "win_restore", "Restore windows", true, None::<&str>).map_err(m)?;
     let clear = MenuItem::with_id(app, "win_clear", "Clear stored windows", true, None::<&str>)
         .map_err(m)?;
-    let open_default =
-        MenuItem::with_id(app, "win_open_default", "Open default apps", true, None::<&str>)
-            .map_err(m)?;
-    let claude_restore = MenuItem::with_id(
-        app,
-        "win_claude_restore",
-        "Restore claude terminals",
-        true,
-        None::<&str>,
-    )
-    .map_err(m)?;
 
     menu.append(&autoplace).map_err(m)?;
     menu.append(&store).map_err(m)?;
     menu.append(&restore).map_err(m)?;
     menu.append(&clear).map_err(m)?;
-    menu.append(&open_default).map_err(m)?;
-    menu.append(&claude_restore).map_err(m)?;
     menu.append(&PredefinedMenuItem::separator(app).map_err(m)?)
         .map_err(m)?;
 
@@ -970,8 +955,6 @@ fn main() {
                         "win_store" => Some("windows/store"),
                         "win_restore" => Some("windows/restore"),
                         "win_clear" => Some("windows/clear"),
-                        "win_open_default" => Some("windows/open_default"),
-                        "win_claude_restore" => Some("windows/claude-restore"),
                         "win_restart_restore" => Some("windows/restart_restore"),
                         "win_sleep" => Some("windows/sleep"),
                         "win_restart" => Some("windows/restart"),

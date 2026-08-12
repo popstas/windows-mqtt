@@ -128,12 +128,23 @@ module.exports = async (mqtt, config, log) => {
       },
       {topics: [`${config.base}/restart_restore`], handler: () => storeAndThen(restart)},
     ],
-    menuItems: [
-      {label: 'Restart with windows restore', click: () => storeAndThen(restart)},
-      {label: 'Sleep', click: sleep},
-      {label: 'Restart', click: restart},
-      {label: 'Shutdown', click: shutdown},
-    ],
+    // Пункты трея приходят не по MQTT, а по stdin от Tauri, и это намеренно:
+    // выключение машины должно работать и при лежащем брокере. Раздавал их
+    // раньше windows.js — единственный модуль со stdinActions; после его
+    // отъезда в windows11-manager пункты питания молча перестали работать
+    // (`stdin: unknown action "windows/sleep"`), пока их не забрал power.
+    // Имена действий — те же, что шлёт трей (`src-tauri/src/main.rs`).
+    //
+    // «Restart» и «Restart with restore» — два разных пункта трея, поэтому
+    // первый перезагружает сразу, а раскладку сохраняет только второй; так же
+    // это было и в windows.js. У одноимённых MQTT-топиков умолчание обратное
+    // (там сохранение просят чаще, а отказ от него — явным `nostore`).
+    stdinActions: {
+      'windows/sleep': () => sleep(),
+      'windows/restart': () => restart(),
+      'windows/shutdown': () => shutdown(),
+      'windows/restart_restore': () => storeAndThen(restart),
+    },
   };
 };
 

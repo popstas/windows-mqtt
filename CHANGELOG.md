@@ -20,6 +20,25 @@ intentionally, not an oversight: physical buttons, the panel and the openHASP
 config all still address the old `windows/restart` topic, and moving them is
 separate work in another repo.
 
+**The tray menu kept working through the move.** `windows.js` was the only
+module that ever supplied `stdinActions`, and the tray reaches its own Node
+child over stdin — so deleting it silently orphaned the whole menu, every item
+answering with `stdin: unknown action` and doing nothing. Power (`Sleep`,
+`Restart`, `Restart with restore`, `Shutdown`) is handled locally again, by
+`power` itself: shutting the machine down must not depend on a live broker.
+Window management (`Place`, `Store`, `Restore`, `Clear stored windows`) is
+relayed to MQTT instead (`src/tray-relay.js`) and executed by
+`windows11-manager`, which already subscribes to those very topics. `Open
+default apps` and `Restore claude terminals` are gone — the first has no
+counterpart in the new router, the second was claude-wt. A test now cross-checks
+the tray items in `main.rs` against the handlers on the Node side, since this
+class of breakage is silent on both ends.
+
+Also removed as dead weight from the same move: the `event` IPC message and
+`mqttBridge.sendEvent()` (they fed the deleted `sessions` webview window, which
+no longer exists in `tauri.conf.json`), and the `homeassistant:` block in
+`config.example.yml`, which nothing in this repo reads anymore.
+
 # 1.0.0 (2026-07-16)
 
 First tagged release. The app moved from Electron to **Tauri v2**, which is the

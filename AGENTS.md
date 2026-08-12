@@ -97,7 +97,7 @@ value is already public in the `popstas/windows11-manager` repo.
 
 ### Tauri v2 Gotchas
 - `devUrl` must be a proper URL (e.g. `http://localhost:1420`), not a relative path
-- Resource globs: `bundle.resources` enumerates `src/` explicitly — `"../src/*"` plus one `"../src/<subdir>/**/*"` entry per subdirectory (currently `modules` and `picker`) — instead of a single `"../src/**/*"` sweep. A recursive `**` under `src/` also matches `src/daemon/`, which is gitignored and holds developer-only logs with absolute local paths; a blanket glob shipped those straight into the installer (see `73c35ec`). Adding a new `src/<subdir>/` needs its own `"../src/<subdir>/**/*"` entry here.
+- Resource globs: `bundle.resources` enumerates `src/` explicitly — `"../src/*"` plus one `"../src/<subdir>/**/*"` entry per subdirectory (currently only `modules`) — instead of a single `"../src/**/*"` sweep. A recursive `**` under `src/` also matches `src/daemon/`, which is gitignored and holds developer-only logs with absolute local paths; a blanket glob shipped those straight into the installer (see `73c35ec`). Adding a new `src/<subdir>/` needs its own `"../src/<subdir>/**/*"` entry here.
 - The full `bundle.resources` list (Node source + `node_modules`) lives in the base
   `tauri.conf.json`, so a plain `npx tauri build` (without `scripts/tauri-wrapper.js`)
   still produces a complete bundle. `dev` runs overlay `tauri.dev.conf.json` whose

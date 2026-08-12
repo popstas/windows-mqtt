@@ -3,6 +3,20 @@ const assert = require('node:assert');
 
 const TOPIC_BASE = 'home/room/pc/keys';
 
+// Подмена robotjs кладётся в require.cache по разрешённому пути, а разрешить
+// его можно только там, где родной аддон установлен, — на Windows. На Linux
+// весь файл пропускается, как и native-modules.test.js.
+function robotAvailable() {
+  try {
+    require.resolve('@hurdlegroup/robotjs');
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+const skip = robotAvailable() ? false : 'нет @hurdlegroup/robotjs (не Windows)';
+
 /**
  * Загрузить модуль keys с подставным robotjs.
  *
@@ -38,7 +52,7 @@ async function initKeys() {
   return { handlerFor, taps, logged };
 }
 
-test('press-throttled drops a bounced press: one tap, not two', async () => {
+test('press-throttled drops a bounced press: one tap, not two', { skip }, async () => {
   // Кнопка на плате openHASP физическая, и палец, снятый неровно, шлёт вторую
   // посылку следом. Для (win)f10 это открытие пикера и его же закрытие.
   const { handlerFor, taps, logged } = await initKeys();
@@ -50,7 +64,7 @@ test('press-throttled drops a bounced press: one tap, not two', async () => {
     'отброшенное нажатие должно попадать в журнал, иначе неотличимо от поломки');
 });
 
-test('press-throttled keeps a separate window per key combination', async () => {
+test('press-throttled keeps a separate window per key combination', { skip }, async () => {
   // Топик один на все кнопки платы: нажатие на одну не должно съедать
   // нажатие на соседнюю, сделанное следом.
   const { handlerFor, taps } = await initKeys();
@@ -60,7 +74,7 @@ test('press-throttled keeps a separate window per key combination', async () => 
   assert.deepStrictEqual(taps, [['f10', ['command']], ['escape', []]]);
 });
 
-test('the plain press topic still lets repeats through', async () => {
+test('the plain press topic still lets repeats through', { skip }, async () => {
   // Через него ходят audio_next и прочее из Node-RED, где повтор подряд — это и
   // есть смысл («промотать три трека»).
   const { handlerFor, taps } = await initKeys();
