@@ -1,45 +1,154 @@
-## Unreleased
+# [1.1.0](https://github.com/popstas/windows-mqtt/compare/v1.0.0...v1.1.0) (2026-08-13)
 
-**claude-wt, the session picker window and Home Assistant export moved out**
-of this repo entirely — into `windows11-manager` and `ccfzf-picker`. Removed:
-`src/modules/windows.js`, `src/modules/claude-wt-watchdog.js`,
-`src/homeassistant/`, `src/picker/`, `frontend-src/` and `sessions.html` (the
-in-app palette window), plus their tests. This was already dead code in the
-live config (`modules.windows.enabled: false`): the whole point was to free
-`Ctrl+F11`/`Ctrl+F12` and the picker's own hotkey, which `windows.js` kept
-losing the registration race for even though nothing here still handled them.
 
-The one behavioral change: `power`'s **enablement** no longer shares the
-`modules.windows.enabled` flag with the now-deleted `windows.js` — that
-interlock existed only so the two wouldn't both answer `windows/restart`.
-With `windows.js` gone, `power` is enabled the same way any other module is
-(its own `enabled` key, default on) — live behavior is unchanged, since it
-was already on. Its **MQTT topic base stays the historical one**,
-`<mqtt.base>/windows` rather than `<mqtt.base>/power` — that part is kept
-intentionally, not an oversight: physical buttons, the panel and the openHASP
-config all still address the old `windows/restart` topic, and moving them is
-separate work in another repo.
+**claude-wt, the session picker and window management moved out of this repo.**
+What is left here is the MQTT transport for the rest of the home-automation
+modules. This release is a *split*, not a feature drop — that is why it is a
+minor bump and not a patch.
 
-**The tray menu kept working through the move.** `windows.js` was the only
-module that ever supplied `stdinActions`, and the tray reaches its own Node
-child over stdin — so deleting it silently orphaned the whole menu, every item
-answering with `stdin: unknown action` and doing nothing. Power (`Sleep`,
-`Restart`, `Restart with restore`, `Shutdown`) is handled locally again, by
-`power` itself: shutting the machine down must not depend on a live broker.
-Window management (`Place`, `Store`, `Restore`, `Clear stored windows`) is
-relayed to MQTT instead (`src/tray-relay.js`) and executed by
-`windows11-manager`, which already subscribes to those very topics. `Open
-default apps` and `Restore claude terminals` are gone — the first has no
-counterpart in the new router, the second was claude-wt. A test now cross-checks
-the tray items in `main.rs` against the handlers on the Node side, since this
-class of breakage is silent on both ends.
+**Highlights**
 
-Also removed as dead weight from the same move: the `event` IPC message and
-`mqttBridge.sendEvent()` (they fed the deleted `sessions` webview window, which
-no longer exists in `tauri.conf.json`), and the `homeassistant:` block in
-`config.example.yml`, which nothing in this repo reads anymore.
+- **Removed:** `src/modules/windows.js`, the in-app session picker
+  (`src/picker/`, `frontend-src/`, `sessions.html` and the `sessions` webview
+  window), the Home Assistant export and the claude-wt watchdog. Window
+  management and claude-wt now live in `windows11-manager`; the picker became
+  a standalone app, `ccfzf-picker`.
+- **New module `power`** carries what stayed: sleep, restart, shutdown and
+  "restart with restore". It deliberately answers on the historical topic base
+  `<mqtt.base>/windows`, not `<mqtt.base>/power` — physical buttons, the
+  openHASP panel and Node-RED all still address `windows/restart`, and moving
+  that topic is separate work in another repo.
+- **The tray menu survived the split.** `windows.js` was the only module that
+  ever supplied tray actions, so removing it silently orphaned the whole menu.
+  Power items are handled locally again (shutting the machine down must not
+  depend on a live broker); window-management items are relayed to MQTT and
+  executed by `windows11-manager`. `Open default apps` and `Restore claude
+  terminals` are gone — nothing implements them anymore.
+- **`keys/press-throttled`**: a new topic that accepts at most one press per
+  second per key combination, for physical panel buttons that bounce. Plain
+  `keys/press` stays unthrottled — repeats are the point there.
+- **Logging**: `console` output from libraries now reaches the log file, both
+  entry points share one level threshold, and re-entry is guarded.
+- **Startup is harder to break**: a config with no `modules:` section, or with
+  the section present but fully commented out (YAML gives `null`, not
+  `undefined`), no longer crashes the server.
+- **`npm run deploy-fast`**: copy the Node part into the installed app without
+  a rebuild.
 
-# 1.0.0 (2026-07-16)
+**Upgrade note**
+
+Rolling this back means reverting the commit, not flipping a flag — and it has
+to be done at both ends. A restored `windows.js` would parse the same topics
+`windows11-manager` already parses: one `restore` would launch every app twice,
+and two publishers on the panel slots would flip rows between sessions.
+
+### Bug Fixes
+
+* **bundle:** include assets/ in Tauri resources so toast icons ship ([09c0878](https://github.com/popstas/windows-mqtt/commit/09c0878f567d8daba088d6331073e76e4923c600))
+* **bundle:** stop shipping the gitignored src/daemon/ in the installer ([73c35ec](https://github.com/popstas/windows-mqtt/commit/73c35ecd5d903fc5c997b84b826a936cd13bb183))
+* **claude-wt:** focus already-open sessions instead of failing restore ([a045ae1](https://github.com/popstas/windows-mqtt/commit/a045ae1cd1b64a2c56e10511ae558e0e655706b1))
+* **claude-wt:** на панели видно, на чём остановилась работающая сессия ([e141885](https://github.com/popstas/windows-mqtt/commit/e141885b432b75742ba66060b1d4ac70bd754a6a))
+* **claude-wt:** сторож не слепнет молча ([d9f4e94](https://github.com/popstas/windows-mqtt/commit/d9f4e946bcf482e061a60ba490b864d21e732a9d))
+* **config:** power.base в примере не забивает наследование базы windows ([a3ef16b](https://github.com/popstas/windows-mqtt/commit/a3ef16be0886ed9d7286307b3863730c51036497))
+* **deploy:** не убивать дерево процессов вместе с приложением ([da8dbc5](https://github.com/popstas/windows-mqtt/commit/da8dbc5959da2d9354395783a9efccff1d9e1d21))
+* **helpers:** getModulesEnabled не падает без секции modules в конфиге ([c37e1b0](https://github.com/popstas/windows-mqtt/commit/c37e1b0884ab01d3f6134d8762e14146595a6c57))
+* **helpers:** пустая секция modules (null) не роняет старт ([df19cfb](https://github.com/popstas/windows-mqtt/commit/df19cfbedaf92286acc7a79c397dceac0b71fa8f))
+* **homeassistant:** прочерк в пустом слоте вместо пробела ([7ca66a2](https://github.com/popstas/windows-mqtt/commit/7ca66a2b463932b3cec899ef179ea90bae39488a))
+* **homeassistant:** пустой слот отдаёт пробел, а не пустую строку ([c00f279](https://github.com/popstas/windows-mqtt/commit/c00f279b6a3075f91bf9ba528c40f6423a852b54))
+* **homeassistant:** только ASCII в значках состояния ([65ddac9](https://github.com/popstas/windows-mqtt/commit/65ddac9e3e79f835906654d624ddc2834abce057))
+* **log:** порог уровня для console-строк и тест на задвоение ([4eb0cfb](https://github.com/popstas/windows-mqtt/commit/4eb0cfb6ad4a610208f72396467afde6a7de768f))
+* **picker:** arm the watchdog per-show and cover the first-show hotkey race ([92e7429](https://github.com/popstas/windows-mqtt/commit/92e74298381da2ae4b1c9d6a59c098ed4724a470))
+* **picker:** check foreground grant result and fix stale comment ([de188b0](https://github.com/popstas/windows-mqtt/commit/de188b03a7fd9d619a4918ad31d5e20de3d06c8c))
+* **picker:** decide the desktop switch from the live value, not the stored one ([4ccc602](https://github.com/popstas/windows-mqtt/commit/4ccc602f41cffcdffb043cf1e38caeacaf66ef2c))
+* **picker:** degrade instead of crashing on app-root, tray-toggle and show failures ([1e752a7](https://github.com/popstas/windows-mqtt/commit/1e752a772fedda8f22330862c3d5eeebbf296608))
+* **picker:** focus a session that opened after the last snapshot ([caf1b76](https://github.com/popstas/windows-mqtt/commit/caf1b767b27059070f030f0b29acff8fa8023c89))
+* **picker:** guard native sessions call and extract testable payload shaping ([dc5b47a](https://github.com/popstas/windows-mqtt/commit/dc5b47a0586ca2618184baea2ef2a49809896a2a))
+* **picker:** ignore /home prefix in search ([f0ffffe](https://github.com/popstas/windows-mqtt/commit/f0ffffe11268380b0de6f1ec211c71579b12416b))
+* **picker:** scope the sessions window to core:default only ([510abab](https://github.com/popstas/windows-mqtt/commit/510abab2e80c123ca250a1669aff5f5de56b7c7b))
+* **picker:** Session info из меню берёт сессию по id, а не по индексу ([5360ecc](https://github.com/popstas/windows-mqtt/commit/5360ecc5f4ec441324f0481ab60e27c1b313e58e))
+* **picker:** store the group-key separator as an escape, not a raw NUL ([6c4dcd4](https://github.com/popstas/windows-mqtt/commit/6c4dcd48c09ac2f35895f1518c36f9623da6c169))
+* **picker:** switch to the live virtual desktop, not the stale stored one ([9c22516](https://github.com/popstas/windows-mqtt/commit/9c22516163cb017cae794304f51289a0322fc801))
+* **picker:** вынести разбор PR-номера в src/picker/pr-url.js ([f5d9cb6](https://github.com/popstas/windows-mqtt/commit/f5d9cb6639901eb3c0dd0e0eb3993a548d899c13))
+* **picker:** гасить по фокусу и review от stop, не только idle ([4921df6](https://github.com/popstas/windows-mqtt/commit/4921df69d87033fd0b7e877ffe936fbde008c486))
+* **picker:** согласовать formatAge с session-glyph и добавить граничные тесты ([b1b84b0](https://github.com/popstas/windows-mqtt/commit/b1b84b01170e8d840575d91e988ce92c21491617))
+* **picker:** список рисуется один раз за открытие, а не каждую секунду ([3444b5e](https://github.com/popstas/windows-mqtt/commit/3444b5e3e74273d865884aef2c88b2d9fb153aee))
+* **picker:** сузить регулярку PR-ссылки до owner/repo без спецсимволов ([fc96136](https://github.com/popstas/windows-mqtt/commit/fc96136ad9d34d32a42c06b0e177083a9c889744))
+* **power:** power грузится на старом config.yml, ack не путает запросы ([e0d862a](https://github.com/popstas/windows-mqtt/commit/e0d862aa1261250aade94661fff17c003d4ca5d1))
+* **scripts:** deploy-local возвращает управление ([366f4b7](https://github.com/popstas/windows-mqtt/commit/366f4b78817b54f5d7f05a8cfa443905a509262d))
+* **sessions:** фокус гасит и вопрос агента ([08917ec](https://github.com/popstas/windows-mqtt/commit/08917ecfdb4d03581f9c03d6958bef47d2633226))
+* **shortcuts:** фильтр Pressed теперь общий, не только у ShowPicker ([654c92a](https://github.com/popstas/windows-mqtt/commit/654c92a830c1b59ba6a5314a1de8ea20ec34195a))
+* **tauri:** route the picker's CloseRequested through hide_picker_window ([bc2dcc6](https://github.com/popstas/windows-mqtt/commit/bc2dcc6016da7474fd350097c80b43d0e2bae236))
+* **tray:** пункты меню снова доходят до исполнителя ([2e00ea3](https://github.com/popstas/windows-mqtt/commit/2e00ea3132222b3da3896b342ee87f5dc0c75c6d))
+* **windows:** log a warning when windows/focus finds no match ([457f7a8](https://github.com/popstas/windows-mqtt/commit/457f7a83e29daa12b19bf29b6980c9c577f4fcf6))
+* **windows:** просьба пикера о подъёме окна приходит по MQTT ([0a7fb17](https://github.com/popstas/windows-mqtt/commit/0a7fb1787d7b54e4fd9bfa37e9b7c9c245ac685d))
+* **windows:** разбирать JSON в просьбе о восстановлении ([b0b10a0](https://github.com/popstas/windows-mqtt/commit/b0b10a08266bc48e2652c7a13fee595c241a104a))
+
+
+### Features
+
+* **claude-wt:** forward claudeProjects.profile to openClaudeProject ([dd3e4a3](https://github.com/popstas/windows-mqtt/commit/dd3e4a346cffb83a92426fc69fc0341da276d9c9))
+* **claude-wt:** http-сервер трекера поднимается внутри демона ([d7346a6](https://github.com/popstas/windows-mqtt/commit/d7346a6606f5938d388db7dbbec90242f67591ee))
+* **claude-wt:** load projects from manager; Terminal reopens via restore ([bdb8d78](https://github.com/popstas/windows-mqtt/commit/bdb8d78a517d9c92e239f080b74c3049cc02ffab))
+* **claude-wt:** register project hotkeys from manager JS API ([6caf64d](https://github.com/popstas/windows-mqtt/commit/6caf64d4baee11ba388de3304d0ca3d0343ef2c9))
+* **claude-wt:** подключить сторожа к жизненному циклу модуля ([2b0e44c](https://github.com/popstas/windows-mqtt/commit/2b0e44c769ac7e1ebd819922f086f159cba921c1))
+* **claude-wt:** сторож живости демона ([962ef63](https://github.com/popstas/windows-mqtt/commit/962ef63b1ac440e229b4b738aad69a70290b11d0))
+* **homeassistant:** значок работающей сессии и экспорт сразу после фокуса ([f11c821](https://github.com/popstas/windows-mqtt/commit/f11c8210a7a4c61895e9af2c3117b555033d69bd))
+* **homeassistant:** имя сущности — заголовок сессии ([0396898](https://github.com/popstas/windows-mqtt/commit/0396898fb3d715465def32592da58df56f1e9e4d))
+* **homeassistant:** отдавать на панель только живые сессии ([fc9b0ce](https://github.com/popstas/windows-mqtt/commit/fc9b0ce299555a484c68f00a82442c574de9b43b))
+* **homeassistant:** сессии как binary_sensor с состоянием внимания ([f047f7a](https://github.com/popstas/windows-mqtt/commit/f047f7a9243d09315fb70bd7a7bcd488c3309448))
+* **homeassistant:** сессии через MQTT Discovery, устройством claude-wt ([e2783f0](https://github.com/popstas/windows-mqtt/commit/e2783f0fa50f8a483352458e1764febd0cdb9ef3))
+* **homeassistant:** экспорт сессий claude-wt через REST API ([55ce4e9](https://github.com/popstas/windows-mqtt/commit/55ce4e9f097eaabf17036bb27e513c3c89927fe7))
+* **keys:** топик press-throttled для дребезжащих кнопок платы ([0f9eef3](https://github.com/popstas/windows-mqtt/commit/0f9eef3c113b1c154a82e12604a8859496559a1c))
+* **log:** console из библиотеки доезжает до файлового лога ([84dbc77](https://github.com/popstas/windows-mqtt/commit/84dbc77908af09f98ab846cd4299ecc4a77af679))
+* **notify:** persistent Windows toasts via PowerShell reminder scenario ([c6fab90](https://github.com/popstas/windows-mqtt/commit/c6fab90985d82a03c539fafa4275df05921b5b5c))
+* **notify:** png toast icons + file-URI image src for persistent toasts ([ffcd4e9](https://github.com/popstas/windows-mqtt/commit/ffcd4e9e36412dd5679d5767ca5ea7a86bc55079))
+* **panel:** в углу строки только контекст ([db6a958](https://github.com/popstas/windows-mqtt/commit/db6a9588412b0679c56e41950224d20080026988))
+* **picker,panel:** время текущего хода вместо возраста последнего события ([a136da7](https://github.com/popstas/windows-mqtt/commit/a136da737e542d11374ff9de503419cf4600875d))
+* **picker:** /s snapshots and panel slot off ([6f4d712](https://github.com/popstas/windows-mqtt/commit/6f4d712728bc3785a2de73ff79f61a96d833fef8))
+* **picker:** Ctrl+K session open actions ([4403717](https://github.com/popstas/windows-mqtt/commit/4403717c2484619b1e34edbe51dc2b79354e817c))
+* **picker:** explain empty states and fall back to restore on a dead window handle ([073df84](https://github.com/popstas/windows-mqtt/commit/073df84d10e060fba81351984be06246d6eff94e))
+* **picker:** filter sessions by name and project ([132ced3](https://github.com/popstas/windows-mqtt/commit/132ced36813ce23bbeb0d6ebdbea0d8f230e1597))
+* **picker:** focus a claude session, with the foreground right granted from Rust ([9add988](https://github.com/popstas/windows-mqtt/commit/9add9881d41881a7c808900a097b0ce4fe2f1eb2))
+* **picker:** group and label claude sessions by desktop and monitor ([77d1e54](https://github.com/popstas/windows-mqtt/commit/77d1e54dd6279fff0187c96a5438fa408eeb5db9))
+* **picker:** Open PR в меню действий ([8ae67e1](https://github.com/popstas/windows-mqtt/commit/8ae67e1eea2f1626a8b1538da454b602cc4abb6d))
+* **picker:** palette window with search, keyboard navigation and position glyphs ([a95696f](https://github.com/popstas/windows-mqtt/commit/a95696fc8f51e2edaf5c1f5d0e9e690e64e49be7))
+* **picker:** palette window, Win+F10 hotkey and tray left-click choice ([fd031b1](https://github.com/popstas/windows-mqtt/commit/fd031b11c892afb2b4679b976d865c2c21401a94))
+* **picker:** prompt line, less chrome ([e310a5d](https://github.com/popstas/windows-mqtt/commit/e310a5d8422b011f6d2ec6d9c5dcfe6674816ff7))
+* **picker:** push grouped session list from Node to the webview ([92c51d7](https://github.com/popstas/windows-mqtt/commit/92c51d70ceb9d0059bf2baf7e7990466fa382103))
+* **picker:** shift над строкой показывает будущую пометку ([8f8bab5](https://github.com/popstas/windows-mqtt/commit/8f8bab58f1af47301397aa0eef69e23dc3674a46))
+* **picker:** shift+клик и пункт меню помечают сессию непрочитанной ([f303218](https://github.com/popstas/windows-mqtt/commit/f3032180c35c251397fc2c10c851dbbb66e828d5))
+* **picker:** Show event checkbox in statusline ([93bb8c9](https://github.com/popstas/windows-mqtt/commit/93bb8c9052f6a723233667be552ced1c6217f235))
+* **picker:** Show paths checkbox in statusline ([bf6b2f8](https://github.com/popstas/windows-mqtt/commit/bf6b2f810a390d6a1318a05fbf920ef2ef4c90ec))
+* **picker:** status dot instead of a position glyph, calmer active row ([7ea061c](https://github.com/popstas/windows-mqtt/commit/7ea061cc148dcbeb7b8fa55ff063c40995cac52a))
+* **picker:** гасить оранжевый по фокусу, а не по времени ([27561cc](https://github.com/popstas/windows-mqtt/commit/27561cc89d11490bc48013ede72d100d0dfabea7))
+* **picker:** горячая клавиша закрывает пикер повторным нажатием ([c0312ef](https://github.com/popstas/windows-mqtt/commit/c0312ef4ff70f9c9b24df3da3a14d355c6891808))
+* **picker:** действия по прямым клавишам, без меню ([f021310](https://github.com/popstas/windows-mqtt/commit/f021310c9c6f2decddd3d80788adb89986052629))
+* **picker:** живые сессии отдельной группой, оранжевый для ждущих проверки ([868dfaa](https://github.com/popstas/windows-mqtt/commit/868dfaad0fee9b3ea5dde7f1598cbd6be9a135b5))
+* **picker:** колонка хоткея и чекбоксы строки ([2453d13](https://github.com/popstas/windows-mqtt/commit/2453d13fa0a8abaf34291820bc440d16051f475f))
+* **picker:** метка PR в строке сессии ([1685529](https://github.com/popstas/windows-mqtt/commit/1685529e1c24f1c1b135a85a839deeebf14a409d))
+* **picker:** оверлей Session info по Ctrl+I и из меню ([bf31a07](https://github.com/popstas/windows-mqtt/commit/bf31a07a80e9ecf5c187232181602b6ccafdddb6))
+* **picker:** подписи хоткеев в меню и в статуслайне ([32737e5](https://github.com/popstas/windows-mqtt/commit/32737e59a476bc60dd7f1c52a33c475a9ebaf4f5))
+* **picker:** пункт и команда mark unread ([967f639](https://github.com/popstas/windows-mqtt/commit/967f6393ee5552dd87830aa7fa1095f55149c097))
+* **picker:** раскладка сессий по фиксированным слотам ([372564d](https://github.com/popstas/windows-mqtt/commit/372564d0fd7498db1b41ad5eee3ff2b6df878fda))
+* **picker:** сводка третьей строкой, путь без домашнего каталога ([37c0cad](https://github.com/popstas/windows-mqtt/commit/37c0cad069ae7a2902452660df79e6eacff56bbc))
+* **picker:** сортировка списка сессий ([cd2c5f2](https://github.com/popstas/windows-mqtt/commit/cd2c5f2a827dd3d98f465ed11132208effa44a36))
+* **picker:** состояние агента и возраст активности в списке сессий ([a4df257](https://github.com/popstas/windows-mqtt/commit/a4df2574e3c44c672f7e70920172d90f80e5da85))
+* **picker:** счётчик в Active sessions ([ccdc543](https://github.com/popstas/windows-mqtt/commit/ccdc543045214d10cb28a2775a83e52ee277021e))
+* **picker:** таблица полей сессии для Session info ([588ad3c](https://github.com/popstas/windows-mqtt/commit/588ad3c9386f19b1f1d422f2e7cc72c1eb0cf0de))
+* **picker:** текстовый статус агента рядом с возрастом ([64584ee](https://github.com/popstas/windows-mqtt/commit/64584ee74e1a14f815415358256de0701ada94ff))
+* **picker:** тултип с полным cwd и сообщением агента ([f28a959](https://github.com/popstas/windows-mqtt/commit/f28a959f75806ec44ade2a0fdc3713fb1214fd14))
+* **picker:** фоновый агент и короткий id в правой колонке ([282f259](https://github.com/popstas/windows-mqtt/commit/282f25993ad8adc266eed314c344437db7057a2d))
+* **picker:** чекбоксы id, cost, context в статуслайне ([b15b9eb](https://github.com/popstas/windows-mqtt/commit/b15b9eb5ddc11a92caaa5e42412902873d3f803f))
+* **power:** питание машины отдельным модулем за флагом windows.enabled ([223188f](https://github.com/popstas/windows-mqtt/commit/223188fba89a7b0cea2344218c03d74360e95c99))
+* **sessions:** dump refresh and HA slot sort ([09fcbf2](https://github.com/popstas/windows-mqtt/commit/09fcbf265763a958e6a48122957641d2d268bc75))
+* **sessions:** project hotkeys and clears ([088ee93](https://github.com/popstas/windows-mqtt/commit/088ee93f0a55c597bc6ed99295b0319d8b414b87))
+* **sessions:** показывать, чем сессия закончила ([c4a035b](https://github.com/popstas/windows-mqtt/commit/c4a035be9218b254a5e9289b3a3cffa434c63e5d))
+* **sessions:** последняя известная сводка отдельным полем ([7b53339](https://github.com/popstas/windows-mqtt/commit/7b5333902efcbdd507f178a7d5110c4ab49d2ede))
+* **windows:** start claude-wt watcher and add tray restore action ([df1695a](https://github.com/popstas/windows-mqtt/commit/df1695a7646f6b034bdd5a13f5a3d6f8f7648e86))
+* **windows:** восстановление снимка по MQTT ([f77a498](https://github.com/popstas/windows-mqtt/commit/f77a4984aa8a0856e3599210ab5197000a4d276e))
+
+# [1.0.0](https://github.com/popstas/windows-mqtt/compare/6d538571f678ed89429fff520e6934b122a0620a...v1.0.0) (2026-07-16)
+
 
 First tagged release. The app moved from Electron to **Tauri v2**, which is the
 reason this is 1.0.0 rather than another 0.0.1 patch.
@@ -198,6 +307,3 @@ tags to split on — so it spans the project's entire life, Electron era include
 * **windows:** restore custom windows with arguments ([2e36e92](https://github.com/popstas/windows-mqtt/commit/2e36e920ea2414992a0befb56373c163ac26fc73))
 * **windows:** shutdown ([9673872](https://github.com/popstas/windows-mqtt/commit/9673872cc3083f1e5e487f718980cedf37542a07))
 * **windows:** store/restore windows, context menu ([c9d0d94](https://github.com/popstas/windows-mqtt/commit/c9d0d94d3fb23ef5ea1d3774a2ac49e8cd64ba22))
-
-
-
