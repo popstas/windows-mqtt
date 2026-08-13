@@ -14,7 +14,8 @@
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0",
     "uninstall-windows": "node scripts/service-uninstall.js",
     "deploy": "zsh data/deploy.sh",
-    "test": "node --test test/**/*.test.js"
+    "test": "node --test test/**/*.test.js",
+    "deploy-fast": "node scripts/deploy-fast.js"
   },
   "author": "Stanislav Popov",
   "license": "ISC",

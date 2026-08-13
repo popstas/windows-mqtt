@@ -12,7 +12,7 @@ use tauri::{
     tray::TrayIconBuilder,
     Emitter, Manager, State, WindowEvent,
 };
-use tauri_plugin_global_shortcut::GlobalShortcutExt;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_shell::{process::CommandEvent, ShellExt};
 
 // --- IPC protocol types ---
@@ -44,7 +44,11 @@ enum IpcToJs {
     Message { topic: String, payload: String },
     Connected,
     Disconnected { reason: String },
-    Action { action: String },
+    Action {
+        action: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        payload: Option<serde_json::Value>,
+    },
 }
 
 // --- App state ---
@@ -71,11 +75,20 @@ struct CurrentShortcut(Mutex<Option<String>>);
 // --- Send command to JS child via IPC ---
 
 async fn send_command(app: &tauri::AppHandle, action: &str) {
+    send_command_with(app, action, None).await;
+}
+
+async fn send_command_with(
+    app: &tauri::AppHandle,
+    action: &str,
+    payload: Option<serde_json::Value>,
+) {
     let state = app.state::<ServerState>();
     let mut guard = state.0.lock().await;
     if let Some(ref mut child) = *guard {
         let msg = IpcToJs::Action {
             action: action.to_string(),
+            payload,
         };
         let line = match serde_json::to_string(&msg) {
             Ok(s) => s + "\n",
@@ -99,6 +112,7 @@ async fn shutdown_node(app: &tauri::AppHandle) {
     if let Some(mut child) = child {
         let msg = IpcToJs::Action {
             action: "app/shutdown".to_string(),
+            payload: None,
         };
         if let Ok(line) = serde_json::to_string(&msg) {
             let _ = child.write((line + "\n").as_bytes());
@@ -574,6 +588,12 @@ fn build_tray_menu(
         .map_err(m)?;
 
     // Windows actions
+    //
+    // Исполняет их не этот процесс: код раскладки уехал в windows11-manager, и
+    // нажатие пункта уходит туда публикацией в MQTT (`src/tray-relay.js`).
+    // Поэтому здесь остались только те, что у него есть в роутере. Пунктов
+    // «Open default apps» и «Restore claude terminals» не осталось: первому
+    // там нечего вызвать, второй был про claude-wt, а он уехал целиком.
     let autoplace = MenuItem::with_id(
         app,
         "win_autoplace",
@@ -588,15 +608,11 @@ fn build_tray_menu(
         MenuItem::with_id(app, "win_restore", "Restore windows", true, None::<&str>).map_err(m)?;
     let clear = MenuItem::with_id(app, "win_clear", "Clear stored windows", true, None::<&str>)
         .map_err(m)?;
-    let open_default =
-        MenuItem::with_id(app, "win_open_default", "Open default apps", true, None::<&str>)
-            .map_err(m)?;
 
     menu.append(&autoplace).map_err(m)?;
     menu.append(&store).map_err(m)?;
     menu.append(&restore).map_err(m)?;
     menu.append(&clear).map_err(m)?;
-    menu.append(&open_default).map_err(m)?;
     menu.append(&PredefinedMenuItem::separator(app).map_err(m)?)
         .map_err(m)?;
 
@@ -715,16 +731,46 @@ fn build_tray_menu(
 }
 
 fn register_shortcut(app: &tauri::AppHandle, shortcut_str: &str) -> Result<(), String> {
+    register_shortcut_action(app, shortcut_str, ShortcutAction::Autoplace)
+}
+
+#[derive(Clone, Copy)]
+enum ShortcutAction {
+    Autoplace,
+}
+
+fn register_shortcut_action(
+    app: &tauri::AppHandle,
+    shortcut_str: &str,
+    what: ShortcutAction,
+) -> Result<(), String> {
     if shortcut_str.is_empty() {
         return Ok(());
     }
     let app_clone = app.clone();
     app.global_shortcut()
-        .on_shortcut(shortcut_str, move |_app, _shortcut, _event| {
+        .on_shortcut(shortcut_str, move |_app, _shortcut, event| {
+            // Как и физический клик мышью (Down/Up), нажатие клавиши тоже
+            // прилетает сюда дважды — Pressed и следом Released (HotKeyState
+            // из crate global-hotkey, на котором построен
+            // tauri-plugin-global-shortcut). Фильтр стоит здесь, на входе в
+            // замыкание, а не внутри `match` — раньше вторая ветка (ShowPicker,
+            // с тех пор удалена вместе с пикером) уже была фильтром сама по
+            // себе, а Autoplace без общего фильтра отправлял windows/autoplace
+            // дважды на одно нажатие. Реагируем только на нажатие клавиши
+            // вниз, симметрично тому, как трей реагирует только на Up
+            // физического клика.
+            if event.state() != ShortcutState::Pressed {
+                return;
+            }
             let app_handle = app_clone.clone();
-            tauri::async_runtime::spawn(async move {
-                send_command(&app_handle, "windows/autoplace").await;
-            });
+            match what {
+                ShortcutAction::Autoplace => {
+                    tauri::async_runtime::spawn(async move {
+                        send_command(&app_handle, "windows/autoplace").await;
+                    });
+                }
+            }
         })
         .map_err(|e| e.to_string())
 }
@@ -735,6 +781,49 @@ fn unregister_shortcut(app: &tauri::AppHandle, shortcut_str: &str) {
     }
     let _ = app.global_shortcut().unregister(shortcut_str);
 }
+
+/// Register a global shortcut off-thread, retrying on failure.
+///
+/// On `tauri dev` hot-reload (and any relaunch while a previous tray-resident
+/// instance is still tearing down, e.g. `npm run deploy-local`'s kill →
+/// install → relaunch) the old process briefly still owns the shortcut, so a
+/// single attempt can lose it for the whole session. Retry until the old
+/// owner releases it, without blocking startup.
+fn register_shortcut_with_retry(
+    app: tauri::AppHandle,
+    shortcut_str: String,
+    action: ShortcutAction,
+    log_label: &'static str,
+) {
+    if shortcut_str.is_empty() {
+        return;
+    }
+    std::thread::spawn(move || {
+        const ATTEMPTS: u32 = 10;
+        for attempt in 1..=ATTEMPTS {
+            // Clear any stale registration owned by this process first.
+            unregister_shortcut(&app, &shortcut_str);
+            match register_shortcut_action(&app, &shortcut_str, action) {
+                Ok(()) => return,
+                Err(e) if attempt == ATTEMPTS => {
+                    let message = format!(
+                        "Failed to register {log_label} hotkey '{shortcut_str}' after {ATTEMPTS} attempts: {e}"
+                    );
+                    eprintln!("{message}");
+                    let _ = app.emit(
+                        "server-log",
+                        LogPayload {
+                            message,
+                            level: "warn".into(),
+                        },
+                    );
+                }
+                Err(_) => std::thread::sleep(Duration::from_millis(300)),
+            }
+        }
+    });
+}
+
 
 // --- Main ---
 
@@ -751,11 +840,12 @@ fn main() {
             start_mqtt_server,
             get_enabled_modules
         ])
-        .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
+        .on_window_event(|window, event| match event {
+            WindowEvent::CloseRequested { api, .. } => {
                 let _ = window.hide();
                 api.prevent_close();
             }
+            _ => {}
         })
         .setup(|app| {
             // Hide main window on startup
@@ -765,8 +855,13 @@ fn main() {
 
             let app_handle = app.handle().clone();
 
+            // Kept as a Result rather than unwrapped here so the MQTT config
+            // below can degrade to its own defaults instead of propagating.
+            let app_root_result = resolve_app_root(&app_handle);
+
             // Read MQTT config and create bridge
-            let mqtt_config = resolve_app_root(&app_handle)
+            let mqtt_config = app_root_result
+                .clone()
                 .and_then(|root| {
                     let config_path = resolve_config_path(&app_handle, &root);
                     read_mqtt_config(&config_path)
@@ -831,29 +926,15 @@ fn main() {
             app.manage(HotkeyMenuItems(hotkey_items));
             app.manage(IntervalMenuItems(interval_items));
 
-            // Register default hotkey. On `tauri dev` hot-reload (and any relaunch
-            // while a previous tray-resident instance is still tearing down) the old
-            // process briefly still owns the global shortcut, so a single attempt
-            // loses it for the whole session. Retry off-thread until the old owner
-            // releases it, without blocking startup.
-            let hotkey_handle = app_handle.clone();
-            std::thread::spawn(move || {
-                const SHORTCUT: &str = "ctrl+alt+shift+p";
-                const ATTEMPTS: u32 = 10;
-                for attempt in 1..=ATTEMPTS {
-                    // Clear any stale registration owned by this process first.
-                    unregister_shortcut(&hotkey_handle, SHORTCUT);
-                    match register_shortcut(&hotkey_handle, SHORTCUT) {
-                        Ok(()) => return,
-                        Err(e) if attempt == ATTEMPTS => {
-                            eprintln!(
-                                "Failed to register default hotkey after {ATTEMPTS} attempts: {e}"
-                            );
-                        }
-                        Err(_) => std::thread::sleep(Duration::from_millis(300)),
-                    }
-                }
-            });
+            // Register default (autoplace) hotkey with the same retry
+            // treatment as the picker hotkey above — see
+            // register_shortcut_with_retry's doc comment for why.
+            register_shortcut_with_retry(
+                app_handle.clone(),
+                "ctrl+alt+shift+p".to_string(),
+                ShortcutAction::Autoplace,
+                "autoplace",
+            );
 
             let mut tray_builder = TrayIconBuilder::new()
                 .menu(&menu)
@@ -874,7 +955,6 @@ fn main() {
                         "win_store" => Some("windows/store"),
                         "win_restore" => Some("windows/restore"),
                         "win_clear" => Some("windows/clear"),
-                        "win_open_default" => Some("windows/open_default"),
                         "win_restart_restore" => Some("windows/restart_restore"),
                         "win_sleep" => Some("windows/sleep"),
                         "win_restart" => Some("windows/restart"),

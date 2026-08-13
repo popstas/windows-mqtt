@@ -11,3 +11,6 @@ TEMP/
 bin/*
 !bin/.gitkeep
 audio-watcher/target/
+
+# brainstorming visual companion
+.superpowers/

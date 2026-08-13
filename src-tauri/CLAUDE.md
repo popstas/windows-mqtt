@@ -37,7 +37,7 @@ The Node child is spawned with `TAURI_BRIDGE=1` env var. In this mode:
 | `message` | `topic, payload` |
 | `connected` | — |
 | `disconnected` | `reason` |
-| `action` | `action` (tray menu commands; `app/shutdown` = graceful exit: Node runs cleanup() and exits) |
+| `action` | `action, payload?` (tray menu commands; `app/shutdown` = graceful exit: Node runs cleanup() and exits. Window-management actions are relayed on to MQTT by `src/tray-relay.js` — windows11-manager executes them) |
 
 ## Key Structs
 

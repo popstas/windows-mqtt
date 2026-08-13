@@ -13,10 +13,10 @@ const registry = {
   mouse: './mouse',
   notify: './notify',
   obs: './obs',
+  power: './power',
   reaper: './reaper',
   tabs: './tabs',
   tts: './tts',
-  windows: './windows',
 };
 
 function load(name) {
@@ -25,4 +25,18 @@ function load(name) {
   return require(modulePath);
 }
 
-module.exports = { registry, load };
+/**
+ * Грузить ли модуль `name` при данном config.modules.
+ *
+ * power раньше делил windows/restart со старым windows.js за флагом
+ * windows.enabled — своего enabled ему нарочно не давали, иначе оба слушали
+ * бы один топик и отвечали дважды. Второго обработчика больше нет
+ * (windows.js уехал в windows11-manager), и power стал обычным модулем со
+ * своим enabled, по умолчанию включён.
+ */
+function isEnabled(name, modulesConfig = {}) {
+  const mod = modulesConfig[name] || {};
+  return mod.enabled !== undefined ? !!mod.enabled : true;
+}
+
+module.exports = { registry, load, isEnabled };

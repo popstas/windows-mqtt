@@ -29,7 +29,7 @@ class MqttBridge extends EventEmitter {
           this.emit('offline');
           break;
         case 'action':
-          this.emit('action', msg.action);
+          this.emit('action', msg.action, msg.payload);
           break;
       }
     });

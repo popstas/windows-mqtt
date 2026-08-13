@@ -5,13 +5,13 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+const { stopApp } = require('./stop-app');
+
 const projectRoot = path.resolve(__dirname, '..');
 const nsisDir = path.join(projectRoot, 'src-tauri', 'target', 'release', 'bundle', 'nsis');
-const installedExe = path.join(
-  process.env.LOCALAPPDATA || '',
-  'windows-mqtt',
-  'windows-mqtt.exe'
-);
+const installDir = path.join(process.env.LOCALAPPDATA || '', 'windows-mqtt');
+const installedExe = path.join(installDir, 'windows-mqtt.exe');
+const resourceRoot = path.join(installDir, '_up_');
 
 function findInstaller() {
   if (!fs.existsSync(nsisDir)) return null;
@@ -35,7 +35,7 @@ if (!installer) {
 }
 
 console.log(`Stopping windows-mqtt (with its node child)...`);
-spawnSync('taskkill', ['/IM', 'windows-mqtt.exe', '/T', '/F'], { stdio: 'inherit' });
+stopApp(resourceRoot);
 
 console.log(`Installing ${path.basename(installer)} silently...`);
 const install = spawnSync(installer, ['/S'], { stdio: 'inherit' });
@@ -50,4 +50,9 @@ if (!fs.existsSync(installedExe)) {
 }
 
 console.log(`Launching ${installedExe}`);
-spawnSync('cmd', ['/c', 'start', '', installedExe], { stdio: 'inherit' });
+// Не inherit: `start` отвязывает процесс, но приложение наследует наши stdout и
+// stderr и держит трубу открытой всё время, пока работает. Вызывающая оболочка
+// ждёт EOF, а не завершения процесса, поэтому `npm run deploy-local` не
+// возвращал управление часами и не печатал ни строчки — и «завершался» ровно в
+// тот момент, когда следующий деплой делал taskkill.
+spawnSync('cmd', ['/c', 'start', '', installedExe], { stdio: 'ignore' });

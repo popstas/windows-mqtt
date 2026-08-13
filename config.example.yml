@@ -177,6 +177,21 @@ modules:
     # host: 'localhost'
     # port: 4455
     password: 'your_obs_password'
+  power:
+    # Answers on the historical base <mqtt.base>/windows, not <mqtt.base>/power
+    # — intentional: buttons, the panel and physical switches are wired to the
+    # old windows/restart topic, and changing it is separate work that also
+    # touches the panel config in another repo.
+    #
+    # Свой enabled не нужен: модуль включён по умолчанию, как и любой другой
+    # без явного enabled: false, даже без собственного ключа здесь. base тоже
+    # по умолчанию не нужен: initModules() (см. src/helpers.js) без своего
+    # base наследует базу модуля windows — тот же топик, на который уже шлют
+    # кнопки и панель. Если задать base literal'ом, как раньше делал этот
+    # пример, — совпадёт только у тех, чей mqtt.base буквально 'home/room/pc';
+    # у остальных power окажется на топике, не совпадающем с тем, что слушали
+    # кнопки, — это и есть поломка, от которой наследование должно защищать.
+    # base: 'home/room/pc/windows'   # override только если база правда должна отличаться
   reaper: {}
     # base: 'home/room/pc/reaper'
     # host: 'localhost'
@@ -203,29 +218,7 @@ modules:
     # windowSize: 512
     # sampleRate: 16000
     # numThreads: 1
-  windows:
-    # enabled: false
-    placeWindowOnOpen: true
-    placeWindowOnStart: false
-    notifyPlaced: true
-    restoreOnStart: true
-    publishStats: true
-    publishStatsTopic: 'state/pc/windows'
-    store:
-      default:
-        apps:
-          # - "C:\\Program Files\\Microsoft VS Code\\Code.exe"
-          - "C:\\Program Files\\Mozilla Thunderbird\\thunderbird.exe"
-          - "C:\\Users\\username\\AppData\\Local\\Yandex\\YandexBrowser\\Application\\browser.exe"
-          - "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
-          # - "C:\\Program Files\\WindowsApps\\...\\WhatsApp.exe"
-          - "C:\\Users\\username\\AppData\\Roaming\\Telegram Desktop\\Telegram.exe"
-        paths: []
-      custom:
-        apps: []
-          # "C:\\Users\\username\\AppData\\Local\\Yandex\\YandexBrowser\\Application\\browser_proxy.exe --profile-directory=Default --app-id=..."
-        paths: []
-
-
-
+  # Управление окнами, claude-wt, пикер сессий и экспорт в Home Assistant живут
+  # в windows11-manager и ccfzf-picker. Здесь их больше нет: откат — это откат
+  # коммита, а не флаг.
 

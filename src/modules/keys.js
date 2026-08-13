@@ -1,4 +1,5 @@
 const robot = require('@hurdlegroup/robotjs');
+const {throttlePress} = require('./press-throttle');
 
 module.exports = async (mqtt, config, log) => {
   function onPress(topic, message) {
@@ -38,11 +39,39 @@ module.exports = async (mqtt, config, log) => {
     robot.typeString(message);
   }
 
+  /**
+   * То же нажатие, но не чаще раза в секунду — для кнопок на плате openHASP.
+   *
+   * Кнопка на плате физическая: палец, снятый неровно, даёт две-три посылки
+   * подряд. Для клавиши это хуже, чем для команды: `(win)f10` открывает пикер,
+   * а второе такое же нажатие тут же его закрывает (см. toggle_picker в
+   * src-tauri/src/main.rs), и снаружи это выглядит как «кнопка не работает».
+   *
+   * Отдельный топик, а не ограничитель на самом `press`: туда же летят
+   * audio_next и прочее из Node-RED, где повтор подряд — это и есть смысл
+   * («промотать три трека»), и глушить его нельзя.
+   *
+   * Окно на каждую комбинацию своё: топик один на все кнопки платы, и общий
+   * счётчик означал бы, что нажатие на одну кнопку съедает нажатие на соседнюю.
+   */
+  const onPressThrottled = throttlePress(onPress, {
+    keyOf: (topic, message) => `${message}`,
+    // Отброшенное нажатие пишется в журнал, а не проглатывается молча: с той
+    // стороны видно только то, что кнопка не сработала, и без строки в логе это
+    // неотличимо от поломки.
+    onDrop: (topic, message) =>
+      log(`< ${topic}: ${message} — отброшено, не чаще раза в секунду`, 'warn'),
+  });
+
   return {
     subscriptions: [
       {
         topics: [ config.base + '/press' ],
         handler: onPress
+      },
+      {
+        topics: [ config.base + '/press-throttled' ],
+        handler: onPressThrottled
       },
       {
         topics: [ config.base + '/type' ],

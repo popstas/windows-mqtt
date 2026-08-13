@@ -9,7 +9,7 @@ function register(actionMap) {
   }
 }
 
-async function handleAction(action) {
+async function handleAction(action, payload) {
   const handler = handlers[action];
   if (!handler) {
     log(`stdin: unknown action "${action}"`, 'warn');
@@ -18,7 +18,7 @@ async function handleAction(action) {
 
   try {
     log(`stdin: ${action}`);
-    await handler();
+    await handler(payload);
   } catch (e) {
     log(`stdin: error in "${action}": ${e.message}`, 'error');
   }
@@ -40,10 +40,10 @@ function init(mqttBridge) {
         return;
       }
 
-      const { action } = cmd;
+      const { action, payload } = cmd;
       if (!action) return;
 
-      await handleAction(action);
+      await handleAction(action, payload);
     });
 
     rl.on('close', () => {

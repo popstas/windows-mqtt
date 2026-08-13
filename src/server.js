@@ -3,6 +3,7 @@ const { mqttInit } = require(isTauriBridge ? './mqtt-bridge' : './mqtt');
 const config = require('./config');
 const {log, getModulesEnabled, initModules} = require("./helpers");
 const stdinHandler = require('./stdin-handler');
+const { buildTrayRelayActions } = require('./tray-relay');
 const { startMonitor } = require('./monitor');
 
 let mqtt; // global object
@@ -94,6 +95,11 @@ async function start() {
     const modulesEnabled = getModulesEnabled();
 
     modules = await initModules(modulesEnabled, mqtt);
+
+    // Пункты трея по управлению окнами исполняет windows11-manager по MQTT —
+    // регистрируются первыми, чтобы модуль со своим stdinActions мог перебить
+    // любое из этих действий, а не наоборот. См. src/tray-relay.js.
+    stdinHandler.register(buildTrayRelayActions(mqtt, config.mqtt.base, log));
 
     // Register stdin actions from modules (for Tauri tray commands)
     for (const mod of modules) {
