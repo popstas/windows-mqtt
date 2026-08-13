@@ -192,3 +192,8 @@ The project includes both Electron and Tauri tray launchers. Both keep the main 
 - Extra files are bundled from `src-tauri/tauri.conf.json` under `bundle.resources`. The current configuration includes `config.example.yml`, `commands.example.yml`, `bin/*`, the `src/` module tree, `assets/`, and `node_modules/` - deliberately **not** `config.yml`, `commands.yml`, or `data/**`, which are gitignored and hold real credentials (see "Never ship secrets in the installer" in AGENTS.md). Add new paths there to ship additional assets with the Tauri build, and make sure any addition can't sweep in gitignored files.
 - Shell permissions (spawning/killing the Node server) are defined in `src-tauri/capabilities/default.json`.
 - Tauri uses the native system tray instead of the custom HTML popover used by Electron, so tray menus and balloon behaviors follow the host OS conventions.
+- The tray menu opens with a disabled `windows-mqtt vX.Y.Z` header, and `Settings -> About` opens a small About window (`about.html`) with the version, the GitHub link and the license. Both read the version from `tauri.conf.json` via `app.package_info()`, so it always matches the installer.
+- Frontend pages are plain HTML files in the repo root, copied into `frontend/` by `scripts/prepare-frontend.js` before every dev run and build. A new page needs a copy line there, an entry in `app.windows` in `tauri.conf.json`, and its window label in `src-tauri/capabilities/default.json` (otherwise its webview may not call `invoke`).
+
+## License
+MIT - see [LICENSE](LICENSE).

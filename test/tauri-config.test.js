@@ -244,7 +244,7 @@ test('prepare-frontend copies index.html and its scripts to the right destinatio
   // иначе новый <script src> в index.html проезжает мимо prepare-frontend, и в
   // собранном приложении страница валится на первом же обращении к нему —
   // тогда как в репозитории и в тестах всё на месте.
-  const pages = ['index.html'];
+  const pages = ['index.html', 'about.html'];
   const required = pages.map(page => ({ from: page, to: `frontend/${page}` }));
   for (const page of pages) {
     const html = fs.readFileSync(path.join(repoRoot, page), 'utf8');
@@ -260,6 +260,37 @@ test('prepare-frontend copies index.html and its scripts to the right destinatio
       `prepare-frontend.js must copyFileSync('${pair.from}', '${pair.to}')`
     );
   }
+});
+
+// Версия живёт в трёх местах (см. «Release» в AGENTS.md): package.json,
+// tauri.conf.json (имя инсталлятора) и Cargo.toml (VERSIONINFO у exe). С тех
+// пор как её показывают в трее и в About, расхождение видно ещё и пользователю:
+// UI берёт версию из tauri.conf.json через `package_info()`.
+test('version matches across package.json, tauri.conf.json and Cargo.toml', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+  const conf = readJson('tauri.conf.json');
+  const cargo = fs.readFileSync(path.join(srcTauri, 'Cargo.toml'), 'utf8');
+  const cargoVersion = (cargo.match(/^version\s*=\s*"([^"]+)"/m) || [])[1];
+
+  assert.equal(conf.version, pkg.version, 'tauri.conf.json version must match package.json');
+  assert.equal(cargoVersion, pkg.version, 'Cargo.toml version must match package.json');
+});
+
+// Окно About объявлено в конфиге (а не создаётся на лету), поэтому оно должно
+// быть и в capabilities — иначе его webview не имеет права на invoke, и
+// страница не получит ни версии, ни открытия ссылки.
+test('about window is declared and allowed in capabilities', () => {
+  const conf = readJson('tauri.conf.json');
+  const about = (conf.app.windows || []).find(w => w.label === 'about');
+  assert.ok(about, 'tauri.conf.json must declare the "about" window');
+  assert.equal(about.url, 'about.html');
+  assert.equal(about.visible, false, 'about window must start hidden');
+
+  const capability = readJson(path.join('capabilities', 'default.json'));
+  assert.ok(
+    capability.windows.includes('about'),
+    'capabilities/default.json must list the "about" window'
+  );
 });
 
 test('config.example.yml no longer defines claudeProjects (moved to windows11-manager)', () => {

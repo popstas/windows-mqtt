@@ -105,6 +105,15 @@ value is already public in the `popstas/windows11-manager` repo.
   Merge Patch / RFC 7396 — arrays are replaced, not appended), keeping dev out of the
   slow `node_modules`/`windows11-manager` junction walk. `scripts/tauri-wrapper.js`
   injects `--config src-tauri/tauri.dev.conf.json` only for `dev`.
+- A new frontend page needs three edits, not one: a `copyFileSync` line in
+  `scripts/prepare-frontend.js` (the repo root is the source, `frontend/` is the
+  build input), a window entry in `app.windows` in `tauri.conf.json`, and that
+  window's label in `capabilities/default.json` — a label missing from
+  capabilities gets a webview that cannot `invoke`.
+- The version shown in the UI (main window title, tray header, About window)
+  comes from `app.package_info().version`, i.e. from `tauri.conf.json`. That is
+  the same source as the installer name, so the three-place version bump above
+  is now user-visible; `test/tauri-config.test.js` asserts the three match.
 - `emit_all()` → `emit()`, `get_window()` → `get_webview_window()`, `path_resolver()` → `path()`
 - `on_window_event` closure signature is `|window, event|` (not `|event|`)
 

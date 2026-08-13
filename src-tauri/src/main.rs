@@ -13,6 +13,7 @@ use tauri::{
     Emitter, Manager, State, WindowEvent,
 };
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_shell::{process::CommandEvent, ShellExt};
 
 // --- IPC protocol types ---
@@ -429,6 +430,30 @@ async fn start_mqtt_server(
     Ok(())
 }
 
+/// Версия приложения для UI (окно About, заголовок главного окна).
+///
+/// Источник — `tauri.conf.json`, тот же, что даёт имя инсталлятору, поэтому
+/// показанное в About совпадает с тем, что скачал пользователь.
+#[tauri::command]
+fn get_app_version(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+/// Открыть ссылку в системном браузере.
+///
+/// Ограничение на https:// — чтобы команда, доступная фронтенду, не
+/// превратилась в запуск произвольной программы: `shell().open()` умеет не
+/// только URL.
+#[tauri::command]
+fn open_external_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    if !url.starts_with("https://") {
+        return Err(format!("Refusing to open non-https url: {url}"));
+    }
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 async fn get_enabled_modules(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     let app_root = resolve_app_root(&app)?;
@@ -581,6 +606,20 @@ fn build_tray_menu(
     let m = |e: tauri::Error| e.to_string();
     let menu = Menu::new(app).map_err(m)?;
 
+    // Заголовок с версией — неактивный пункт, чтобы версия была видна прямо в
+    // трее, без открытия окна. `enabled: false` делает его некликабельным.
+    let version = MenuItem::with_id(
+        app,
+        "version",
+        format!("windows-mqtt v{}", app.package_info().version),
+        false,
+        None::<&str>,
+    )
+    .map_err(m)?;
+    menu.append(&version).map_err(m)?;
+    menu.append(&PredefinedMenuItem::separator(app).map_err(m)?)
+        .map_err(m)?;
+
     // Show App
     let show = MenuItem::with_id(app, "show", "Show App", true, None::<&str>).map_err(m)?;
     menu.append(&show).map_err(m)?;
@@ -707,6 +746,9 @@ fn build_tray_menu(
     )
     .map_err(m)?;
 
+    let about = MenuItem::with_id(app, "about", "About", true, None::<&str>).map_err(m)?;
+    let settings_separator = PredefinedMenuItem::separator(app).map_err(m)?;
+
     let settings_submenu = Submenu::with_id_and_items(
         app,
         "settings",
@@ -715,6 +757,8 @@ fn build_tray_menu(
         &[
             &hotkey_submenu as &dyn tauri::menu::IsMenuItem<tauri::Wry>,
             &interval_submenu as &dyn tauri::menu::IsMenuItem<tauri::Wry>,
+            &settings_separator as &dyn tauri::menu::IsMenuItem<tauri::Wry>,
+            &about as &dyn tauri::menu::IsMenuItem<tauri::Wry>,
         ],
     )
     .map_err(m)?;
@@ -830,6 +874,7 @@ fn register_shortcut_with_retry(
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(ServerState::default())
         .manage(AutoplaceTimer(Mutex::new(None)))
@@ -838,7 +883,9 @@ fn main() {
         ))))
         .invoke_handler(tauri::generate_handler![
             start_mqtt_server,
-            get_enabled_modules
+            get_enabled_modules,
+            get_app_version,
+            open_external_url
         ])
         .on_window_event(|window, event| match event {
             WindowEvent::CloseRequested { api, .. } => {
@@ -849,7 +896,17 @@ fn main() {
         })
         .setup(|app| {
             // Hide main window on startup
+            //
+            // Заголовок с версией ставится здесь, а не в tauri.conf.json:
+            // конфиг статичен, а версия должна подтягиваться из него же
+            // (`package_info`), чтобы не разъезжаться при релизе.
+            let version = app.package_info().version.to_string();
             if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_title(&format!("windows-mqtt v{version}"));
+                window.hide().ok();
+            }
+            if let Some(window) = app.get_webview_window("about") {
+                let _ = window.set_title(&format!("About windows-mqtt v{version}"));
                 window.hide().ok();
             }
 
@@ -982,6 +1039,12 @@ fn main() {
                         }
                         "show" => {
                             if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "about" => {
+                            if let Some(window) = app.get_webview_window("about") {
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             }

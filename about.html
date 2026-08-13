@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About windows-mqtt</title>
+    <script>
+      const REPO_URL = 'https://github.com/popstas/windows-mqtt';
+
+      // Ссылку открываем в системном браузере через команду бэкенда: обычный
+      // <a href> увёл бы сам webview на github, и окно About стало бы
+      // браузером без адресной строки, из которого некуда вернуться.
+      async function openExternal(url) {
+        if (!window.__TAURI__) return;
+        await window.__TAURI__.core.invoke('open_external_url', { url });
+      }
+
+      async function start() {
+        const link = document.getElementById('repo');
+        link.textContent = REPO_URL;
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          openExternal(REPO_URL).catch(() => {});
+        });
+
+        if (!window.__TAURI__) return;
+        const version = await window.__TAURI__.core.invoke('get_app_version');
+        document.getElementById('version').textContent = `v${version}`;
+      }
+
+      window.addEventListener('DOMContentLoaded', () => {
+        start().catch((e) => {
+          document.getElementById('version').textContent = `error: ${e}`;
+        });
+      });
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            color: #222;
+            background-color: #fff;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin: 0;
+        }
+
+        #version {
+            color: #666;
+            font-size: 14px;
+        }
+
+        p {
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        a {
+            color: #0a58ca;
+            cursor: pointer;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                color: #eee;
+                background-color: #1e1e1e;
+            }
+
+            #version {
+                color: #aaa;
+            }
+
+            a {
+                color: #6ea8fe;
+            }
+        }
+    </style>
+</head>
+<body>
+<h1>windows-mqtt</h1>
+<div id="version">&nbsp;</div>
+<p>Control a Windows PC over MQTT: windows, audio, power, hotkeys and custom commands.</p>
+<p>GitHub: <a id="repo" href="#"></a></p>
+<p>
+    Released under the <b>MIT License</b> — free to use, copy, modify and
+    distribute, including commercially, as long as the copyright notice is
+    kept. Provided &laquo;as is&raquo;, without warranty of any kind.
+</p>
+<p>&copy; 2026 Stanislav Popov</p>
+</body>
+</html>

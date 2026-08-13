@@ -39,6 +39,11 @@
           appendLog(`${prefix}${payload.message || ''}`.trim());
         });
 
+        // Заголовок окна ставит Rust (`setup`), но document.title на некоторых
+        // платформах перебивает его — держим здесь ту же строку с версией.
+        const version = await invoke('get_app_version');
+        document.title = `windows-mqtt v${version}`;
+
         await invoke('start_mqtt_server');
         const enabledModules = await invoke('get_enabled_modules');
         renderEnabledModules(enabledModules);

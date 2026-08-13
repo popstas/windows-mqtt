@@ -44,6 +44,16 @@
         "resizable": true,
         "fullscreen": false,
         "visible": false
+      },
+      {
+        "label": "about",
+        "title": "About windows-mqtt",
+        "url": "about.html",
+        "width": 460,
+        "height": 380,
+        "resizable": false,
+        "fullscreen": false,
+        "visible": false
       }
     ]
   }

@@ -18,7 +18,12 @@
     "deploy-fast": "node scripts/deploy-fast.js"
   },
   "author": "Stanislav Popov",
-  "license": "ISC",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/popstas/windows-mqtt.git"
+  },
+  "homepage": "https://github.com/popstas/windows-mqtt",
   "dependencies": {
     "@hurdlegroup/robotjs": "^0.12.3",
     "@julusian/midi": "^3.6.1",
