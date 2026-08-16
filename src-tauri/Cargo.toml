@@ -23,6 +23,19 @@ tauri-plugin-opener = "2"
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 
+# Профиль под выкатку, а не под витрину: время сборки здесь — время, которое
+# человек ждёт. Стояли `lto = true` и `codegen-units = 1`, то есть fat-LTO по
+# дереву из полутысячи зависимостей в один поток на каждую пересборку.
+#
+# Замерено на соседях с тем же деревом Tauri 2 (16-поточная Windows-машина и
+# MacBook Air): fat-LTO — 208 с, без него — 70 с, с `incremental` — 37 с;
+# у windows11-manager, где LTO и не было, `incremental` дал 78,7 → 13,8 с.
+# Здесь замер не воспроизвести, пока проект не собирается на той машине, но
+# рычаг тот же и дерево то же.
+#
+# Оптимизации всей программы приложение не окупает: оно ждёт сообщений MQTT.
+# Мегабайт бинаря платят один раз, минуты — каждую сборку.
 [profile.release]
-lto = true
-codegen-units = 1
+lto = false
+codegen-units = 16
+incremental = true
