@@ -1,4 +1,4 @@
-const winMan = require('windows11-manager');
+const { processRunning } = require('./obs-helpers');
 const { default: OBSWebSocket } = require('obs-websocket-js');
 const obs = new OBSWebSocket();
 
@@ -20,9 +20,14 @@ module.exports = async (mqtt, config, log) => {
     await obs.call('StopRecord');
   }
 
+  // Сторож «не подключаться, пока OBS не запущен» остался, но спрашивает
+  // теперь про процесс, а не про окно. Окно спрашивалось у windows11-manager
+  // (`findWindow({title: '^OBS'})`) — единственный живой вызов, ради которого
+  // сюда тянулся весь соседний репозиторий: и `file:`-зависимостью, и
+  // вендорингом в ресурсы бандла. Процесс отвечает на тот же вопрос, и точнее:
+  // свёрнутого в трей OBS окна может не быть вовсе, а WebSocket у него слушает.
   async function connect() {
-    const win = winMan.findWindow({title: '^OBS'});
-    if (!win) return; // don't try to connect when no OBS window opened
+    if (!processRunning()) return;
     try {
       tries++;
       // Replace 'your_password' with your actual OBS WebSocket password, if you've set one
