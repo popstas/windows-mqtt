@@ -91,9 +91,10 @@ find <tmpdir> -iname 'config.yml' -o -iname 'commands.yml' -o -type d -iname dat
 # %APPDATA%\windows-mqtt\config.yml (mqtt.password, obs.password, api keys)
 ```
 
-Known and accepted: `mqtt.host` does appear in the bundle via
-`node_modules/windows11-manager/config.example.cjs`, which hardcodes it. That
-value is already public in the `popstas/windows11-manager` repo.
+This used to have a known and accepted leak: `mqtt.host` appeared in the bundle
+via `node_modules/windows11-manager/config.example.cjs`, which hardcodes it.
+That dependency is gone (see `obs-helpers.js`), so the leak is gone with it —
+if the host shows up in a bundle again, it is a new one, not this old one.
 
 ### Tauri v2 Gotchas
 - `devUrl` must be a proper URL (e.g. `http://localhost:1420`), not a relative path
@@ -102,9 +103,13 @@ value is already public in the `popstas/windows11-manager` repo.
   `tauri.conf.json`, so a plain `npx tauri build` (without `scripts/tauri-wrapper.js`)
   still produces a complete bundle. `dev` runs overlay `tauri.dev.conf.json` whose
   empty `resources` array REPLACES the base list (Tauri v2 merges configs per JSON
-  Merge Patch / RFC 7396 — arrays are replaced, not appended), keeping dev out of the
-  slow `node_modules`/`windows11-manager` junction walk. `scripts/tauri-wrapper.js`
-  injects `--config src-tauri/tauri.dev.conf.json` only for `dev`.
+  Merge Patch / RFC 7396 — arrays are replaced, not appended). `dev` runs from the
+  working tree and reads `node_modules` in place, so copying its thousands of files
+  into the bundle would only cost time. `scripts/tauri-wrapper.js` injects
+  `--config src-tauri/tauri.dev.conf.json` only for `dev`. (Until the
+  `windows11-manager` dependency was dropped, the overlay also kept the globber out
+  of a junction to a 5.9 GB sibling repo — that walk was slow and intermittently
+  failed when a background git op locked an object.)
 - A new frontend page needs three edits, not one: a `copyFileSync` line in
   `scripts/prepare-frontend.js` (the repo root is the source, `frontend/` is the
   build input), a window entry in `app.windows` in `tauri.conf.json`, and that
