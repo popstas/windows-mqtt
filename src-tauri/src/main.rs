@@ -2,6 +2,7 @@
 
 mod mqtt_bridge;
 
+use chrono::{Local, NaiveDate, NaiveDateTime, TimeZone};
 use mqtt_bridge::{MqttBridge, MqttConfig, MqttEvent};
 use rumqttc::QoS;
 use serde::{Deserialize, Serialize};
@@ -593,6 +594,30 @@ const INTERVAL_OPTIONS: &[(&str, u64)] = &[
     ("300s", 300),
 ];
 
+/// Время сборки, вшитое `build.rs`. Ноль значит релизную сборку (а не полночь
+/// 1970-го): там штамп не нужен, версии достаточно.
+fn build_time() -> Option<NaiveDateTime> {
+    let secs: i64 = env!("WINDOWS_MQTT_BUILD_UNIX").parse().ok()?;
+    if secs == 0 {
+        return None;
+    }
+    Some(Local.timestamp_opt(secs, 0).single()?.naive_local())
+}
+
+/// Подпись пункта версии. Чистая — иначе её нечем проверить, меню в тестах не
+/// собрать. Дата у несегодняшней сборки обязательна: без неё вчерашнее `23:05`
+/// читается как сегодняшнее, и неудавшаяся выкатка выглядит удавшейся.
+fn version_item_label(version: &str, built: Option<NaiveDateTime>, today: NaiveDate) -> String {
+    let Some(built) = built else {
+        return format!("v{version}");
+    };
+    if built.date() == today {
+        format!("v{version} · {}", built.format("%H:%M"))
+    } else {
+        format!("v{version} · {}", built.format("%Y-%m-%d %H:%M"))
+    }
+}
+
 fn build_tray_menu(
     app: &tauri::AppHandle,
 ) -> Result<
@@ -606,12 +631,22 @@ fn build_tray_menu(
     let m = |e: tauri::Error| e.to_string();
     let menu = Menu::new(app).map_err(m)?;
 
-    // Заголовок с версией — неактивный пункт, чтобы версия была видна прямо в
-    // трее, без открытия окна. `enabled: false` делает его некликабельным.
+    // Заголовок с версией и временем сборки — неактивный пункт, чтобы и то и
+    // другое было видно прямо в трее, без открытия окна. `enabled: false`
+    // делает его некликабельным.
+    //
+    // «Сегодня» считается один раз, при старте приложения: меню строится тут же
+    // и больше не пересобирается. У процесса, прожившего в трее сутки, подпись
+    // устареет — но его и перезапускали не сегодня, а вопрос «то ли собралось»
+    // стоит сразу после выкатки.
     let version = MenuItem::with_id(
         app,
         "version",
-        format!("windows-mqtt v{}", app.package_info().version),
+        version_item_label(
+            &app.package_info().version.to_string(),
+            build_time(),
+            Local::now().date_naive(),
+        ),
         false,
         None::<&str>,
     )
@@ -1174,7 +1209,36 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{describe_child_exit, find_app_root};
+    use super::{describe_child_exit, find_app_root, version_item_label};
+    use chrono::NaiveDate;
+
+    fn dt(y: i32, m: u32, d: u32, h: u32, min: u32) -> chrono::NaiveDateTime {
+        NaiveDate::from_ymd_opt(y, m, d)
+            .unwrap()
+            .and_hms_opt(h, min, 0)
+            .unwrap()
+    }
+
+    #[test]
+    fn todays_build_shows_only_the_time() {
+        let today = NaiveDate::from_ymd_opt(2026, 8, 18).unwrap();
+        let label = version_item_label("1.1.0", Some(dt(2026, 8, 18, 5, 29)), today);
+        assert_eq!(label, "v1.1.0 · 05:29");
+    }
+
+    #[test]
+    fn older_build_carries_the_date() {
+        let today = NaiveDate::from_ymd_opt(2026, 8, 18).unwrap();
+        let label = version_item_label("1.1.0", Some(dt(2026, 8, 15, 23, 5)), today);
+        assert_eq!(label, "v1.1.0 · 2026-08-15 23:05");
+    }
+
+    #[test]
+    fn release_build_shows_the_version_alone() {
+        let today = NaiveDate::from_ymd_opt(2026, 8, 18).unwrap();
+        assert_eq!(version_item_label("1.1.0", None, today), "v1.1.0");
+    }
+
 
     #[test]
     fn reports_access_violation_as_a_native_crash_error() {
