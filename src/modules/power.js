@@ -19,6 +19,16 @@ import {exec} from 'child_process';
  * снимет ожидание раньше времени, и перезагрузка пойдёт по чуть устаревшей
  * раскладке. См. createAckQueue() — там та же оговорка для запросов внахлёст.
  */
+/**
+ * @param {{
+ *   publish: (topic: string, payload: string) => void,
+ *   base: string,
+ *   ack?: Promise<any>,
+ *   timeoutMs?: number,
+ *   setTimeoutFn?: (fn: (...args: any[]) => void, ms?: number) => any,
+ *   clearTimeoutFn?: (id: any) => void,
+ * }} options
+ */
 function storeThen({
   publish, base, ack, timeoutMs = 5000,
   setTimeoutFn = setTimeout, clearTimeoutFn = clearTimeout,

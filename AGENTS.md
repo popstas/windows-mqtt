@@ -21,6 +21,12 @@ Run `source "$HOME/.cargo/env"` before any cargo/rust commands.
   msgpack вместо JSON (`src/modules/obs.js`, обходится импортом подпути
   `obs-websocket-js/json`). Перед переводом любой зависимости стоит сверить
   `import.meta.resolve('pkg')` с прежним `require.resolve('pkg')`.
+- Тот же механизм уже стоил второго модуля: `ws` под ESM резолвится в
+  `wrapper.mjs`, чей `default` — класс `WebSocket` БЕЗ статик, поэтому
+  `new WebSocket.Server()` из `src/modules/tabs.js` падал с TypeError с самого
+  перехода на ESM (глотал `initModules()`). Сервер берётся только именованным
+  импортом `import { WebSocketServer } from 'ws'` — `wrapper.mjs` настоящий
+  ESM, оговорка про `cjs-module-lexer` к нему не относится.
 - `require()` в проекте больше нет.
 - Планка рантайма: `import.meta.dirname` требует Node ≥ 20.11 (боевой код),
   `registerHooks` — Node ≥ 22.15 (только тесты, `test/modules-registry.test.js`).
@@ -38,7 +44,17 @@ Run `source "$HOME/.cargo/env"` before any cargo/rust commands.
 - Shell commands use `app.shell().command()` (from `ShellExt` trait), NOT `tauri::api::process::Command`
 - `CommandEvent::Stdout/Stderr` returns `Vec<u8>`, convert with `String::from_utf8_lossy`
 - Build check: `cd src-tauri && cargo check`
-- JS tests: `npm test` (`node --test test/**/*.test.js`). Pure logic only — never spawn Windows/native binaries in tests. Modules with native addons are covered by `test/native-modules.test.js`, which auto-skips where those addons aren't installed (e.g. Linux).
+- Типы без TypeScript: `jsconfig.json` включает `checkJs`, `npm run typecheck`
+  (`tsc --noEmit`) гоняется первым шагом `npm test`. Файлы остаются `.js`, шага
+  сборки нет — `bundle.resources`, `deploy-fast.js` и спавн `src/index.js` из
+  Rust продолжают работать с россыпью исходников. `strict` намеренно выключен:
+  в нём проект даёт ~450 ошибок, из них ~380 — разметка implicit any без
+  единого реального дефекта. Формы конфига описаны одним `@typedef Config` в
+  `src/config-loader.js` (индексная сигнатура: ключи задаёт пользователь в
+  YAML). Нетипизированные зависимости обязаны иметь `@types/*` в
+  devDependencies — иначе `allowJs` заставляет `tsc` проверять их собственный
+  JS и сыпать сотней чужих ошибок.
+- JS tests: `npm test` (`npm run typecheck && node --test test/**/*.test.js`). Pure logic only — never spawn Windows/native binaries in tests. Modules with native addons are covered by `test/native-modules.test.js`, which auto-skips where those addons aren't installed (e.g. Linux).
 - JS/Rust config-path coupling: `resolveAppFile`/`resolveConfigPath` in `src/paths.js` must stay in sync with `config_candidates`/`resolve_config_path` in `src-tauri/src/main.rs` (same search order, same `config.example.yml` fallback).
 - Dev run: `npm run start-tauri` or `cargo tauri dev`. The npm scripts use `scripts/tauri-wrapper.js` to ensure MSVC linker is available when running from Git Bash (vcvars64.bat is invoked before Tauri). If you see `LNK1181: cannot open input file 'kernel32.lib'`, ensure the "Desktop development with C++" workload includes the Windows 10/11 SDK.
 
@@ -67,6 +83,42 @@ For a quick module-only test without rebuilding, the installed bundle can be
 hot-patched: copy the changed file into `...\windows-mqtt\_up_\src\...` (and
 `bin\audio-watcher.exe` into `...\_up_\bin\`), then restart the app. An official
 rebuild+install overwrites such patches.
+
+### Выкатка на Windows-машину с Linux
+
+Разработка идёт и с Linux, где собрать Windows-установщик нельзя (MSVC, NSIS,
+`LOCALAPPDATA`) и где не установлены нативные аддоны. Выкатка оттуда — через
+`data/deploy-win.sh`: он гоняет по ssh на `popstas-pc` тот же цикл, что
+`npm run deploy-local` делает локально.
+
+```bash
+./data/deploy-win.sh                          # master: pull + сборка + установка + запуск
+BRANCH=task/foo ./data/deploy-win.sh          # обкатать ветку до мержа
+./data/deploy-win.sh --install                # + npm install (обязательно, если менялись зависимости)
+./data/deploy-win.sh --no-pull --no-build     # поставить уже собранное
+./data/deploy-win.sh --no-launch              # поставить, но не запускать
+```
+
+Скрипт лежит вне git (`data/` в `.gitignore`) — он знает имена хостов и пути
+конкретной установки. Если его нет на машине, восстанавливать по этому
+описанию. Что в нём неочевидно и повторить придётся:
+
+- Гасить надо ДВОИХ — приложение и его node-сайдкар, иначе установщик не
+  заменит файлы в `_up_`. Только через `scripts/stop-app.js`: там `taskkill`
+  намеренно без `/T`, потому что `/T` ходит по ParentProcessId и уносит заодно
+  пользовательский WindowsTerminal, если тот когда-то поднялся из-под
+  приложения.
+- Запуск — только через `schtasks /ru <user> /it`. Служба OpenSSH сажает сессию
+  в session 0, а рабочий стол человека — в session 1; запущенный напрямую трей
+  попадёт туда, где нет ни трея, ни рабочего стола: процесс есть, на экране
+  пусто.
+- Установщик зовётся `start /wait`: NSIS — GUI-приложение, и `cmd` его не
+  ждёт, а возвращает управление сразу.
+- Установщик ищется как самый свежий по ВРЕМЕНИ (`dir /o-d`), а не по имени:
+  между релизами версия в имени не меняется.
+- Чем проверять, что выкатилось: первый пункт меню трея показывает время
+  сборки. Старое время означает, что установщик бинарь не заменил — почти
+  всегда потому, что кто-то из двух процессов не был убит.
 
 ## Release
 

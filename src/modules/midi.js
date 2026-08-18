@@ -281,8 +281,8 @@ export default async (mqtt, config, log) => {
   function doActions({keys = '', sendMqtt}) {
     // обработка кнопок, если keys назначены
     if (keys) {
-      let [mods, key] = keys.split(' ');
-      mods = mods.split('+');
+      const [modsRaw, key] = keys.split(' ');
+      const mods = modsRaw.split('+');
       if (key) {
         log(`press ${keys}`);
         robot.keyTap(key, mods);
