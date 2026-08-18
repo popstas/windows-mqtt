@@ -12,6 +12,7 @@
   "bundle": {
     "active": true,
     "resources": [
+      "../package.json",
       "../config.example.yml",
       "../commands.example.yml",
       "../bin/*",

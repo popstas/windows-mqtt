@@ -35,4 +35,4 @@ function shouldLogOnce(loggedSet, key) {
   return true;
 }
 
-module.exports = { listPortNames, formatMidiPortHelp, shouldLogOnce };
+export { listPortNames, formatMidiPortHelp, shouldLogOnce };

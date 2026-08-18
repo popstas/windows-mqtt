@@ -3,11 +3,11 @@
 // missing. When the watcher is available, reads are event-driven through it,
 // because loudness has no Windows event API and shells out an .exe on every
 // getVolume/getMuted call — a per-tick process spawn we avoid when we can.
-const loudness = require('loudness');
-const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const { appRoot } = require('../paths');
+import loudness from 'loudness';
+import { spawn } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import { appRoot } from '../paths.js';
 
 let mqtt;
 let volumeSetTopic, volumeStatTopic, muteSetTopic, muteStatTopic;
@@ -81,7 +81,7 @@ async function onMuteSet(topic, message) {
   mqtt.publish(muteStatTopic, value);
 }
 
-module.exports = async (mqttClient, config, log) => {
+export default async (mqttClient, config, log) => {
   mqtt = mqttClient;
 
   // onStart
@@ -276,8 +276,10 @@ module.exports = async (mqttClient, config, log) => {
   }
 }
 
-module.exports.isDeviceDisabled = isDeviceDisabled;
-module.exports.parseWatcherLine = parseWatcherLine;
-module.exports.fallbackIntervalMs = fallbackIntervalMs;
-module.exports.shouldScheduleRestart = shouldScheduleRestart;
-module.exports.resolveWatcherBin = resolveWatcherBin;
+export {
+  isDeviceDisabled,
+  parseWatcherLine,
+  fallbackIntervalMs,
+  shouldScheduleRestart,
+  resolveWatcherBin,
+};

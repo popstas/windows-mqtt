@@ -1,8 +1,8 @@
-const { processRunning } = require('./obs-helpers');
-const { default: OBSWebSocket } = require('obs-websocket-js');
+import { processRunning } from './obs-helpers.js';
+import OBSWebSocket from 'obs-websocket-js';
 const obs = new OBSWebSocket();
 
-module.exports = async (mqtt, config, log) => {
+export default async (mqtt, config, log) => {
   let connected = false;
   let tries = 0;
   let reconnectIntervalId = null;

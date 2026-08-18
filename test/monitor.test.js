@@ -1,7 +1,7 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
+import { test } from 'node:test';
+import assert from 'node:assert';
 
-const { safeCount } = require('../src/monitor');
+import { safeCount } from '../src/monitor.js';
 
 test('counts entries when the introspection method exists', () => {
   const obj = { list: () => [1, 2, 3] };

@@ -1,8 +1,8 @@
-const notifier = require('node-notifier');
-const path = require('path');
-const axios = require('axios');
-const { spawn } = require('child_process');
-const { pathToFileURL } = require('url');
+import notifier from 'node-notifier';
+import path from 'path';
+import axios from 'axios';
+import { spawn } from 'child_process';
+import { pathToFileURL } from 'url';
 
 // Persistent toast via PowerShell (UWP Toast API) with scenario="reminder".
 // node-notifier / SnoreToast can't emit scenario, so it always auto-dismisses.
@@ -56,7 +56,7 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
   child.on('error', (e) => console.log('notifyPersistent error', e));
 }
 
-module.exports = async (mqtt, config, log) => {
+export default async (mqtt, config, log) => {
 
   async function notify(topic, message) {
     const msg = `${message}`;
@@ -80,7 +80,7 @@ module.exports = async (mqtt, config, log) => {
       // icon
       const appIcons = config.appIcons || {};
       if (appIcons[obj.app]) {
-        data.icon = path.join(__dirname, '..', '..', 'assets', 'icons', appIcons[obj.app]);
+        data.icon = path.join(import.meta.dirname, '..', '..', 'assets', 'icons', appIcons[obj.app]);
       }
 
       // sound

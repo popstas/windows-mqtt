@@ -1,11 +1,11 @@
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 // App root: the folder above src/. In a bundled Tauri install this is the
 // flattened resource dir (`_up_`) — read-only app payload, NOT a place for
 // user files. User config/commands live in the OS settings dir instead.
-const appRoot = path.join(__dirname, '..');
+const appRoot = path.join(import.meta.dirname, '..');
 
 // OS settings base dir: %APPDATA% on Windows, ~/Library/Application Support on
 // macOS, $XDG_CONFIG_HOME (or ~/.config) on Linux.
@@ -72,4 +72,4 @@ function resolveUserDataFile(configPath) {
   return settingsDir(name);
 }
 
-module.exports = { appRoot, appDataDir, settingsDir, resolveAppFile, resolveUserDataFile };
+export { appRoot, appDataDir, settingsDir, resolveAppFile, resolveUserDataFile };

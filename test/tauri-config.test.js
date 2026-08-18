@@ -1,11 +1,11 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const path = require('node:path');
-const { execFileSync } = require('node:child_process');
-const yaml = require('js-yaml');
+import { test } from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import yaml from 'js-yaml';
 
-const repoRoot = path.join(__dirname, '..');
+const repoRoot = path.join(import.meta.dirname, '..');
 const srcTauri = path.join(repoRoot, 'src-tauri');
 
 function readJson(file) {
@@ -75,6 +75,25 @@ test('base tauri.conf.json bundles the full resource list', () => {
       `bundle.resources must include ${glob}`
     );
   }
+});
+
+// "type": "module" живёт в корневом package.json, а Node ищет ближайший
+// package.json вверх от запускаемого файла. В установленном приложении это
+// _up_/src/index.js, значит package.json обязан лежать в _up_/ — то есть
+// быть в bundle.resources. Без него Node прочитает src/*.js как CommonJS и
+// упадёт на первом import, причём молча: initModules() глотает исключения
+// модулей, а стартовый сбой в bridge-режиме уходит в stderr, который видно
+// только в окне приложения.
+test('bundle.resources ships package.json, and it declares type: module', () => {
+  const base = readJson('tauri.conf.json');
+  const resources = base.bundle && base.bundle.resources;
+  assert.ok(Array.isArray(resources), 'bundle.resources must be an array');
+  assert.ok(
+    resources.includes('../package.json'),
+    'bundle.resources must include ../package.json, иначе "type": "module" не доедет до установленного приложения'
+  );
+  const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+  assert.strictEqual(pkg.type, 'module', 'package.json must declare "type": "module"');
 });
 
 // config.yml, commands.yml, data/, and (as of the src/daemon leak) any other
@@ -156,15 +175,15 @@ test('every non-gitignored subdirectory of src/ is fully covered by bundle.resou
 
 // The subdirectory-coverage test above only catches a *missing* glob — it
 // says nothing about a file that does exist inside src/ and still throws
-// MODULE_NOT_FOUND in the installed app because its own require() reaches
+// MODULE_NOT_FOUND in the installed app because its own import reaches
 // *outside* src/ (bundle.resources ships `../src/*` and per-subdirectory
 // globs, nothing from the repo root or frontend-src/). That's exactly what
-// happened: src/picker/session-open-helpers.js required
+// happened: src/picker/session-open-helpers.js imported
 // '../../frontend-src/session-glyph', which is covered by neither
 // `../src/*` nor any `../src/<subdir>/**/*` entry, and the installed app
 // failed with "Cannot find module '../../frontend-src/session-glyph'" —
 // silently, because initModules() catches and logs the exception. This walks
-// every .js file under src/ and flags any relative require() whose target
+// every .js file under src/ and flags any relative import whose target
 // resolves outside src/, so a future copy of this mistake fails a test
 // instead of an install.
 test('no relative require() in src/ resolves to a path outside src/', () => {
@@ -173,16 +192,20 @@ test('no relative require() in src/ resolves to a path outside src/', () => {
     .filter(p => fs.statSync(path.join(repoRoot, p)).isFile());
 
   const offenders = [];
-  const requireRe = /require\(\s*['"](\.\.?\/[^'"]+)['"]\s*\)/g;
+  // Ловит все три формы относительного импорта: статическую (`from './x.js'`),
+  // голую (`import './x.js'`) и динамическую (`await import('./x.js')`), —
+  // после перехода на ES-модули относительные пути живут только в них, а
+  // прежний сторож искал CommonJS-вызов и не увидел бы ни одной формы.
+  const importRe = /(?:\bfrom|\bimport)\s*\(?\s*['"](\.\.?\/[^'"]+)['"]/g;
   for (const rel of jsFiles) {
     const abs = path.join(repoRoot, rel);
     const content = fs.readFileSync(abs, 'utf8');
     let m;
-    while ((m = requireRe.exec(content))) {
+    while ((m = importRe.exec(content))) {
       const target = path.resolve(path.dirname(abs), m[1]);
       const relToSrc = path.relative(srcDir, target);
       if (relToSrc === '..' || relToSrc.startsWith(`..${path.sep}`)) {
-        offenders.push(`  ${rel}: require('${m[1]}') -> src/${relToSrc}`);
+        offenders.push(`  ${rel}: import '${m[1]}' -> src/${relToSrc}`);
       }
     }
   }
@@ -190,7 +213,7 @@ test('no relative require() in src/ resolves to a path outside src/', () => {
   assert.deepStrictEqual(
     offenders,
     [],
-    `relative require() must stay inside src/ (bundle.resources ships only ` +
+    `relative import must stay inside src/ (bundle.resources ships only ` +
     `../src/* and its subdirectory globs, not the repo root):\n${offenders.join('\n')}`
   );
 });

@@ -18,13 +18,13 @@
  * захватил ссылку на него при загрузке, и подмена ссылки до него бы
  * не доехала.
  */
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const helpers = require('../src/helpers');
-const { config, reload, setConfig } = require('../src/config');
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as helpers from '../src/helpers.js';
+import { config, reload, setConfig } from '../src/config.js';
 
 function loadHelpersWithConfig(yamlLines) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wm-power-gate-'));
@@ -147,7 +147,7 @@ test('config.yml с modules: без ключа, но с закомментиро
 
 test('config.example.yml: power загружается на исторической базе windows без единого упоминания modules.windows', async () => {
   const { helpers, config } = loadHelpersWithConfig(
-    fs.readFileSync(path.join(__dirname, '..', 'config.example.yml'), 'utf8').split('\n')
+    fs.readFileSync(path.join(import.meta.dirname, '..', 'config.example.yml'), 'utf8').split('\n')
   );
   assert.equal(config.modules.windows, undefined, 'modules.windows в config.example.yml больше нет вовсе');
   const enabled = helpers.getModulesEnabled();

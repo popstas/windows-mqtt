@@ -1,6 +1,6 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
-const keys = require('../src/modules/keys');
+import { test } from 'node:test';
+import assert from 'node:assert';
+import keys from '../src/modules/keys.js';
 
 const TOPIC_BASE = 'home/room/pc/keys';
 

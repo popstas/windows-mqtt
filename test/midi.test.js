@@ -1,7 +1,7 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
+import { test } from 'node:test';
+import assert from 'node:assert';
 
-const { listPortNames, formatMidiPortHelp, shouldLogOnce } = require('../src/modules/midi-utils');
+import { listPortNames, formatMidiPortHelp, shouldLogOnce } from '../src/modules/midi-utils.js';
 
 // Fake midi.Input exposing only the port-enumeration surface used by the helper.
 function fakeInput(names) {

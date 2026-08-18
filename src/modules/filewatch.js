@@ -1,7 +1,7 @@
-const chokidar = require('chokidar');
-const { isNetworkPath } = require('./filewatch-helpers');
+import chokidar from 'chokidar';
+import { isNetworkPath } from './filewatch-helpers.js';
 
-module.exports = async (mqtt, config, log) => {
+export default async (mqtt, config, log) => {
   const watchers = [];
 
   function createWatcher(file) {

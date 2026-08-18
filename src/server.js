@@ -1,10 +1,16 @@
+import { config } from './config.js';
+import { log, getModulesEnabled, initModules } from './helpers.js';
+// stdin-handler экспортирует { init, register }, а server.js зовёт их через
+// точку (stdinHandler.register(...), пять мест) — нужен именно импорт
+// пространства имён, а не дефолтный.
+import * as stdinHandler from './stdin-handler.js';
+import { buildTrayRelayActions } from './tray-relay.js';
+import { startMonitor } from './monitor.js';
+
 const isTauriBridge = process.env.TAURI_BRIDGE === '1';
-const { mqttInit } = require(isTauriBridge ? './mqtt-bridge' : './mqtt');
-const { config } = require('./config');
-const {log, getModulesEnabled, initModules} = require("./helpers");
-const stdinHandler = require('./stdin-handler');
-const { buildTrayRelayActions } = require('./tray-relay');
-const { startMonitor } = require('./monitor');
+// Транспорт выбирается по рантайм-флагу: статический импорт обоих загрузил бы
+// неиспользуемый. Top-level await здесь намеренный, а не случайно уцелевший.
+const { mqttInit } = await import(isTauriBridge ? './mqtt-bridge.js' : './mqtt.js');
 
 let mqtt; // global object
 let modules; // global object
@@ -187,4 +193,4 @@ function getHandler(topic, modules) {
   return handler;
 }
 
-module.exports = { start, cleanup };
+export { start, cleanup };

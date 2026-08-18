@@ -1,4 +1,4 @@
-const { spawnSync } = require('node:child_process');
+import { spawnSync } from 'node:child_process';
 
 // Остановка установленного приложения перед деплоем.
 //
@@ -63,4 +63,4 @@ function stopApp(resourceRoot) {
   return killed;
 }
 
-module.exports = { stopApp, nodeSidecarPids };
+export { stopApp, nodeSidecarPids };

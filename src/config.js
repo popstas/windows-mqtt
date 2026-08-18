@@ -1,4 +1,4 @@
-const { loadConfig } = require('./config-loader');
+import { loadConfig } from './config-loader.js';
 
 // Живой объект конфига процесса. Его ИДЕНТИЧНОСТЬ обязана сохраняться:
 // src/helpers.js захватывает ссылку при загрузке модуля, и подмена ссылки
@@ -23,4 +23,4 @@ function setConfig(next) {
   Object.assign(config, next);
 }
 
-module.exports = { config, reload, setConfig };
+export { config, reload, setConfig };

@@ -1,9 +1,9 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
-const { EventEmitter } = require('node:events');
+import { test } from 'node:test';
+import assert from 'node:assert';
+import { EventEmitter } from 'node:events';
+import * as stdinHandler from '../src/stdin-handler.js';
 
 test('stdin-handler dispatches actions from bridge events', async () => {
-  const stdinHandler = require('../src/stdin-handler');
   let called = false;
   stdinHandler.register({ 'test/action': () => { called = true; } });
   const fakeBridge = new EventEmitter();
@@ -14,7 +14,6 @@ test('stdin-handler dispatches actions from bridge events', async () => {
 });
 
 test('stdin-handler passes payload to handlers', async () => {
-  const stdinHandler = require('../src/stdin-handler');
   let got = 'not called';
   stdinHandler.register({ 'test/payload': (payload) => { got = payload; } });
   const fakeBridge = new EventEmitter();
@@ -25,7 +24,6 @@ test('stdin-handler passes payload to handlers', async () => {
 });
 
 test('stdin-handler still calls handlers registered without payload', async () => {
-  const stdinHandler = require('../src/stdin-handler');
   let calls = 0;
   stdinHandler.register({ 'test/legacy': () => { calls += 1; } });
   const fakeBridge = new EventEmitter();

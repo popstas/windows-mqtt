@@ -1,28 +1,28 @@
-// Lazy module registry: a module's require() runs only when the module is
+// Lazy module registry: a module's import() runs only when the module is
 // enabled in config, so one broken/missing native dep can't kill the server.
 const registry = {
-  audio: './audio',
-  clipboard: './clipboard',
-  commands: './commands',
-  dirwatch: './dirwatch',
-  exec: './exec',
-  filewatch: './filewatch',
-  gpt: './gpt',
-  keys: './keys',
-  midi: './midi',
-  mouse: './mouse',
-  notify: './notify',
-  obs: './obs',
-  power: './power',
-  reaper: './reaper',
-  tabs: './tabs',
-  tts: './tts',
+  audio: './audio.js',
+  clipboard: './clipboard.js',
+  commands: './commands.js',
+  dirwatch: './dirwatch.js',
+  exec: './exec.js',
+  filewatch: './filewatch.js',
+  gpt: './gpt.js',
+  keys: './keys.js',
+  midi: './midi.js',
+  mouse: './mouse.js',
+  notify: './notify.js',
+  obs: './obs.js',
+  power: './power.js',
+  reaper: './reaper.js',
+  tabs: './tabs.js',
+  tts: './tts.js',
 };
 
 async function load(name) {
   const modulePath = registry[name];
   if (!modulePath) throw new Error(`Unknown module: ${name}`);
-  return require(modulePath);
+  return (await import(modulePath)).default;
 }
 
 /**
@@ -39,4 +39,4 @@ function isEnabled(name, modulesConfig = {}) {
   return mod.enabled !== undefined ? !!mod.enabled : true;
 }
 
-module.exports = { registry, load, isEnabled };
+export { registry, load, isEnabled };

@@ -1,5 +1,5 @@
 /** Питание машины. Осталось здесь после того, как окна уехали в windows11-manager. */
-const {exec} = require('child_process');
+import {exec} from 'child_process';
 
 /**
  * Попросить менеджер сохранить раскладку и дождаться ответа.
@@ -87,7 +87,7 @@ function shutdown() {
   setTimeout(() => exec('shutdown -t 0 -s -f'), 1000);
 }
 
-module.exports = async (mqtt, config, log) => {
+export default async (mqtt, config, log) => {
   // Одна подписка на всё время жизни модуля: своей на каждую перезагрузку
   // было бы столько же, сколько перезагрузок. Очередь FIFO раздаёт ответы по
   // порядку — см. createAckQueue().
@@ -148,5 +148,4 @@ module.exports = async (mqtt, config, log) => {
   };
 };
 
-module.exports.storeThen = storeThen;
-module.exports.createAckQueue = createAckQueue;
+export { storeThen, createAckQueue };

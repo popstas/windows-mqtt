@@ -1,11 +1,11 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
+import { test } from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-const { loadConfig, SAFE_DEFAULT } = require('../src/config-loader');
-const { resolveAppFile } = require('../src/paths');
+import { loadConfig, SAFE_DEFAULT } from '../src/config-loader.js';
+import { resolveAppFile } from '../src/paths.js';
 
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'wm-config-'));

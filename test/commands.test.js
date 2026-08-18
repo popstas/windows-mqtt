@@ -1,12 +1,12 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
+import { test } from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-const yaml = require('js-yaml');
+import yaml from 'js-yaml';
 
-const commands = require('../src/modules/commands');
+import * as commands from '../src/modules/commands.js';
 const {
   writeScriptFile,
   removeScriptFile,

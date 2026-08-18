@@ -2,13 +2,14 @@
 // release binary to ./bin/audio-watcher.exe, where both the headless server
 // (src/modules/audio.js) and the bundled Tauri app resolve it from.
 //
-// Run directly (`npm run build-audio-watcher`) or require() and call build().
+// Run directly (`npm run build-audio-watcher`) or import it and call build().
 
-const { spawnSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+import { spawnSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import { pathToFileURL } from 'node:url';
 
-const projectRoot = path.resolve(__dirname, '..');
+const projectRoot = path.resolve(import.meta.dirname, '..');
 const crateDir = path.join(projectRoot, 'audio-watcher');
 const exeName = 'audio-watcher.exe';
 const builtExe = path.join(crateDir, 'target', 'release', exeName);
@@ -43,8 +44,8 @@ function build() {
   return true;
 }
 
-if (require.main === module) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   process.exit(build() ? 0 : 1);
 }
 
-module.exports = { build };
+export { build };

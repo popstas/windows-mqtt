@@ -1,7 +1,7 @@
 // module for receive tabs info from https://github.com/popstas/chrome-tabs-exporter
-const WebSocket = require("ws");
+import WebSocket from "ws";
 
-module.exports = async (mqtt, config, log) => {
+export default async (mqtt, config, log) => {
   let lastData = {};
   if (!config.port) {
     log('tabs: need to define port in config');

@@ -49,4 +49,4 @@ function buildTrayRelayActions(mqtt, base, log = () => {}) {
   return actions;
 }
 
-module.exports = { buildTrayRelayActions, RELAYED };
+export { buildTrayRelayActions, RELAYED };

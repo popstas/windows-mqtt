@@ -1,11 +1,11 @@
 // Periodic process health sampling: memory, CPU, event loop, handles.
 // Appends JSONL to <settings-dir>/windows-mqtt/sysstats.jsonl and publishes
 // to MQTT so leaks/busy-loops can be diagnosed from history.
-const fs = require('fs');
-const path = require('path');
-const { performance } = require('perf_hooks');
-const { settingsDir, resolveUserDataFile } = require('./paths');
-const { rotateFile } = require('./log-rotate');
+import fs from 'fs';
+import path from 'path';
+import { performance } from 'perf_hooks';
+import { settingsDir, resolveUserDataFile } from './paths.js';
+import { rotateFile } from './log-rotate.js';
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -100,4 +100,4 @@ function safeCount(obj, method) {
   return typeof fn === 'function' ? fn.call(obj).length : null;
 }
 
-module.exports = { startMonitor, safeCount };
+export { startMonitor, safeCount };

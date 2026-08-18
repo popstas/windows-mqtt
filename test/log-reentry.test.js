@@ -1,6 +1,6 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
-const reentry = require('../src/log-reentry');
+import { test } from 'node:test';
+import assert from 'node:assert';
+import * as reentry from '../src/log-reentry.js';
 
 test('снаружи вызова флаг опущен', () => {
   assert.strictEqual(reentry.isInside(), false);
