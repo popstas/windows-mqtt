@@ -84,6 +84,42 @@ hot-patched: copy the changed file into `...\windows-mqtt\_up_\src\...` (and
 `bin\audio-watcher.exe` into `...\_up_\bin\`), then restart the app. An official
 rebuild+install overwrites such patches.
 
+### Выкатка на Windows-машину с Linux
+
+Разработка идёт и с Linux, где собрать Windows-установщик нельзя (MSVC, NSIS,
+`LOCALAPPDATA`) и где не установлены нативные аддоны. Выкатка оттуда — через
+`data/deploy-win.sh`: он гоняет по ssh на `popstas-pc` тот же цикл, что
+`npm run deploy-local` делает локально.
+
+```bash
+./data/deploy-win.sh                          # master: pull + сборка + установка + запуск
+BRANCH=task/foo ./data/deploy-win.sh          # обкатать ветку до мержа
+./data/deploy-win.sh --install                # + npm install (обязательно, если менялись зависимости)
+./data/deploy-win.sh --no-pull --no-build     # поставить уже собранное
+./data/deploy-win.sh --no-launch              # поставить, но не запускать
+```
+
+Скрипт лежит вне git (`data/` в `.gitignore`) — он знает имена хостов и пути
+конкретной установки. Если его нет на машине, восстанавливать по этому
+описанию. Что в нём неочевидно и повторить придётся:
+
+- Гасить надо ДВОИХ — приложение и его node-сайдкар, иначе установщик не
+  заменит файлы в `_up_`. Только через `scripts/stop-app.js`: там `taskkill`
+  намеренно без `/T`, потому что `/T` ходит по ParentProcessId и уносит заодно
+  пользовательский WindowsTerminal, если тот когда-то поднялся из-под
+  приложения.
+- Запуск — только через `schtasks /ru <user> /it`. Служба OpenSSH сажает сессию
+  в session 0, а рабочий стол человека — в session 1; запущенный напрямую трей
+  попадёт туда, где нет ни трея, ни рабочего стола: процесс есть, на экране
+  пусто.
+- Установщик зовётся `start /wait`: NSIS — GUI-приложение, и `cmd` его не
+  ждёт, а возвращает управление сразу.
+- Установщик ищется как самый свежий по ВРЕМЕНИ (`dir /o-d`), а не по имени:
+  между релизами версия в имени не меняется.
+- Чем проверять, что выкатилось: первый пункт меню трея показывает время
+  сборки. Старое время означает, что установщик бинарь не заменил — почти
+  всегда потому, что кто-то из двух процессов не был убит.
+
 ## Release
 
 Order matters: the version must be bumped BEFORE the changelog (it reads
