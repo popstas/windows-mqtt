@@ -30,8 +30,8 @@ if (process.env.TAURI_BRIDGE === '1') {
   // не статическим импортом наверху: статический импорт выполнился бы до
   // тела файла. До того как промис разрешится, строки уходят только в stderr —
   // ровно то же окно, что было у ленивого require раньше.
-  let helpersMod;
-  import('./helpers.js').then((m) => { helpersMod = m; }, () => {});
+  let helpersMod, helpersErr;
+  import('./helpers.js').then((m) => { helpersMod = m; }, (e) => { helpersErr = e; });
 
   // Одна пометка на весь процесс. Молчать тут нельзя — этот путь для того и
   // заведён, чтобы диагностика перестала теряться, — но и жаловаться на каждую
@@ -43,7 +43,7 @@ if (process.env.TAURI_BRIDGE === '1') {
       process.stderr.write(tagLines(level, text) + '\n');
     } catch {}
     try {
-      if (!helpersMod) throw new Error('helpers ещё не загружен');
+      if (!helpersMod) throw helpersErr ?? new Error('helpers ещё не загружен');
       helpersMod.logConsoleLine(level, text);
     } catch (e) {
       // Штатный случай — helpers ещё грузится: строка мимо файла. Дальше всё

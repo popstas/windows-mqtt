@@ -44,7 +44,12 @@ function build() {
   return true;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+// process.argv[1] может отсутствовать (`node -e`, REPL) — pathToFileURL иначе
+// бросит. И, что серьёзнее: import.meta.url нормализован ESM-загрузчиком через
+// realpath, а argv[1] — нет; junction/симлинк или другой регистр буквы диска
+// (как в %~dp0 из tauri-wrapper.cmd) делают сравнение ложным без резолва пути,
+// скрипт молча выходит с кодом 0, и сборка увозит устаревший бинарник.
+if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href) {
   process.exit(build() ? 0 : 1);
 }
 

@@ -80,10 +80,13 @@ test('base tauri.conf.json bundles the full resource list', () => {
 // "type": "module" живёт в корневом package.json, а Node ищет ближайший
 // package.json вверх от запускаемого файла. В установленном приложении это
 // _up_/src/index.js, значит package.json обязан лежать в _up_/ — то есть
-// быть в bundle.resources. Без него Node прочитает src/*.js как CommonJS и
-// упадёт на первом import, причём молча: initModules() глотает исключения
-// модулей, а стартовый сбой в bridge-режиме уходит в stderr, который видно
-// только в окне приложения.
+// быть в bundle.resources. Без него на Node < 22.7 (или при отключённой
+// эвристике определения ESM по синтаксису, --no-experimental-detect-module)
+// Node прочитает src/*.js как CommonJS и упадёт на первом import, причём
+// молча: initModules() глотает исключения модулей, а стартовый сбой в
+// bridge-режиме уходит в stderr, который видно только в окне приложения.
+// На Node ≥ 22.7 файл без package.json запустится и так за счёт эвристики,
+// но полагаться на неё не стоит — ресурс остаётся обязательным.
 test('bundle.resources ships package.json, and it declares type: module', () => {
   const base = readJson('tauri.conf.json');
   const resources = base.bundle && base.bundle.resources;
@@ -192,6 +195,7 @@ test('no relative import in src/ resolves to a path outside src/', () => {
     .filter(p => fs.statSync(path.join(repoRoot, p)).isFile());
 
   const offenders = [];
+  let scanned = 0;
   // Ловит все три формы относительного импорта: статическую (`from './x.js'`),
   // голую (`import './x.js'`) и динамическую (`await import('./x.js')`), —
   // после перехода на ES-модули относительные пути живут только в них, а
@@ -202,6 +206,7 @@ test('no relative import in src/ resolves to a path outside src/', () => {
     const content = fs.readFileSync(abs, 'utf8');
     let m;
     while ((m = importRe.exec(content))) {
+      scanned++;
       const target = path.resolve(path.dirname(abs), m[1].replace(/\?.*$/, ''));
       const relToSrc = path.relative(srcDir, target);
       if (relToSrc === '..' || relToSrc.startsWith(`..${path.sep}`)) {
@@ -209,6 +214,14 @@ test('no relative import in src/ resolves to a path outside src/', () => {
       }
     }
   }
+
+  // Порог 20 — заметно ниже фактических ~31 относительных импортов (на
+  // момент написания, в 16 файлах src/), но заметно выше нуля: обычная
+  // правка кода его не заденет, а сломанная регулярка (как когда-то
+  // случилось с прежним сторожем на require()) свалит scanned в 0 и
+  // тест упадёт здесь, а не молча пройдёт зелёным на пустом offenders.
+  assert.ok(scanned > 20,
+    `сканер не нашёл ни одного относительного импорта (${scanned}) — сломана регулярка, а не src/ чист`);
 
   assert.deepStrictEqual(
     offenders,

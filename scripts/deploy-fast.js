@@ -35,6 +35,9 @@ const COPY = [
 const NEEDS_BUILD = [
   'src-tauri',
   'index.html',
+  // Осознанно не в COPY: package.json несёт "type": "module", и его
+  // расхождение с установленной сборкой обязано приводить к полной
+  // переустановке, а не к горячей подмене.
   'package.json',
 ];
 

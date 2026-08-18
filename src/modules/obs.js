@@ -1,5 +1,9 @@
 import { processRunning } from './obs-helpers.js';
-import OBSWebSocket from 'obs-websocket-js';
+// В exports-карте obs-websocket-js есть ключ `require`, но нет `import` —
+// голый `import 'obs-websocket-js'` уходит в default-экспорт (msgpack-сборку),
+// молча меняя протокол по сравнению с прежним CommonJS require(), который
+// резолвился в json.cjs. Указываем подпуть явно, чтобы сохранить JSON-протокол.
+import OBSWebSocket from 'obs-websocket-js/json';
 const obs = new OBSWebSocket();
 
 export default async (mqtt, config, log) => {
