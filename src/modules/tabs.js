@@ -1,5 +1,11 @@
 // module for receive tabs info from https://github.com/popstas/chrome-tabs-exporter
-import WebSocket from "ws";
+// Только именованным импортом. Под ESM `ws` резолвится в wrapper.mjs, где
+// default — это КЛАСС WebSocket без статик: `WebSocket.Server` там undefined,
+// и `new WebSocket.Server()` падал с TypeError с самого перехода на ESM
+// (исключение глотал initModules(), модуль просто молча не работал).
+// Оговорка про cjs-module-lexer из CLAUDE.md сюда не относится: wrapper.mjs —
+// настоящий ESM с настоящими именованными экспортами.
+import { WebSocketServer } from "ws";
 
 export default async (mqtt, config, log) => {
   let lastData = {};
@@ -13,7 +19,7 @@ export default async (mqtt, config, log) => {
 
   function createServer() {
     try {
-      wss = new WebSocket.Server({ port: config.port });
+      wss = new WebSocketServer({ port: config.port });
 
       wss.on("error", e => {
         log('Tabs error: ' + e);
@@ -24,7 +30,8 @@ export default async (mqtt, config, log) => {
         clients.add(ws);
         
         ws.on("message", message => {
-          const data = JSON.parse(message);
+          // ws отдаёт RawData (Buffer | ArrayBuffer | Buffer[]), а не строку.
+          const data = JSON.parse(String(message));
           if (data.type === 'stat') {
             // console.log('tabs data: ', data);
 

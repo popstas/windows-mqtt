@@ -21,6 +21,12 @@ Run `source "$HOME/.cargo/env"` before any cargo/rust commands.
   msgpack вместо JSON (`src/modules/obs.js`, обходится импортом подпути
   `obs-websocket-js/json`). Перед переводом любой зависимости стоит сверить
   `import.meta.resolve('pkg')` с прежним `require.resolve('pkg')`.
+- Тот же механизм уже стоил второго модуля: `ws` под ESM резолвится в
+  `wrapper.mjs`, чей `default` — класс `WebSocket` БЕЗ статик, поэтому
+  `new WebSocket.Server()` из `src/modules/tabs.js` падал с TypeError с самого
+  перехода на ESM (глотал `initModules()`). Сервер берётся только именованным
+  импортом `import { WebSocketServer } from 'ws'` — `wrapper.mjs` настоящий
+  ESM, оговорка про `cjs-module-lexer` к нему не относится.
 - `require()` в проекте больше нет.
 - Планка рантайма: `import.meta.dirname` требует Node ≥ 20.11 (боевой код),
   `registerHooks` — Node ≥ 22.15 (только тесты, `test/modules-registry.test.js`).
