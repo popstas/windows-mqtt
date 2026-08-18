@@ -187,7 +187,7 @@ async function initModules(modulesEnabled, mqtt) {
     }
 
     try {
-      const mod = loadModule(name);
+      const mod = await loadModule(name);
 
       const modInited = {
         ...{

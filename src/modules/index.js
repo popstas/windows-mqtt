@@ -19,7 +19,7 @@ const registry = {
   tts: './tts',
 };
 
-function load(name) {
+async function load(name) {
   const modulePath = registry[name];
   if (!modulePath) throw new Error(`Unknown module: ${name}`);
   return require(modulePath);

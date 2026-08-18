@@ -8,9 +8,9 @@ test('registry exposes load() and module names, without deleted vad', () => {
   assert.ok(!Object.keys(mods.registry).includes('vad'), 'vad.js was deleted, must not be referenced');
 });
 
-test('load() throws for unknown module name', () => {
+test('load() rejects for unknown module name', async () => {
   const { load } = require('../src/modules');
-  assert.throws(() => load('nope'), /Unknown module/);
+  await assert.rejects(load('nope'), /Unknown module/);
 });
 
 test('requiring the registry loads no module implementations (lazy)', () => {

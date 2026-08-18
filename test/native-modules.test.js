@@ -16,9 +16,9 @@ function nativesAvailable() {
   return true;
 }
 
-test('modules with native deps load on Node 24', { skip: !nativesAvailable() }, () => {
+test('modules with native deps load on Node 24', { skip: !nativesAvailable() }, async () => {
   const { load } = require('../src/modules');
-  assert.strictEqual(typeof load('keys'), 'function');
-  assert.strictEqual(typeof load('mouse'), 'function');
-  assert.strictEqual(typeof load('midi'), 'function');
+  assert.strictEqual(typeof await load('keys'), 'function');
+  assert.strictEqual(typeof await load('mouse'), 'function');
+  assert.strictEqual(typeof await load('midi'), 'function');
 });
