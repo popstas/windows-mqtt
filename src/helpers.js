@@ -12,7 +12,9 @@ let windowsLogger;
 if (isWindows) {
   const { default: nodeWindows } = await import('node-windows');
   const { EventLogger } = nodeWindows;
-  windowsLogger = new EventLogger('windows-mqtt');
+  // @types/node-windows описывает только объектную форму, рантайм принимает
+  // и строку (node_modules/node-windows/lib/eventlog.js:81).
+  windowsLogger = new EventLogger(/** @type {any} */ ('windows-mqtt'));
 }
 
 // Persistent on-disk log. In Tauri bridge mode console output only reaches the

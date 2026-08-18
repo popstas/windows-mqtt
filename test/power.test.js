@@ -7,7 +7,6 @@ test('storeThen публикует просьбу сохранить раскл�
   const done = storeThen({
     publish: (topic, payload) => published.push([topic, payload]),
     base: 'home/room/pc/windows',
-    onDone: () => {},
     timeoutMs: 50,
     setTimeoutFn: (fn) => { fn(); return 0; },
     clearTimeoutFn: () => {},
@@ -18,6 +17,7 @@ test('storeThen публикует просьбу сохранить раскл�
 
 test('storeThen идёт дальше по ответу и снимает таймер', async () => {
   const cleared = [];
+  /** @type {(value?: any) => void} */
   let resolveAck;
   const ack = new Promise((r) => { resolveAck = r; });
   const p = storeThen({
@@ -36,6 +36,7 @@ test('storeThen идёт дальше по ответу и снимает тай
 });
 
 test('storeThen не ждёт вечно, если ответа нет', async () => {
+  /** @type {() => void} */
   let timeoutFn;
   const p = storeThen({
     publish: () => {},

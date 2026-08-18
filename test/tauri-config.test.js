@@ -330,6 +330,8 @@ test('about window is declared and allowed in capabilities', () => {
 });
 
 test('config.example.yml no longer defines claudeProjects (moved to windows11-manager)', () => {
-  const config = yaml.load(fs.readFileSync(path.join(repoRoot, 'config.example.yml'), 'utf8'));
+  const config = /** @type {any} */ (
+    yaml.load(fs.readFileSync(path.join(repoRoot, 'config.example.yml'), 'utf8'))
+  );
   assert.equal(config.claudeProjects, undefined);
 });

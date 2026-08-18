@@ -44,7 +44,17 @@ Run `source "$HOME/.cargo/env"` before any cargo/rust commands.
 - Shell commands use `app.shell().command()` (from `ShellExt` trait), NOT `tauri::api::process::Command`
 - `CommandEvent::Stdout/Stderr` returns `Vec<u8>`, convert with `String::from_utf8_lossy`
 - Build check: `cd src-tauri && cargo check`
-- JS tests: `npm test` (`node --test test/**/*.test.js`). Pure logic only — never spawn Windows/native binaries in tests. Modules with native addons are covered by `test/native-modules.test.js`, which auto-skips where those addons aren't installed (e.g. Linux).
+- Типы без TypeScript: `jsconfig.json` включает `checkJs`, `npm run typecheck`
+  (`tsc --noEmit`) гоняется первым шагом `npm test`. Файлы остаются `.js`, шага
+  сборки нет — `bundle.resources`, `deploy-fast.js` и спавн `src/index.js` из
+  Rust продолжают работать с россыпью исходников. `strict` намеренно выключен:
+  в нём проект даёт ~450 ошибок, из них ~380 — разметка implicit any без
+  единого реального дефекта. Формы конфига описаны одним `@typedef Config` в
+  `src/config-loader.js` (индексная сигнатура: ключи задаёт пользователь в
+  YAML). Нетипизированные зависимости обязаны иметь `@types/*` в
+  devDependencies — иначе `allowJs` заставляет `tsc` проверять их собственный
+  JS и сыпать сотней чужих ошибок.
+- JS tests: `npm test` (`npm run typecheck && node --test test/**/*.test.js`). Pure logic only — never spawn Windows/native binaries in tests. Modules with native addons are covered by `test/native-modules.test.js`, which auto-skips where those addons aren't installed (e.g. Linux).
 - JS/Rust config-path coupling: `resolveAppFile`/`resolveConfigPath` in `src/paths.js` must stay in sync with `config_candidates`/`resolve_config_path` in `src-tauri/src/main.rs` (same search order, same `config.example.yml` fallback).
 - Dev run: `npm run start-tauri` or `cargo tauri dev`. The npm scripts use `scripts/tauri-wrapper.js` to ensure MSVC linker is available when running from Git Bash (vcvars64.bat is invoked before Tauri). If you see `LNK1181: cannot open input file 'kernel32.lib'`, ensure the "Desktop development with C++" workload includes the Windows 10/11 SDK.
 

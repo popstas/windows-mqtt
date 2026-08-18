@@ -7,6 +7,13 @@
  *
  * Повторное нажатие на тот же слот перезапускает таймер: гасить надо финальное
  * нажатие, а не промежуточное.
+ *
+ * @param {{
+ *   delayMs?: number,
+ *   publish?: (slot: any) => void,
+ *   setTimeoutFn?: (fn: () => void, ms?: number) => any,
+ *   clearTimeoutFn?: (id: any) => void,
+ * }} [options]
  */
 function createDelayedSlotOff({
   delayMs = 500,

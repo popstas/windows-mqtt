@@ -15,7 +15,8 @@
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0",
     "uninstall-windows": "node scripts/service-uninstall.js",
     "deploy": "zsh data/deploy.sh",
-    "test": "node --test test/**/*.test.js",
+    "typecheck": "tsc --noEmit -p jsconfig.json",
+    "test": "npm run typecheck && node --test test/**/*.test.js",
     "deploy-fast": "node scripts/deploy-fast.js"
   },
   "author": "Stanislav Popov",
@@ -45,6 +46,13 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2"
+    "@tauri-apps/cli": "^2",
+    "@types/js-yaml": "^4.0.9",
+    "@types/lodash.debounce": "^4.0.9",
+    "@types/node": "^22.20.1",
+    "@types/node-notifier": "^8.0.5",
+    "@types/node-windows": "^0.1.6",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.9.3"
   }
 }

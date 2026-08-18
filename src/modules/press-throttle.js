@@ -34,6 +34,14 @@ const DEFAULT_INTERVAL_MS = 1000;
  *
  * `now` и `onDrop` — швы для проверки и для журнала: молча проглоченное
  * нажатие выглядит как поломка, поэтому вызывающий его логирует.
+ *
+ * @param {(...args: any[]) => any} handler
+ * @param {{
+ *   intervalMs?: number,
+ *   now?: () => number,
+ *   onDrop?: (...args: any[]) => void,
+ *   keyOf?: (...args: any[]) => string,
+ * }} [options]
  */
 function throttlePress(handler, {intervalMs = DEFAULT_INTERVAL_MS, now = Date.now, onDrop, keyOf} = {}) {
   // Одно окно на ключ. Без `keyOf` ключ всегда один и тот же, и таблица из

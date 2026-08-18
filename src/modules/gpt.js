@@ -25,6 +25,7 @@ export default async (mqtt, config, log) => {
     }
   }
 
+  /** @param {{text: string, systemMessage?: string, parentMessageId?: string}} req */
   function gptRequest({ text, systemMessage, parentMessageId }) {
     const request = {
       timeoutMs: config.timeoutMs || 60000,

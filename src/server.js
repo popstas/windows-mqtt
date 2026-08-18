@@ -74,7 +74,8 @@ async function start() {
   // Handle uncaught exceptions
   process.on('uncaughtException', function (err) {
     // Logging a dead-pipe error writes to the same dead pipe and loops forever
-    if (err && (err.code === 'EPIPE' || err.code === 'ERR_STREAM_DESTROYED')) return;
+    const code = /** @type {NodeJS.ErrnoException} */ (err)?.code;
+    if (code === 'EPIPE' || code === 'ERR_STREAM_DESTROYED') return;
     log('An uncaught error occurred!', 'error');
     log(err.stack, 'error');
   });

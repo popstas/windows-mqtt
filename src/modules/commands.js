@@ -32,9 +32,10 @@ function removeScriptFile(filePath) {
 
 // Read and parse a commands.yml-style file, returning [] on any read/parse
 // error (or an empty document) so callers can always spread the result.
+/** @returns {any[]} */
 function parseCommandsFile(filePath) {
   try {
-    return yaml.load(fs.readFileSync(filePath, 'utf8')) || [];
+    return /** @type {any[]} */ (yaml.load(fs.readFileSync(filePath, 'utf8'))) || [];
   } catch (e) {
     console.log('commands.yml not found', e.message);
     return [];

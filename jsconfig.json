@@ -1,0 +1,26 @@
+{
+  // Типы без переезда на TypeScript: файлы остаются .js, шага сборки нет.
+  // `tsc --noEmit` гоняется из `npm test` и ловит опечатки в именах полей,
+  // недоехавшие переименования и неверную арность.
+  //
+  // strict намеренно выключен: в strict-режиме проект даёт ~450 ошибок, из
+  // которых ~380 — чистая разметка (implicit any у параметров, `catch (e)`),
+  // а реальных дефектов среди них нет. Цена разметки не окупается.
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "es2022",
+    "lib": ["es2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*.js", "scripts/**/*.js", "test/**/*.js"],
+  // data/ и src/daemon/ под .gitignore: первый хранит распакованный старый
+  // билд с тысячами чужих .ts, второй — логи разработчика.
+  "exclude": ["node_modules", "data", "src/daemon", "src-tauri", "frontend"]
+}
