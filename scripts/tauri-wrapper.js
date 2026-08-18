@@ -1,6 +1,6 @@
-const { spawnSync } = require('child_process');
-const path = require('path');
-const { build: buildAudioWatcher } = require('./build-audio-watcher');
+import { spawnSync } from 'child_process';
+import path from 'path';
+import { build as buildAudioWatcher } from './build-audio-watcher.js';
 
 const args = process.argv.slice(2);
 if (args.length === 0) {
@@ -8,7 +8,7 @@ if (args.length === 0) {
   process.exit(1);
 }
 
-const projectRoot = path.resolve(__dirname, '..');
+const projectRoot = path.resolve(import.meta.dirname, '..');
 
 // The full `resources` list (incl. `../node_modules/**/*`) lives in the base
 // tauri.conf.json so a plain `npx tauri build` still produces a complete bundle.

@@ -27,4 +27,4 @@ function createDelayedSlotOff({
   };
 }
 
-module.exports = { createDelayedSlotOff };
+export { createDelayedSlotOff };

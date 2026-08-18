@@ -1,9 +1,9 @@
-const globalConfig = require('../config.js');
-const fs = require('fs');
+import { config as globalConfig } from '../config.js';
+import fs from 'fs';
 
-module.exports = async (mqtt, config, log) => {
+export default async (mqtt, config, log) => {
 
-  // const ChatGPTAPI = require('chatgpt');
+  // import ChatGPTAPI from 'chatgpt';
   // return;
   const { ChatGPTAPI } = await import('chatgpt');
   const api = new ChatGPTAPI({

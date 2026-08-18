@@ -8,12 +8,12 @@
 // Так можно не всё. index.html в файлы не попадает: tauri вшивает
 // frontendDist в бинарник. Rust — тем более. Поэтому скрипт сам сверяет
 // отметки времени и говорит, когда быстрым путём обойтись не выйдет.
-const { spawnSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const { stopApp } = require('./stop-app');
+import { spawnSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import { stopApp } from './stop-app.js';
 
-const projectRoot = path.resolve(__dirname, '..');
+const projectRoot = path.resolve(import.meta.dirname, '..');
 const installDir = path.join(process.env.LOCALAPPDATA || '', 'windows-mqtt');
 const installedExe = path.join(installDir, 'windows-mqtt.exe');
 // tauri раскладывает ресурсы вида `../foo` под `_up_/foo`.
@@ -35,6 +35,9 @@ const COPY = [
 const NEEDS_BUILD = [
   'src-tauri',
   'index.html',
+  // Осознанно не в COPY: package.json несёт "type": "module", и его
+  // расхождение с установленной сборкой обязано приводить к полной
+  // переустановке, а не к горячей подмене.
   'package.json',
 ];
 

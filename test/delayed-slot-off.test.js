@@ -1,6 +1,6 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
-const { createDelayedSlotOff } = require('../src/modules/delayed-slot-off');
+import { test } from 'node:test';
+import assert from 'node:assert';
+import { createDelayedSlotOff } from '../src/modules/delayed-slot-off.js';
 
 function fakeTimers() {
   let nextId = 1;

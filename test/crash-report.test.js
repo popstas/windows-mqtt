@@ -1,6 +1,6 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const { configureReport } = require('../src/crash-report');
+import test from 'node:test';
+import assert from 'node:assert';
+import { configureReport } from '../src/crash-report.js';
 
 test('configureReport points reports at the given dir and enables fatal capture', () => {
   const report = {

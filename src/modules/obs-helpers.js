@@ -12,6 +12,8 @@
  * WebSocket у него слушает.
  */
 
+import { execSync } from 'node:child_process';
+
 const OBS_PROCESS = 'obs64.exe';
 
 /**
@@ -55,8 +57,7 @@ function processRunning(name = OBS_PROCESS, run = defaultRun) {
 }
 
 function defaultRun(cmd) {
-  const { execSync } = require('node:child_process');
   return execSync(cmd, { encoding: 'utf8', timeout: 5000, windowsHide: true });
 }
 
-module.exports = { OBS_PROCESS, parseTasklist, processRunning };
+export { OBS_PROCESS, parseTasklist, processRunning };

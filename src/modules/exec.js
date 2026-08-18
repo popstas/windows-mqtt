@@ -1,7 +1,7 @@
-const exec = require('child_process').exec;
-const globalConfig = require('../config.js');
+import { exec } from 'child_process';
+import { config as globalConfig } from '../config.js';
 
-module.exports = async (mqtt, config, log) => {
+export default async (mqtt, config, log) => {
 
   async function cmd(topic, message) {
     const cmd = `${message}`;

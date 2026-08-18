@@ -1,7 +1,7 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
+import { test } from 'node:test';
+import assert from 'node:assert';
 
-const { tagLines } = require('../src/log-tag');
+import { tagLines } from '../src/log-tag.js';
 
 test('tags a single line with the level prefix', () => {
   assert.strictEqual(tagLines('info', 'hello world'), '[info] hello world');

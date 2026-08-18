@@ -23,4 +23,4 @@ function configureReport(report, dir) {
   return true;
 }
 
-module.exports = { configureReport };
+export { configureReport };

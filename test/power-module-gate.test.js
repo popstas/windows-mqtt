@@ -10,17 +10,21 @@
  * наследуется от windows нарочно, и именно это здесь и проверяется — теперь
  * единственный сторож кнопки перезагрузки на панели.
  *
- * getModulesEnabled()/initModules() читают глобальный src/config.js, а не
- * инжектируемый параметр, поэтому каждый тест подставляет свой config.yml
- * через переменную CONFIG и перечитывает src/config.js и src/helpers.js
- * заново через require.cache — иначе все тесты в файле видели бы конфиг,
- * загруженный первым.
+ * getModulesEnabled()/initModules() читают общий объект конфига из
+ * src/config.js, а не инжектируемый параметр, поэтому каждый тест
+ * подставляет свой config.yml через переменную CONFIG и вызывает
+ * setConfig(reload()) — иначе все тесты в файле видели бы конфиг,
+ * загруженный первым. setConfig меняет объект НА МЕСТЕ: helpers.js
+ * захватил ссылку на него при загрузке, и подмена ссылки до него бы
+ * не доехала.
  */
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as helpers from '../src/helpers.js';
+import { config, reload, setConfig } from '../src/config.js';
 
 function loadHelpersWithConfig(yamlLines) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wm-power-gate-'));
@@ -29,10 +33,7 @@ function loadHelpersWithConfig(yamlLines) {
 
   const prevConfig = process.env.CONFIG;
   process.env.CONFIG = configPath;
-  delete require.cache[require.resolve('../src/config')];
-  delete require.cache[require.resolve('../src/helpers')];
-  const helpers = require('../src/helpers');
-  const config = require('../src/config');
+  setConfig(reload());
   if (prevConfig === undefined) delete process.env.CONFIG;
   else process.env.CONFIG = prevConfig;
 
@@ -146,7 +147,7 @@ test('config.yml с modules: без ключа, но с закомментиро
 
 test('config.example.yml: power загружается на исторической базе windows без единого упоминания modules.windows', async () => {
   const { helpers, config } = loadHelpersWithConfig(
-    fs.readFileSync(path.join(__dirname, '..', 'config.example.yml'), 'utf8').split('\n')
+    fs.readFileSync(path.join(import.meta.dirname, '..', 'config.example.yml'), 'utf8').split('\n')
   );
   assert.equal(config.modules.windows, undefined, 'modules.windows в config.example.yml больше нет вовсе');
   const enabled = helpers.getModulesEnabled();

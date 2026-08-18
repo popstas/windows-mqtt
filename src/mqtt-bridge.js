@@ -1,5 +1,5 @@
-const { EventEmitter } = require('events');
-const readline = require('readline');
+import { EventEmitter } from 'events';
+import readline from 'readline';
 
 class MqttBridge extends EventEmitter {
   constructor() {
@@ -81,4 +81,4 @@ function mqttInit() {
   return new MqttBridge();
 }
 
-module.exports = { mqttInit };
+export { mqttInit };

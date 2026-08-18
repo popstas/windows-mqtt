@@ -9,11 +9,11 @@
  * Лог уводится во временный файл через config.log.path: настоящий лог
  * приложения трогать нельзя.
  */
-const { test, after } = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
+import { test, after } from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wm-helpers-log-'));
 const logPath = path.join(dir, 'test.log');
@@ -30,7 +30,10 @@ fs.writeFileSync(configPath, [
 // абсолютный log.path resolveUserDataFile отдаёт как есть.
 process.env.CONFIG = configPath;
 
-const helpers = require('../src/helpers');
+// Динамический импорт, а не статический: статические импорты выполняются
+// раньше тела файла, и helpers.js прочитал бы конфиг до того, как выставлен
+// process.env.CONFIG выше — то есть настоящий лог приложения вместо временного.
+const helpers = await import('../src/helpers.js');
 
 // Так console выглядит в bridge-режиме (см. src/index.js): каждая строка,
 // помимо stderr, уезжает в файловый лог мимо log().

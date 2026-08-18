@@ -1,10 +1,10 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const path = require('node:path');
+import { test } from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
 
-const { buildTrayRelayActions, RELAYED } = require('../src/tray-relay');
-const power = require('../src/modules/power');
+import { buildTrayRelayActions, RELAYED } from '../src/tray-relay.js';
+import power from '../src/modules/power.js';
 
 const BASE = 'home/room/pc';
 
@@ -60,7 +60,7 @@ test('у каждого пункта трея в main.rs есть обработ
   // со своими stdinActions, а пункты меню в Rust остались — и вся секция
   // управления окнами месяц писала в лог `stdin: unknown action`, ничего не
   // делая. Ошибка молчаливая с обеих сторон, так что ловится только сверкой.
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src', 'main.rs'), 'utf8');
+  const main = fs.readFileSync(path.join(import.meta.dirname, '..', 'src-tauri', 'src', 'main.rs'), 'utf8');
   const trayActions = [...main.matchAll(/"win_\w+"\s*=>\s*Some\("([^"]+)"\)/g)].map((m) => m[1]);
   assert.ok(trayActions.length >= 8, `подозрительно мало пунктов трея: ${trayActions.length}`);
 

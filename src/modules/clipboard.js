@@ -1,4 +1,4 @@
-module.exports = async (mqtt, config, log) => {
+export default async (mqtt, config, log) => {
 
   const clipboard = await import('clipboardy');
 

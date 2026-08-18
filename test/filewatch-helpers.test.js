@@ -1,6 +1,6 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
-const { isNetworkPath } = require('../src/modules/filewatch-helpers');
+import { test } from 'node:test';
+import assert from 'node:assert';
+import { isNetworkPath } from '../src/modules/filewatch-helpers.js';
 
 const DRIVES = ['R', 'S', 'V'];
 

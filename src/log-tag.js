@@ -9,4 +9,4 @@ function tagLines(level, message) {
     .join('\n');
 }
 
-module.exports = { tagLines };
+export { tagLines };

@@ -1,7 +1,11 @@
-const robot = require('@hurdlegroup/robotjs');
-const {throttlePress} = require('./press-throttle');
+import {throttlePress} from './press-throttle.js';
 
-module.exports = async (mqtt, config, log) => {
+export default async (mqtt, config, log, deps = {}) => {
+  // robotjs — нативный аддон: грузим внутри функции, а не на уровне модуля,
+  // чтобы реестр модулей мог отдать keys на машине без собранного аддона, а
+  // тест — подставить заглушку вместо настоящих нажатий (иначе прогон жал бы
+  // клавиши в том самом окне, где идут тесты).
+  const robot = deps.robot ?? (await import('@hurdlegroup/robotjs')).default;
   function onPress(topic, message) {
     message = `${message}`;
     const keys = `${message}`.split(' ');

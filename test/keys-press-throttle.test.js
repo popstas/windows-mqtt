@@ -1,49 +1,30 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
+import { test } from 'node:test';
+import assert from 'node:assert';
+import keys from '../src/modules/keys.js';
 
 const TOPIC_BASE = 'home/room/pc/keys';
 
-// Подмена robotjs кладётся в require.cache по разрешённому пути, а разрешить
-// его можно только там, где родной аддон установлен, — на Windows. На Linux
-// весь файл пропускается, как и native-modules.test.js.
-function robotAvailable() {
-  try {
-    require.resolve('@hurdlegroup/robotjs');
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-const skip = robotAvailable() ? false : 'нет @hurdlegroup/robotjs (не Windows)';
-
 /**
- * Загрузить модуль keys с подставным robotjs.
+ * Поднять модуль keys с подставным robotjs.
  *
- * Настоящий нажал бы клавиши по-настоящему — в том самом окне, где идут тесты,
- * и `(win)f10` открыл бы пикер. Подмена кладётся в кэш модулей до первого
- * require('../src/modules/keys'), поэтому родной бинарник даже не грузится.
+ * Настоящий нажал бы клавиши по-настоящему — в том самом окне, где идут
+ * тесты, и `(win)f10` открыл бы пикер. Заглушка приходит четвёртым
+ * аргументом, поэтому нативный аддон не грузится вовсе и файл исполняется
+ * на любой платформе, а не только на Windows.
  */
-function loadKeysWithFakeRobot() {
-  const robotPath = require.resolve('@hurdlegroup/robotjs');
-  const taps = [];
-  require.cache[robotPath] = {
-    id: robotPath,
-    filename: robotPath,
-    loaded: true,
-    exports: {
-      keyTap: (key, mods) => taps.push([key, mods]),
-      typeString: () => {},
-    },
-  };
-  delete require.cache[require.resolve('../src/modules/keys')];
-  return { keys: require('../src/modules/keys'), taps };
-}
-
 async function initKeys() {
-  const { keys, taps } = loadKeysWithFakeRobot();
+  const taps = [];
+  const fakeRobot = {
+    keyTap: (key, mods) => taps.push([key, mods]),
+    typeString: () => {},
+  };
   const logged = [];
-  const mod = await keys({}, { base: TOPIC_BASE }, (message, level) => logged.push({ message, level }));
+  const mod = await keys(
+    {},
+    { base: TOPIC_BASE },
+    (message, level) => logged.push({ message, level }),
+    { robot: fakeRobot },
+  );
   const handlerFor = (suffix) => {
     const sub = mod.subscriptions.find((s) => s.topics.includes(`${TOPIC_BASE}/${suffix}`));
     assert.ok(sub, `нет подписки на ${TOPIC_BASE}/${suffix}`);
@@ -52,7 +33,7 @@ async function initKeys() {
   return { handlerFor, taps, logged };
 }
 
-test('press-throttled drops a bounced press: one tap, not two', { skip }, async () => {
+test('press-throttled drops a bounced press: one tap, not two', async () => {
   // Кнопка на плате openHASP физическая, и палец, снятый неровно, шлёт вторую
   // посылку следом. Для (win)f10 это открытие пикера и его же закрытие.
   const { handlerFor, taps, logged } = await initKeys();
@@ -64,7 +45,7 @@ test('press-throttled drops a bounced press: one tap, not two', { skip }, async 
     'отброшенное нажатие должно попадать в журнал, иначе неотличимо от поломки');
 });
 
-test('press-throttled keeps a separate window per key combination', { skip }, async () => {
+test('press-throttled keeps a separate window per key combination', async () => {
   // Топик один на все кнопки платы: нажатие на одну не должно съедать
   // нажатие на соседнюю, сделанное следом.
   const { handlerFor, taps } = await initKeys();
@@ -74,7 +55,7 @@ test('press-throttled keeps a separate window per key combination', { skip }, as
   assert.deepStrictEqual(taps, [['f10', ['command']], ['escape', []]]);
 });
 
-test('the plain press topic still lets repeats through', { skip }, async () => {
+test('the plain press topic still lets repeats through', async () => {
   // Через него ходят audio_next и прочее из Node-RED, где повтор подряд — это и
   // есть смысл («промотать три трека»).
   const { handlerFor, taps } = await initKeys();

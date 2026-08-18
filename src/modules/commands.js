@@ -1,9 +1,9 @@
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const globalConfig = require('../config.js');
-const yaml = require('js-yaml');
-const { resolveUserDataFile, resolveAppFile } = require('../paths');
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { config as globalConfig } from '../config.js';
+import yaml from 'js-yaml';
+import { resolveUserDataFile, resolveAppFile } from '../paths.js';
 
 // Write a script-type command body to a temp file in the OS temp dir (always
 // writable, unlike a bundled app's read-only cwd) and schedule cleanup. Returns
@@ -54,7 +54,7 @@ function writeCommandsCache(cachePath, commands) {
   }
 }
 
-module.exports = async (mqtt, config, log) => {
+export default async (mqtt, config, log) => {
   const subscriptions = [];
 
   // Route the configured (possibly relative) custom-commands path through the
@@ -221,7 +221,4 @@ module.exports = async (mqtt, config, log) => {
   return { subscriptions };
 }
 
-module.exports.writeScriptFile = writeScriptFile;
-module.exports.removeScriptFile = removeScriptFile;
-module.exports.parseCommandsFile = parseCommandsFile;
-module.exports.writeCommandsCache = writeCommandsCache;
+export { writeScriptFile, removeScriptFile, parseCommandsFile, writeCommandsCache };

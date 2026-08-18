@@ -60,4 +60,4 @@ function throttlePress(handler, {intervalMs = DEFAULT_INTERVAL_MS, now = Date.no
   };
 }
 
-module.exports = {DEFAULT_INTERVAL_MS, throttlePress};
+export {DEFAULT_INTERVAL_MS, throttlePress};

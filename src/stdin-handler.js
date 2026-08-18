@@ -1,5 +1,5 @@
-const readline = require('readline');
-const { log } = require('./helpers');
+import readline from 'readline';
+import { log } from './helpers.js';
 
 const handlers = {};
 
@@ -52,4 +52,4 @@ function init(mqttBridge) {
   }
 }
 
-module.exports = { init, register };
+export { init, register };

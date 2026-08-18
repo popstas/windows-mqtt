@@ -1,6 +1,6 @@
-const robot = require('@hurdlegroup/robotjs');
+import robot from '@hurdlegroup/robotjs';
 
-module.exports = async (mqtt, config, log) => {
+export default async (mqtt, config, log) => {
 
   async function click(topic, message) {
     message = `${message}`;

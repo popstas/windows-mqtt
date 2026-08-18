@@ -1,21 +1,21 @@
-const midi = require('@julusian/midi');
-const { usb } = require('usb');
-const debounce = require('lodash.debounce');
-const robot = require('@hurdlegroup/robotjs');
-const { listPortNames, formatMidiPortHelp, shouldLogOnce } = require('./midi-utils');
+import midi from '@julusian/midi';
+import usbPkg from 'usb';
+import debounce from 'lodash.debounce';
+import robot from '@hurdlegroup/robotjs';
+import { listPortNames, formatMidiPortHelp, shouldLogOnce } from './midi-utils.js';
+import { reload } from '../config.js';
+
+const { usb } = usbPkg;
 
 const maxRangeDelay = 200; // for ranges should be at least 2 events per maxRangeDelay
 const minChanges = 3; // for avoid false positives
 
 // loads config without cache
 function getConfig() {
-  const configPath = '../config.js';
-  delete(require.cache[require.resolve(configPath)]);
-  const config = require(configPath);
-  return config.modules.midi;
+  return reload().modules.midi;
 }
 
-module.exports = async (mqtt, config, log) => {
+export default async (mqtt, config, log) => {
   let inputs = [];
   let portsDisplayed = false;
   const lastMessage = { date: 0, message: {}}; // for detect midi disconnect, watchdogTimeout, TODO: remove?

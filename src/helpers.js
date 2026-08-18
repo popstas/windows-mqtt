@@ -1,16 +1,17 @@
-const config = require("./config");
-const { load: loadModule, isEnabled: isModuleEnabled } = require('./modules');
-const os = require("os");
-const fs = require("fs");
-const path = require("path");
-const { settingsDir, resolveUserDataFile } = require("./paths");
-const { rotateFile } = require("./log-rotate");
-const reentry = require('./log-reentry');
+import { config } from "./config.js";
+import { load as loadModule, isEnabled as isModuleEnabled } from './modules/index.js';
+import os from "os";
+import fs from "fs";
+import path from "path";
+import { settingsDir, resolveUserDataFile } from "./paths.js";
+import { rotateFile } from "./log-rotate.js";
+import * as reentry from './log-reentry.js';
 const isWindows = os.platform() === 'win32';
 
 let windowsLogger;
 if (isWindows) {
-  const EventLogger = require('node-windows').EventLogger;
+  const { default: nodeWindows } = await import('node-windows');
+  const { EventLogger } = nodeWindows;
   windowsLogger = new EventLogger('windows-mqtt');
 }
 
@@ -187,7 +188,7 @@ async function initModules(modulesEnabled, mqtt) {
     }
 
     try {
-      const mod = loadModule(name);
+      const mod = await loadModule(name);
 
       const modInited = {
         ...{
@@ -206,7 +207,7 @@ async function initModules(modulesEnabled, mqtt) {
   return modules;
 }
 
-module.exports = {
+export {
   log,
   logConsoleLine,
   getModulesEnabled,

@@ -1,9 +1,9 @@
-const chokidar = require('chokidar');
-const path = require('node:path');
+import chokidar from 'chokidar';
+import path from 'node:path';
 
 const addChangeGap = 1000; // avoid publish change file just after add
 
-module.exports = async (mqtt, config, log) => {
+export default async (mqtt, config, log) => {
   const watchers = [];
   const watcherState = new Map(); // Store state per watcher
 

@@ -1,5 +1,7 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
+import { test } from 'node:test';
+import assert from 'node:assert';
+
+import { load } from '../src/modules/index.js';
 
 // These modules require native addons (@hurdlegroup/robotjs, @julusian/midi)
 // that are only installed/buildable on the target Windows machine. Skip on any
@@ -8,7 +10,7 @@ const assert = require('node:assert');
 function nativesAvailable() {
   for (const dep of ['@hurdlegroup/robotjs', '@julusian/midi']) {
     try {
-      require.resolve(dep);
+      import.meta.resolve(dep);
     } catch (e) {
       return false;
     }
@@ -16,9 +18,8 @@ function nativesAvailable() {
   return true;
 }
 
-test('modules with native deps load on Node 24', { skip: !nativesAvailable() }, () => {
-  const { load } = require('../src/modules');
-  assert.strictEqual(typeof load('keys'), 'function');
-  assert.strictEqual(typeof load('mouse'), 'function');
-  assert.strictEqual(typeof load('midi'), 'function');
+test('modules with native deps load on Node 24', { skip: !nativesAvailable() }, async () => {
+  assert.strictEqual(typeof await load('keys'), 'function');
+  assert.strictEqual(typeof await load('mouse'), 'function');
+  assert.strictEqual(typeof await load('midi'), 'function');
 });

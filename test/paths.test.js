@@ -1,9 +1,9 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
-const os = require('node:os');
-const path = require('node:path');
+import { test } from 'node:test';
+import assert from 'node:assert';
+import os from 'node:os';
+import path from 'node:path';
 
-const { settingsDir, appDataDir } = require('../src/paths');
+import { settingsDir, appDataDir } from '../src/paths.js';
 
 test('settingsDir joins the windows-mqtt segment and extra segments', () => {
   assert.strictEqual(settingsDir(), path.join(appDataDir(), 'windows-mqtt'));

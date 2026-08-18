@@ -1,6 +1,7 @@
 /** Чистые помощники filewatch. Без I/O. */
 
-const os = require('node:os');
+import os from 'node:os';
+import { execSync } from 'node:child_process';
 
 /**
  * Путь лежит на сетевом ресурсе?
@@ -36,7 +37,6 @@ function defaultNetworkDrives() {
  */
 function readNetworkDrives() {
   try {
-    const { execSync } = require('node:child_process');
     const out = execSync(
       'wmic logicaldisk where drivetype=4 get deviceid',
       { encoding: 'utf8', timeout: 5000, windowsHide: true },
@@ -47,4 +47,4 @@ function readNetworkDrives() {
   }
 }
 
-module.exports = { isNetworkPath, readNetworkDrives };
+export { isNetworkPath, readNetworkDrives };

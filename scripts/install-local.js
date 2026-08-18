@@ -1,13 +1,13 @@
 // Installs the NSIS bundle produced by `npm run build` over the running app:
 // kills the app together with its Node child (the installer cannot replace
 // files that are in use), runs the installer silently, then relaunches.
-const { spawnSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+import { spawnSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 
-const { stopApp } = require('./stop-app');
+import { stopApp } from './stop-app.js';
 
-const projectRoot = path.resolve(__dirname, '..');
+const projectRoot = path.resolve(import.meta.dirname, '..');
 const nsisDir = path.join(projectRoot, 'src-tauri', 'target', 'release', 'bundle', 'nsis');
 const installDir = path.join(process.env.LOCALAPPDATA || '', 'windows-mqtt');
 const installedExe = path.join(installDir, 'windows-mqtt.exe');

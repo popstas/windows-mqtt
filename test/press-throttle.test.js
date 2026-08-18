@@ -1,6 +1,6 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
-const { DEFAULT_INTERVAL_MS, throttlePress } = require('../src/modules/press-throttle');
+import { test } from 'node:test';
+import assert from 'node:assert';
+import { DEFAULT_INTERVAL_MS, throttlePress } from '../src/modules/press-throttle.js';
 
 // Подставные часы: настоящие сделали бы проверку окна гонкой с планировщиком.
 function clock(start = 10_000) {

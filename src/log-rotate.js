@@ -1,4 +1,4 @@
-const fs = require('fs');
+import fs from 'fs';
 
 // Windows-safe single-backup log rotation. Shared by helpers.js (app log) and
 // monitor.js (sysstats.jsonl) so both use the same correct implementation.
@@ -26,4 +26,4 @@ function rotateFile(file, maxBytes, onWarn) {
   }
 }
 
-module.exports = { rotateFile };
+export { rotateFile };

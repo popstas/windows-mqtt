@@ -26,4 +26,4 @@ function run(fn) {
   }
 }
 
-module.exports = { isInside, run };
+export { isInside, run };

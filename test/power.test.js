@@ -1,6 +1,6 @@
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const { storeThen, createAckQueue } = require('../src/modules/power');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { storeThen, createAckQueue } from '../src/modules/power.js';
 
 test('storeThen публикует просьбу сохранить раскладку', async () => {
   const published = [];

@@ -1,5 +1,5 @@
-const mqtt = require('mqtt');
-const config = require('./config');
+import mqtt from 'mqtt';
+import { config } from './config.js';
 
 function mqttInit({onConnect}) {
   console.log('Connecting to MQTT...');
@@ -21,6 +21,6 @@ function mqttInit({onConnect}) {
   return client;
 }
 
-module.exports = {
+export {
   mqttInit
 };

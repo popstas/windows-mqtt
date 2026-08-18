@@ -6,6 +6,29 @@ This repo contains a Node.js project for controlling a PC via MQTT, wrapped in a
 
 Run `source "$HOME/.cargo/env"` before any cargo/rust commands.
 
+## ESM-соглашения
+
+Весь JS в проекте — ES-модули (`"type": "module"` в `package.json`). При правке кода:
+
+- Относительные импорты обязаны нести расширение `.js` (`./foo.js`, не `./foo`).
+- CJS-зависимости импортируются дефолтом и деструктурируются
+  (`import pkg from 'x'; const { thing } = pkg;`), а не именованными импортами —
+  именованные экспорты из CJS зависят от `cjs-module-lexer`, который ненадёжен
+  на пакетах с нативными аддонами.
+- Если у зависимости в `exports` есть ключ `require`, но нет `import`, голый
+  `import` уходит в `default` и может отличаться от того, что отдавал
+  `require()` — именно так одна строка молча сменила протокол OBS на
+  msgpack вместо JSON (`src/modules/obs.js`, обходится импортом подпути
+  `obs-websocket-js/json`). Перед переводом любой зависимости стоит сверить
+  `import.meta.resolve('pkg')` с прежним `require.resolve('pkg')`.
+- `require()` в проекте больше нет.
+- Планка рантайма: `import.meta.dirname` требует Node ≥ 20.11 (боевой код),
+  `registerHooks` — Node ≥ 22.15 (только тесты, `test/modules-registry.test.js`).
+  Поля `engines` в `package.json` намеренно нет.
+- `data/` под `.gitignore` и содержит CommonJS-файлы (`data/index.js` и т. п.),
+  поэтому там лежит собственный `data/package.json` с `{"type":"commonjs"}` —
+  на свежем клоне его надо создать заново.
+
 ## Tauri Architecture
 
 - **Tauri v2** (not v1, not Electron). Config schema: `https://schema.tauri.app/config/2`
@@ -99,6 +122,15 @@ if the host shows up in a bundle again, it is a new one, not this old one.
 ### Tauri v2 Gotchas
 - `devUrl` must be a proper URL (e.g. `http://localhost:1420`), not a relative path
 - Resource globs: `bundle.resources` enumerates `src/` explicitly — `"../src/*"` plus one `"../src/<subdir>/**/*"` entry per subdirectory (currently only `modules`) — instead of a single `"../src/**/*"` sweep. A recursive `**` under `src/` also matches `src/daemon/`, which is gitignored and holds developer-only logs with absolute local paths; a blanket glob shipped those straight into the installer (see `73c35ec`). Adding a new `src/<subdir>/` needs its own `"../src/<subdir>/**/*"` entry here.
+- `package.json` обязан быть в `bundle.resources`: `"type": "module"` живёт
+  в нём, а Node ищет ближайший package.json вверх от `_up_/src/index.js`.
+  Без него на Node < 22.7 (или при отключённом определении синтаксиса,
+  `--no-experimental-detect-module`) установленное приложение читает
+  `src/*.js` как CommonJS и падает на первом `import` — молча, потому что
+  `initModules()` глотает исключения. На Node ≥ 22.7 эвристика определения
+  ESM по синтаксису запускает файл и без package.json, но полагаться на неё
+  не стоит — ресурс и тест остаются обязательными. Охраняется тестом в
+  `test/tauri-config.test.js`.
 - The full `bundle.resources` list (Node source + `node_modules`) lives in the base
   `tauri.conf.json`, so a plain `npx tauri build` (without `scripts/tauri-wrapper.js`)
   still produces a complete bundle. `dev` runs overlay `tauri.dev.conf.json` whose

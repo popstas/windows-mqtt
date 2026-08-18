@@ -1,4 +1,4 @@
-module.exports = async (mqtt, config, log) => {
+export default async (mqtt, config, log) => {
   const host = config.host || 'localhost';
   const port = config.port || 8080;
   const origin = `http://${host}:${port}`

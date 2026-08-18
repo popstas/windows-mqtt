@@ -1,6 +1,6 @@
-const fs = require('fs');
-const os = require('os');
-const execSync = require('child_process').execSync;
+import fs from 'fs';
+import os from 'os';
+import { execSync } from 'child_process';
 
 const maxRetry = 10;
 const retryDelay = 1000;
@@ -66,7 +66,7 @@ const ttsSay = (msg, tryNum = 1) => {
   }
 };
 
-module.exports = (mqtt, configModule, configLog) => {
+export default (mqtt, configModule, configLog) => {
   config = configModule;
   log = configLog;
 

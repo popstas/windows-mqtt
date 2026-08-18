@@ -1,7 +1,7 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
+import { test } from 'node:test';
+import assert from 'node:assert';
 
-const audio = require('../src/modules/audio');
+import * as audio from '../src/modules/audio.js';
 const { isDeviceDisabled, parseWatcherLine, fallbackIntervalMs, shouldScheduleRestart } = audio;
 
 test('isDeviceDisabled is false when device is unset or configured', () => {

@@ -1,6 +1,6 @@
-const fs = require('fs');
-const yaml = require('js-yaml');
-const { resolveAppFile } = require('./paths');
+import fs from 'fs';
+import yaml from 'js-yaml';
+import { resolveAppFile } from './paths.js';
 
 // Minimal, never-null shape so downstream consumers (helpers.log(), module
 // loading) can dereference `config.mqtt`/`config.modules` without crashing when
@@ -40,4 +40,4 @@ function loadConfig(resolve = resolveAppFile) {
   return { ...SAFE_DEFAULT };
 }
 
-module.exports = { loadConfig, SAFE_DEFAULT };
+export { loadConfig, SAFE_DEFAULT };

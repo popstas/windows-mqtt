@@ -1,11 +1,11 @@
-const { test } = require('node:test');
-const assert = require('node:assert');
-const fs = require('fs');
-const path = require('path');
+import { test } from 'node:test';
+import assert from 'node:assert';
+import fs from 'fs';
+import path from 'path';
 
-const { parseTasklist, processRunning, OBS_PROCESS } = require('../src/modules/obs-helpers');
+import { parseTasklist, processRunning, OBS_PROCESS } from '../src/modules/obs-helpers.js';
 
-const ROOT = path.join(__dirname, '..');
+const ROOT = path.join(import.meta.dirname, '..');
 
 test('строка tasklist со своим процессом читается как «работает»', () => {
   const out = '"obs64.exe","12345","Console","1","345 678 K"\r\n';
@@ -55,13 +55,13 @@ test('модуль obs не зависит от windows11-manager', () => {
   // Зависимость держалась на одном вызове `findWindow`, а стоила junction на
   // соседний репозиторий: его обходила сборка, его отдельно копировал
   // deploy-fast, и он же молча не читался через сетевой логон ssh.
-  // Сторожится `require`, а не слово: почему зависимости здесь больше нет,
+  // Сторожится импорт, а не слово: почему зависимости здесь больше нет,
   // объяснено комментарием в самом файле, и запрет на упоминание стёр бы
   // объяснение вместе с запретом.
   const src = fs.readFileSync(path.join(ROOT, 'src', 'modules', 'obs.js'), 'utf8');
   assert.doesNotMatch(
     src,
-    /require\(\s*['"]windows11-manager['"]/,
+    /(?:^|[^\w.])(?:import|from)\s*\(?\s*['"]windows11-manager['"]/m,
     'obs.js снова требует windows11-manager',
   );
 });
