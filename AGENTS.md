@@ -172,6 +172,21 @@ That dependency is gone (see `obs-helpers.js`), so the leak is gone with it —
 if the host shows up in a bundle again, it is a new one, not this old one.
 
 ### Tauri v2 Gotchas
+- **Меню трея на Windows требует `tauri` ≥ 2.11 (`tray-icon` ≥ 0.24).** Не откатывать
+  `Cargo.lock` ниже. На `tray-icon` 0.21.x меню открывалось по НАЖАТИЮ
+  (`WM_RBUTTONDOWN`), а не по отпусканию. `TrackPopupMenu` — модальный вызов со
+  своим циклом сообщений: войдя в него на нажатии, приложение съедает
+  последующий `WM_RBUTTONUP`, и explorer, всё ещё отслеживающий жест над своей
+  кнопкой области уведомлений, показывает поверх СОБСТВЕННОЕ меню значка — два
+  меню разом. Это гонка, поэтому воспроизводится через раз, а не всегда. Там же
+  не постился `PostMessageW(hwnd, WM_NULL, 0, 0)` после `TrackPopupMenu` —
+  документированный Microsoft приём для меню значков области уведомлений
+  (KB «Menus for Notification Icons Do Not Work Correctly»); без него меню не
+  гаснет по клику мимо и остаётся висеть поверх панели задач. Оба симптома
+  чинятся одним обновлением, правок кода не требуют: `menu_on_right_click` в
+  0.24 по умолчанию `true`. Обычный `cargo update -p tauri` версию НЕ поднимет
+  (2.11 требует `tauri-build` 2.6, а обновление одного пакета соседний не
+  тянет) — нужен `cargo update -p tauri --precise 2.11.5`.
 - `devUrl` must be a proper URL (e.g. `http://localhost:1420`), not a relative path
 - Resource globs: `bundle.resources` enumerates `src/` explicitly — `"../src/*"` plus one `"../src/<subdir>/**/*"` entry per subdirectory (currently only `modules`) — instead of a single `"../src/**/*"` sweep. A recursive `**` under `src/` also matches `src/daemon/`, which is gitignored and holds developer-only logs with absolute local paths; a blanket glob shipped those straight into the installer (see `73c35ec`). Adding a new `src/<subdir>/` needs its own `"../src/<subdir>/**/*"` entry here.
 - `package.json` обязан быть в `bundle.resources`: `"type": "module"` живёт
