@@ -186,7 +186,7 @@ test('every non-gitignored subdirectory of src/ is fully covered by bundle.resou
 // every .js file under src/ and flags any relative import whose target
 // resolves outside src/, so a future copy of this mistake fails a test
 // instead of an install.
-test('no relative require() in src/ resolves to a path outside src/', () => {
+test('no relative import in src/ resolves to a path outside src/', () => {
   const srcDir = path.join(repoRoot, 'src');
   const jsFiles = fs.globSync('src/**/*.js', { cwd: repoRoot })
     .filter(p => fs.statSync(path.join(repoRoot, p)).isFile());
@@ -202,7 +202,7 @@ test('no relative require() in src/ resolves to a path outside src/', () => {
     const content = fs.readFileSync(abs, 'utf8');
     let m;
     while ((m = importRe.exec(content))) {
-      const target = path.resolve(path.dirname(abs), m[1]);
+      const target = path.resolve(path.dirname(abs), m[1].replace(/\?.*$/, ''));
       const relToSrc = path.relative(srcDir, target);
       if (relToSrc === '..' || relToSrc.startsWith(`..${path.sep}`)) {
         offenders.push(`  ${rel}: import '${m[1]}' -> src/${relToSrc}`);

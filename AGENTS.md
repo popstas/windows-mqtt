@@ -99,6 +99,11 @@ if the host shows up in a bundle again, it is a new one, not this old one.
 ### Tauri v2 Gotchas
 - `devUrl` must be a proper URL (e.g. `http://localhost:1420`), not a relative path
 - Resource globs: `bundle.resources` enumerates `src/` explicitly — `"../src/*"` plus one `"../src/<subdir>/**/*"` entry per subdirectory (currently only `modules`) — instead of a single `"../src/**/*"` sweep. A recursive `**` under `src/` also matches `src/daemon/`, which is gitignored and holds developer-only logs with absolute local paths; a blanket glob shipped those straight into the installer (see `73c35ec`). Adding a new `src/<subdir>/` needs its own `"../src/<subdir>/**/*"` entry here.
+- `package.json` обязан быть в `bundle.resources`: `"type": "module"` живёт
+  в нём, а Node ищет ближайший package.json вверх от `_up_/src/index.js`.
+  Без него установленное приложение читает `src/*.js` как CommonJS и падает
+  на первом `import` — молча, потому что `initModules()` глотает исключения.
+  Охраняется тестом в `test/tauri-config.test.js`.
 - The full `bundle.resources` list (Node source + `node_modules`) lives in the base
   `tauri.conf.json`, so a plain `npx tauri build` (without `scripts/tauri-wrapper.js`)
   still produces a complete bundle. `dev` runs overlay `tauri.dev.conf.json` whose
