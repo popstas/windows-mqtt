@@ -1,4 +1,4 @@
-const config = require("./config");
+const { config } = require("./config");
 const { load: loadModule, isEnabled: isModuleEnabled } = require('./modules');
 const os = require("os");
 const fs = require("fs");

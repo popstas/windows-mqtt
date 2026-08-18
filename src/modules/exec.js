@@ -1,5 +1,5 @@
 const exec = require('child_process').exec;
-const globalConfig = require('../config.js');
+const { config: globalConfig } = require('../config.js');
 
 module.exports = async (mqtt, config, log) => {
 

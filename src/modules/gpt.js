@@ -1,4 +1,4 @@
-const globalConfig = require('../config.js');
+const { config: globalConfig } = require('../config.js');
 const fs = require('fs');
 
 module.exports = async (mqtt, config, log) => {

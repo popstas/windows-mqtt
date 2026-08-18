@@ -10,17 +10,21 @@
  * наследуется от windows нарочно, и именно это здесь и проверяется — теперь
  * единственный сторож кнопки перезагрузки на панели.
  *
- * getModulesEnabled()/initModules() читают глобальный src/config.js, а не
- * инжектируемый параметр, поэтому каждый тест подставляет свой config.yml
- * через переменную CONFIG и перечитывает src/config.js и src/helpers.js
- * заново через require.cache — иначе все тесты в файле видели бы конфиг,
- * загруженный первым.
+ * getModulesEnabled()/initModules() читают общий объект конфига из
+ * src/config.js, а не инжектируемый параметр, поэтому каждый тест
+ * подставляет свой config.yml через переменную CONFIG и вызывает
+ * setConfig(reload()) — иначе все тесты в файле видели бы конфиг,
+ * загруженный первым. setConfig меняет объект НА МЕСТЕ: helpers.js
+ * захватил ссылку на него при загрузке, и подмена ссылки до него бы
+ * не доехала.
  */
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const helpers = require('../src/helpers');
+const { config, reload, setConfig } = require('../src/config');
 
 function loadHelpersWithConfig(yamlLines) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wm-power-gate-'));
@@ -29,10 +33,7 @@ function loadHelpersWithConfig(yamlLines) {
 
   const prevConfig = process.env.CONFIG;
   process.env.CONFIG = configPath;
-  delete require.cache[require.resolve('../src/config')];
-  delete require.cache[require.resolve('../src/helpers')];
-  const helpers = require('../src/helpers');
-  const config = require('../src/config');
+  setConfig(reload());
   if (prevConfig === undefined) delete process.env.CONFIG;
   else process.env.CONFIG = prevConfig;
 

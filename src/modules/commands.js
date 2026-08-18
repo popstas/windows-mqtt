@@ -1,7 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const globalConfig = require('../config.js');
+const { config: globalConfig } = require('../config.js');
 const yaml = require('js-yaml');
 const { resolveUserDataFile, resolveAppFile } = require('../paths');
 

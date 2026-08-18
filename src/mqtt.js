@@ -1,5 +1,5 @@
 const mqtt = require('mqtt');
-const config = require('./config');
+const { config } = require('./config');
 
 function mqttInit({onConnect}) {
   console.log('Connecting to MQTT...');

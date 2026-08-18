@@ -1,6 +1,6 @@
 const isTauriBridge = process.env.TAURI_BRIDGE === '1';
 const { mqttInit } = require(isTauriBridge ? './mqtt-bridge' : './mqtt');
-const config = require('./config');
+const { config } = require('./config');
 const {log, getModulesEnabled, initModules} = require("./helpers");
 const stdinHandler = require('./stdin-handler');
 const { buildTrayRelayActions } = require('./tray-relay');

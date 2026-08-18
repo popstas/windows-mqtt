@@ -3,16 +3,14 @@ const { usb } = require('usb');
 const debounce = require('lodash.debounce');
 const robot = require('@hurdlegroup/robotjs');
 const { listPortNames, formatMidiPortHelp, shouldLogOnce } = require('./midi-utils');
+const { reload } = require('../config.js');
 
 const maxRangeDelay = 200; // for ranges should be at least 2 events per maxRangeDelay
 const minChanges = 3; // for avoid false positives
 
 // loads config without cache
 function getConfig() {
-  const configPath = '../config.js';
-  delete(require.cache[require.resolve(configPath)]);
-  const config = require(configPath);
-  return config.modules.midi;
+  return reload().modules.midi;
 }
 
 module.exports = async (mqtt, config, log) => {
