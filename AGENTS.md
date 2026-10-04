@@ -205,8 +205,16 @@ if the host shows up in a bundle again, it is a new one, not this old one.
   Merge Patch / RFC 7396 — arrays are replaced, not appended). `dev` runs from the
   working tree and reads `node_modules` in place, so copying its thousands of files
   into the bundle would only cost time. `scripts/tauri-wrapper.js` injects
-  `--config src-tauri/tauri.dev.conf.json` only for `dev`. (Until the
-  `windows11-manager` dependency was dropped, the overlay also kept the globber out
+  `--config src-tauri/tauri.dev.conf.json` for `dev`. For `build` it injects
+  a second, generated overlay — `src-tauri/tauri.build.conf.json` (gitignored,
+  written by `scripts/prune-resources.js`) — that replaces `../node_modules/**/*`
+  with one `../node_modules/<pkg>/**/*` glob per production package. Tauri v2 has
+  no exclusion globs, and the blanket sweep shipped devDependencies
+  (`@tauri-apps/cli`, `typescript`, `@types/*` — ~65 of 149 MB) to every user.
+  The package list comes from `package-lock.json` (top-level entries without
+  `dev: true` that are installed), so a plain `npx tauri build` bypassing the
+  wrapper still works but produces the fat bundle. (Until the
+  `windows11-manager` dependency was dropped, the dev overlay also kept the globber out
   of a junction to a 5.9 GB sibling repo — that walk was slow and intermittently
   failed when a background git op locked an object.)
 - A new frontend page needs three edits, not one: a `copyFileSync` line in
