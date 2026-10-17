@@ -1,3 +1,39 @@
+# [1.3.0](https://github.com/popstas/windows-mqtt/compare/v1.1.1...v1.3.0) (2026-10-18)
+
+**Брокер можно звать по `mqtts://`.** Машина вне дома ходит к брокеру,
+выставленному наружу только через TLS, без VPN: `mqtt.host` принимает
+`mqtts://host:8883`. Голое имя работает как раньше, открытым текстом.
+
+1.2.0 отдельно не выпускался: его содержимое — перевод на ES-модули, раздел ниже —
+впервые уезжает установщиком в этой версии.
+
+**Highlights**
+
+- `mqtt.host` — голое `имя[:порт]`, `mqtt://…` или `mqtts://…`. Порт из адреса
+  главнее `mqtt.port`; без обоих — 1883, у mqtts — 8883. `mqtt.port` по-прежнему
+  может быть и числом, и строкой (`'1883'`). Непонятая форма — ошибка конфига,
+  а не соединение «как вышло».
+- Новый ключ `mqtt.ca` — PEM-файл корня (относительный путь — от каталога
+  `config.yml`); задан — доверяем только ему. Без него оба клиента берут набор
+  корней Mozilla: мост Tauri — `webpki-roots`, а не системное хранилище Windows,
+  куда ISRG Root X1 докладывается лениво.
+- В логе — `scheme://host:port` без пароля, и отказ до первого соединения (TLS,
+  DNS, авторизация) теперь виден.
+- Правый клик по трею больше не открывает два меню (tauri 2.11).
+- Вкладки снова получают свой WebSocket-сервер, потерянный при переводе на ES-модули.
+
+
+
+### Features
+
+* **mqtt:** поддержка mqtts:// и ключа mqtt.ca в обоих клиентах ([aa26ef7](https://github.com/popstas/windows-mqtt/commit/aa26ef7)), closes [#19](https://github.com/popstas/windows-mqtt/issues/19)
+
+### Bug Fixes
+
+* **mqtt:** голый host:port и числовая строка в mqtt.port, как у соседей ([dde7086](https://github.com/popstas/windows-mqtt/commit/dde7086))
+* **tray:** обновить tauri до 2.11 — правый клик больше не открывает два меню ([636ae93](https://github.com/popstas/windows-mqtt/commit/636ae93))
+* **tabs:** вернуть рабочий WebSocket-сервер после ESM-перевода импорта ([dadb602](https://github.com/popstas/windows-mqtt/commit/dadb602)), closes [#17](https://github.com/popstas/windows-mqtt/issues/17)
+
 # [1.2.0](https://github.com/popstas/windows-mqtt/compare/v1.1.1...v1.2.0) (2026-08-18)
 
 **Проект переведён на ES-модули.** Снаружи не изменилось ничего — ни одной новой
