@@ -13,8 +13,17 @@ monitor:
   # topic: 'home/room/pc/sysstats'   # override the publish topic
   # path: 'data/sysstats.jsonl'      # override the on-disk stats file
 mqtt:
+  # Broker address: a bare host (plain MQTT), mqtt://host[:port] or
+  # mqtts://host[:port] (MQTT over TLS). Default port: 1883 for mqtt, 8883 for
+  # mqtts. A port in the address wins over `port` below, and `port` wins over
+  # the scheme default - so drop `port: 1883` when switching to mqtts://host,
+  # or TLS will be attempted on 1883.
   host: 'mqtt.example.com'
+  # host: 'mqtts://mqtt.example.com:8883'
   port: 1883
+  # mqtts only: PEM file with the CA to trust INSTEAD of the bundled public
+  # roots (Let's Encrypt etc. work without it). Relative to this file's folder.
+  # ca: 'C:/path/to/ca.pem'
   user: 'your_username'
   password: 'your_password'
   base: 'home/room/pc'

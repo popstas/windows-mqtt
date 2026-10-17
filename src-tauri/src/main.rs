@@ -3,7 +3,7 @@
 mod mqtt_bridge;
 
 use chrono::{Local, NaiveDate, NaiveDateTime, TimeZone};
-use mqtt_bridge::{MqttBridge, MqttConfig, MqttEvent};
+use mqtt_bridge::{parse_broker, tls_roots_for, MqttBridge, MqttConfig, MqttEvent};
 use rumqttc::QoS;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Arc, time::Duration};
@@ -197,12 +197,31 @@ fn read_mqtt_config(config_path: &PathBuf) -> Result<MqttConfig, String> {
     let host = mqtt
         .get("host")
         .and_then(|v| v.as_str())
-        .unwrap_or("localhost")
-        .to_string();
-    let port = mqtt
-        .get("port")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(1883) as u16;
+        .unwrap_or("localhost");
+    // Прежний `as_u64().unwrap_or(1883) as u16` молча обрезал 99999 до 34463
+    // и подменял нечисловой порт умолчанием — теперь это ошибка конфига.
+    let port = match mqtt.get("port") {
+        None | Some(serde_yaml::Value::Null) => None,
+        Some(v) => Some(
+            v.as_u64()
+                .ok_or_else(|| "mqtt.port must be a number".to_string())?,
+        ),
+    };
+    let broker = parse_broker(host, port)?;
+    // `ca` — путь к PEM; относительный считается от каталога config.yml, как и
+    // в node-клиенте: рабочие каталоги у Tauri и его node-ребёнка разные.
+    let ca = mqtt
+        .get("ca")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| {
+            let ca = PathBuf::from(s.trim());
+            match config_path.parent() {
+                Some(dir) if ca.is_relative() => dir.join(ca),
+                _ => ca,
+            }
+        });
+    let tls = tls_roots_for(broker.tls, ca.as_deref())?;
     let username = mqtt.get("user").and_then(|v| v.as_str()).map(String::from);
     let password = mqtt
         .get("password")
@@ -217,8 +236,9 @@ fn read_mqtt_config(config_path: &PathBuf) -> Result<MqttConfig, String> {
     );
 
     Ok(MqttConfig {
-        host,
-        port,
+        host: broker.host,
+        port: broker.port,
+        tls,
         username,
         password,
         client_id,
@@ -349,6 +369,7 @@ fn spawn_bridge_to_js_writer(
     app: tauri::AppHandle,
     mut event_rx: tokio::sync::mpsc::Receiver<MqttEvent>,
     connected: Arc<std::sync::atomic::AtomicBool>,
+    endpoint: String,
 ) {
     tauri::async_runtime::spawn(async move {
         while let Some(event) = event_rx.recv().await {
@@ -359,7 +380,7 @@ fn spawn_bridge_to_js_writer(
                     let _ = app.emit(
                         "server-log",
                         LogPayload {
-                            message: "MQTT connected (Rust bridge)".into(),
+                            message: format!("MQTT connected to {endpoint} (Rust bridge)"),
                             level: "info".into(),
                         },
                     );
@@ -370,11 +391,23 @@ fn spawn_bridge_to_js_writer(
                     let _ = app.emit(
                         "server-log",
                         LogPayload {
-                            message: format!("MQTT disconnected: {}", reason),
+                            message: format!("MQTT disconnected from {endpoint}: {reason}"),
                             level: "warn".into(),
                         },
                     );
                     IpcToJs::Disconnected { reason }
+                }
+                // Только в лог: node-ребёнок и так не видел связи, и сообщать
+                // ему «отключено» было бы неправдой.
+                MqttEvent::ConnectFailed(reason) => {
+                    let _ = app.emit(
+                        "server-log",
+                        LogPayload {
+                            message: format!("MQTT cannot connect to {endpoint}: {reason}"),
+                            level: "warn".into(),
+                        },
+                    );
+                    continue;
                 }
             };
 
@@ -967,15 +1000,20 @@ fn main() {
                             level: "error".into(),
                         },
                     );
+                    // Откат — всегда голый localhost:1883, никогда не TLS и не
+                    // «почти тот» адрес из негодного mqtt.host.
                     MqttConfig {
                         host: "localhost".into(),
                         port: 1883,
+                        tls: None,
                         username: None,
                         password: None,
                         client_id: "windows-mqtt-unconfigured".into(),
                     }
                 });
 
+            let endpoint = mqtt_config.endpoint();
+            eprintln!("MQTT broker: {endpoint}");
             let (bridge, event_rx) = MqttBridge::new(&mqtt_config);
             let bridge = Arc::new(bridge);
             app.manage(BridgeState(bridge.clone()));
@@ -983,7 +1021,7 @@ fn main() {
             // Forward MQTT events to JS child
             let connected = Arc::new(std::sync::atomic::AtomicBool::new(false));
             app.manage(MqttConnected(connected.clone()));
-            spawn_bridge_to_js_writer(app_handle.clone(), event_rx, connected.clone());
+            spawn_bridge_to_js_writer(app_handle.clone(), event_rx, connected.clone(), endpoint);
 
             // Start the Node server immediately — do not depend on the hidden
             // webview invoking start_mqtt_server.
@@ -1209,7 +1247,8 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{describe_child_exit, find_app_root, version_item_label};
+    use super::{describe_child_exit, find_app_root, read_mqtt_config, version_item_label};
+    use crate::mqtt_bridge::TlsRoots;
     use chrono::NaiveDate;
 
     fn dt(y: i32, m: u32, d: u32, h: u32, min: u32) -> chrono::NaiveDateTime {
@@ -1291,5 +1330,61 @@ mod tests {
     fn returns_none_when_no_candidate_matches() {
         let missing = std::env::temp_dir().join("wmqtt-approot-none");
         assert_eq!(find_app_root(&[missing]), None);
+    }
+    // --- mqtt-секция config.yml ---
+
+    /// Каталог с config.yml (и, по желанию, ca.pem рядом) — свой на каждый тест.
+    fn mqtt_config_dir(name: &str, yaml: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("wmqtt-cfg-{}-{name}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("config.yml"), yaml).unwrap();
+        dir
+    }
+
+    #[test]
+    fn old_plain_config_keeps_working() {
+        let dir = mqtt_config_dir("plain", "mqtt:\n  host: broker.example\n  port: 1883\n");
+        let cfg = read_mqtt_config(&dir.join("config.yml"));
+        std::fs::remove_dir_all(&dir).ok();
+        let cfg = cfg.unwrap();
+        assert_eq!((cfg.host.as_str(), cfg.port, &cfg.tls), ("broker.example", 1883, &None));
+        assert_eq!(cfg.endpoint(), "mqtt://broker.example:1883");
+    }
+
+    #[test]
+    fn mqtts_url_without_ca_uses_bundled_roots() {
+        let dir = mqtt_config_dir("tls", "mqtt:\n  host: mqtts://broker.example\n");
+        let cfg = read_mqtt_config(&dir.join("config.yml"));
+        std::fs::remove_dir_all(&dir).ok();
+        let cfg = cfg.unwrap();
+        assert_eq!(cfg.endpoint(), "mqtts://broker.example:8883");
+        assert_eq!(cfg.tls, Some(TlsRoots::Webpki));
+    }
+
+    #[test]
+    fn relative_ca_is_taken_from_the_config_dir() {
+        let pem = b"-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n";
+        let dir = mqtt_config_dir("ca", "mqtt:\n  host: mqtts://broker.example\n  ca: ca.pem\n");
+        std::fs::write(dir.join("ca.pem"), pem).unwrap();
+        let cfg = read_mqtt_config(&dir.join("config.yml"));
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(cfg.unwrap().tls, Some(TlsRoots::Ca(pem.to_vec())));
+    }
+
+    #[test]
+    fn invalid_mqtt_host_is_a_config_error() {
+        let dir = mqtt_config_dir("bad-host", "mqtt:\n  host: ws://broker.example\n");
+        let cfg = read_mqtt_config(&dir.join("config.yml"));
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(cfg.is_err());
+    }
+
+    #[test]
+    fn non_numeric_port_is_a_config_error() {
+        // Раньше нечисловой порт молча становился 1883.
+        let dir = mqtt_config_dir("bad-port", "mqtt:\n  host: broker.example\n  port: abc\n");
+        let cfg = read_mqtt_config(&dir.join("config.yml"));
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(cfg.is_err());
     }
 }

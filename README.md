@@ -142,6 +142,7 @@ It's using module, https://github.com/popstas/windows11-manager, Vitrual desktop
 
 ## Install
 1. Copy [config.example.yml](config.example.yml) to `config.yml` and update MQTT credentials and module settings for your environment.
+   `mqtt.host` takes a bare host (plain MQTT), `mqtt://host[:port]` or `mqtts://host[:port]` for MQTT over TLS (default port 8883). Public certificates such as Let's Encrypt work out of the box; for a private CA set `mqtt.ca` to a PEM file.
 
 2. This script will install Windows service "windows-mqtt":
 ``` sh
