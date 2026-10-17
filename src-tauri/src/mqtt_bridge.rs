@@ -76,7 +76,7 @@ fn valid_port(port: u64) -> Option<u16> {
 /// (`mqtts://user:pass@h`) мог стоять пароль, а ошибка уходит в лог.
 pub fn parse_broker(raw: &str, port_key: Option<u64>) -> Result<Broker, String> {
     let raw = raw.trim();
-    let (tls, authority, has_scheme) = match raw.split_once("://") {
+    let (tls, authority) = match raw.split_once("://") {
         Some((scheme, rest)) => {
             let tls = match scheme.to_ascii_lowercase().as_str() {
                 "mqtt" => false,
@@ -87,9 +87,10 @@ pub fn parse_broker(raw: &str, port_key: Option<u64>) -> Result<Broker, String> 
                     ))
                 }
             };
-            (tls, rest.strip_suffix('/').unwrap_or(rest), true)
+            (tls, rest.strip_suffix('/').unwrap_or(rest))
         }
-        None => (false, raw, false),
+        // Голый `h` или `h:port` — прежний mqtt, как и у соседей по связке.
+        None => (false, raw),
     };
 
     if authority.contains('@') {
@@ -107,9 +108,6 @@ pub fn parse_broker(raw: &str, port_key: Option<u64>) -> Result<Broker, String> 
     }
 
     let (host, url_port) = match authority.split_once(':') {
-        Some(_) if !has_scheme => {
-            return Err("mqtt.host: a port needs a scheme, e.g. mqtt://host:1884".into())
-        }
         Some((host, port)) => {
             let port = (!port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()))
                 .then(|| port.parse::<u64>().ok())
@@ -414,6 +412,14 @@ mod tests {
     }
 
     #[test]
+    fn bare_host_with_port_is_plain_mqtt() {
+        // Так же разбирают ccfzf-picker и windows11-manager: голый `h:port`
+        // — прежний mqtt, порт из адреса бьёт ключ.
+        assert_eq!(ok("broker.example:1884", None), broker("broker.example", 1884, false));
+        assert_eq!(ok("broker.example:1884", Some(1883)), broker("broker.example", 1884, false));
+    }
+
+    #[test]
     fn mqtts_defaults_to_8883() {
         assert_eq!(ok("mqtts://broker.example", None), broker("broker.example", 8883, true));
     }
@@ -466,7 +472,8 @@ mod tests {
             "mqtts://:8883",
             "",
             "   ",
-            "broker.example:1884",
+            "broker.example:",
+            "broker.example:99999",
             "broker.example/",
             "user@broker.example",
             "mqtts://broker example",

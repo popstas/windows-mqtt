@@ -24,6 +24,16 @@ test('mqtt:// без порта и с портом', () => {
   assert.deepStrictEqual(parseBroker('mqtt://broker.example:1884'), broker('broker.example', 1884, false));
 });
 
+test('голый host:port — прежний mqtt, порт из адреса (как у ccfzf-picker и windows11-manager)', () => {
+  assert.deepStrictEqual(parseBroker('broker.example:1884'), broker('broker.example', 1884, false));
+  assert.deepStrictEqual(parseBroker('broker.example:1884', 1883), broker('broker.example', 1884, false));
+});
+
+test("числовая строка в port (`port: '1883'`) работает как прежде", () => {
+  assert.deepStrictEqual(parseBroker('broker.example', '1883'), broker('broker.example', 1883, false));
+  assert.deepStrictEqual(parseBroker('mqtts://broker.example', ' 8884 '), broker('broker.example', 8884, true));
+});
+
 test('mqtts:// по умолчанию на 8883', () => {
   assert.deepStrictEqual(parseBroker('mqtts://broker.example'), broker('broker.example', 8883, true));
 });
@@ -67,7 +77,8 @@ test('негодные адреса отвергаются', () => {
     'mqtts://:8883',
     '',
     '   ',
-    'broker.example:1884',
+    'broker.example:',
+    'broker.example:99999',
     'broker.example/',
     'user@broker.example',
     'mqtts://broker example',
@@ -81,6 +92,9 @@ test('нечисловой хост и негодный ключ port отвер
   assert.throws(() => parseBroker('broker.example', 0));
   assert.throws(() => parseBroker('broker.example', 70000));
   assert.throws(() => parseBroker('broker.example', 'abc'));
+  for (const bad of ['', '0', '70000', '-1', '18 83', '1883.5', 1883.5, -1, [1883], true]) {
+    assert.throws(() => parseBroker('broker.example', bad), undefined, `port ${JSON.stringify(bad)} должен быть отвергнут`);
+  }
 });
 
 test('ошибка не цитирует userinfo — там мог стоять пароль', () => {

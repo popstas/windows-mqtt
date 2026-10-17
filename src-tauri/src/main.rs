@@ -177,6 +177,30 @@ fn parse_stderr_log(line: &str) -> (&'static str, String) {
 
 // --- Read MQTT config from config.yml ---
 
+/// Ключ `mqtt.port`: число или числовая строка (`port: '1883'` в живых
+/// конфигах обязан пережить обновление). Прежний `as_u64().unwrap_or(1883) as
+/// u16` молча обрезал 99999 до 34463 и подменял нечисловой порт умолчанием —
+/// теперь это ошибка конфига; диапазон проверяет `parse_broker`.
+fn port_key(value: Option<&serde_yaml::Value>) -> Result<Option<u64>, String> {
+    use serde_yaml::Value;
+    match value {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Number(n)) => n
+            .as_u64()
+            .map(Some)
+            .ok_or_else(|| format!("mqtt.port: {n} is not a port number")),
+        Some(Value::String(s)) => {
+            let t = s.trim();
+            (!t.is_empty() && t.bytes().all(|b| b.is_ascii_digit()))
+                .then(|| t.parse::<u64>().ok())
+                .flatten()
+                .map(Some)
+                .ok_or_else(|| format!("mqtt.port: '{s}' is not a port number"))
+        }
+        Some(_) => Err("mqtt.port must be a number".into()),
+    }
+}
+
 fn read_mqtt_config(config_path: &PathBuf) -> Result<MqttConfig, String> {
     let content = std::fs::read_to_string(config_path).map_err(|e| {
         format!(
@@ -198,15 +222,7 @@ fn read_mqtt_config(config_path: &PathBuf) -> Result<MqttConfig, String> {
         .get("host")
         .and_then(|v| v.as_str())
         .unwrap_or("localhost");
-    // Прежний `as_u64().unwrap_or(1883) as u16` молча обрезал 99999 до 34463
-    // и подменял нечисловой порт умолчанием — теперь это ошибка конфига.
-    let port = match mqtt.get("port") {
-        None | Some(serde_yaml::Value::Null) => None,
-        Some(v) => Some(
-            v.as_u64()
-                .ok_or_else(|| "mqtt.port must be a number".to_string())?,
-        ),
-    };
+    let port = port_key(mqtt.get("port"))?;
     let broker = parse_broker(host, port)?;
     // `ca` — путь к PEM; относительный считается от каталога config.yml, как и
     // в node-клиенте: рабочие каталоги у Tauri и его node-ребёнка разные.
@@ -1386,5 +1402,39 @@ mod tests {
         let cfg = read_mqtt_config(&dir.join("config.yml"));
         std::fs::remove_dir_all(&dir).ok();
         assert!(cfg.is_err());
+    }
+
+    #[test]
+    fn quoted_numeric_port_keeps_working() {
+        // `port: '1883'` в живых конфигах обязан пережить обновление.
+        let dir = mqtt_config_dir("str-port", "mqtt:\n  host: broker.example\n  port: ' 1884 '\n");
+        let cfg = read_mqtt_config(&dir.join("config.yml"));
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(cfg.unwrap().port, 1884);
+    }
+
+    #[test]
+    fn port_key_parsing() {
+        use super::port_key;
+        use serde_yaml::Value;
+        let yaml = |s: &str| serde_yaml::from_str::<Value>(s).unwrap();
+        assert_eq!(port_key(None), Ok(None));
+        assert_eq!(port_key(Some(&Value::Null)), Ok(None));
+        assert_eq!(port_key(Some(&yaml("1883"))), Ok(Some(1883)));
+        assert_eq!(port_key(Some(&yaml("'8883'"))), Ok(Some(8883)));
+        for bad in ["abc", "''", "'-1'", "-1", "1883.5", "'18 83'", "[1883]"] {
+            assert!(port_key(Some(&yaml(bad))).is_err(), "{bad} должен быть отвергнут");
+        }
+    }
+
+    #[test]
+    fn quoted_out_of_range_port_is_a_config_error() {
+        for port in ["'0'", "'70000'", "0", "70000"] {
+            let yaml = format!("mqtt:\n  host: broker.example\n  port: {port}\n");
+            let dir = mqtt_config_dir(&format!("range-{}", port.trim_matches('\'')), &yaml);
+            let cfg = read_mqtt_config(&dir.join("config.yml"));
+            std::fs::remove_dir_all(&dir).ok();
+            assert!(cfg.is_err(), "port: {port} должен быть отвергнут");
+        }
     }
 }

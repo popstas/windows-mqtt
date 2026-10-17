@@ -28,6 +28,22 @@ function validPort(port) {
 }
 
 /**
+ * Ключ `mqtt.port`: число или числовая строка — `port: '1883'` в живых
+ * конфигах обязан пережить обновление. Всё прочее и порт вне 1..65535 — ошибка.
+ * @param {unknown} portKey
+ * @returns {number}
+ */
+function portFromKey(portKey) {
+  let port = portKey;
+  if (typeof portKey === 'string') {
+    const text = portKey.trim();
+    port = /^[0-9]+$/.test(text) ? Number(text) : NaN;
+  }
+  if (!validPort(port)) throw new Error(`mqtt.port: '${portKey}' is not a port number in 1..65535`);
+  return /** @type {number} */ (port);
+}
+
+/**
  * Разобрать `mqtt.host` и `mqtt.port`. Бросает Error с понятным текстом.
  *
  * Текст ошибки не цитирует исходную строку целиком: в userinfo
@@ -43,8 +59,7 @@ function parseBroker(raw, portKey) {
 
   let tls = false;
   let authority = trimmed;
-  const hasScheme = trimmed.includes('://');
-  if (hasScheme) {
+  if (trimmed.includes('://')) {
     const idx = trimmed.indexOf('://');
     const scheme = trimmed.slice(0, idx);
     const rest = trimmed.slice(idx + 3);
@@ -65,11 +80,11 @@ function parseBroker(raw, portKey) {
     throw new Error(`mqtt.host: unexpected '${bad[0]}' — the address takes only a host and a port`);
   }
 
+  // Голый `h` или `h:port` — прежний mqtt, как и у соседей по связке.
   let host = authority;
   let urlPort;
   const colon = authority.indexOf(':');
   if (colon !== -1) {
-    if (!hasScheme) throw new Error('mqtt.host: a port needs a scheme, e.g. mqtt://host:1884');
     host = authority.slice(0, colon);
     const portText = authority.slice(colon + 1);
     const port = /^[0-9]+$/.test(portText) ? Number(portText) : NaN;
@@ -82,8 +97,7 @@ function parseBroker(raw, portKey) {
   if (urlPort !== undefined) {
     port = urlPort;
   } else if (portKey !== undefined && portKey !== null) {
-    if (!validPort(portKey)) throw new Error(`mqtt.port: ${portKey} is out of range 1..65535`);
-    port = /** @type {number} */ (portKey);
+    port = portFromKey(portKey);
   } else {
     port = tls ? TLS_PORT : PLAIN_PORT;
   }
