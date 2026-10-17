@@ -140,7 +140,8 @@ are baked in at build time).
    Miss `Cargo.toml` and you ship `windows-mqtt_1.0.0_x64-setup.exe` whose
    binary reports `0.0.1` — the installer name and the exe disagree, and
    nothing warns you. This happened in v1.0.0.
-3. **Changelog**: `npm run changelog` (conventional-changelog, angular preset,
+3. **Changelog**: `npm run changelog` (conventional-changelog via `npx`, pinned
+   `conventional-changelog-cli@5.0.0` — nothing to install globally; angular preset,
    `-r 0` = regenerate all). It titles the section from `package.json`. Then
    hand-write a short highlights section on top — the raw commit list alone is
    poor release notes.
