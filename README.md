@@ -154,7 +154,7 @@ npm run install-windows
 
 3. For TTS setup you should install `gTTS` (Python) and `mpg123`, see [popstas/mqtt2tts](https://github.com/popstas/mqtt2tts#requirements).
 
-4. When building desktop apps, make sure `config.yml` is present in the project root so the tray apps can read it at runtime. It is **not** bundled into the installer (it's gitignored and holds real credentials — see "Never ship secrets in the installer" in AGENTS.md); both Electron and Tauri builds read it from disk next to the running app instead.
+4. When building desktop apps, make sure `config.yml` is present in the project root so the tray apps can read it at runtime. It is **not** bundled into the installer (it's gitignored and holds real credentials — see "Never ship secrets in the installer" in AGENTS.md); the Tauri app reads it from disk next to the running app instead.
 
 ## Extend
 1. Copy [src/modules/_module.js](src/modules/_module.js) to `src/modules/yourModuleName.js`
@@ -177,22 +177,16 @@ return {
 }
 ```
 
-## Desktop tray apps
-The project includes both Electron and Tauri tray launchers. Both keep the main window hidden while exposing a tray icon for quick access to controls, but they differ in runtime requirements and packaging outputs.
+## Desktop tray app (Tauri v2)
+The desktop app is a Tauri v2 tray launcher: it keeps the main window hidden and exposes a tray icon for quick access to controls, while the Node.js server runs as its child process.
 
-### Electron
-- Start the Electron tray app with `npm run start-electron` once dependencies are installed.
-- Portable builds are produced with `npm run build:dist` (Electron Builder), which places artifacts under `dist/` (for example, a portable `.exe` when building on Windows).
-- Electron uses the HTML UI from `index.html` for its tray popover and ships assets from the `assets/` folder via electron-builder configuration.
-
-### Tauri (v2)
 - Install the Rust toolchain (for example, `curl https://sh.rustup.rs -sSf | sh` on Unix-like systems or the Rust installer on Windows) and install the Tauri CLI (`npm install -g @tauri-apps/cli` or use the local dependency via `npm run start-tauri`).
 - Requires `libwebkit2gtk-4.1-dev` on Linux (Ubuntu 24.04+ ships this; older `4.0` is not supported).
 - Run the Tauri development tray with `npm run start-tauri` (or `cargo tauri dev` from `src-tauri/`) to launch the native system tray while keeping the window hidden unless explicitly shown.
-- Build release bundles with `npm run build:tauri`; Tauri outputs installers and executables under `src-tauri/target/release/bundle/` (for example, `.msi` and `.exe` files on Windows).
+- Build release bundles with `npm run build` (every bundle type) or `npm run build-installer` (NSIS installer only); Tauri outputs installers and executables under `src-tauri/target/release/bundle/` (for example, `.msi` and `.exe` files on Windows).
 - Extra files are bundled from `src-tauri/tauri.conf.json` under `bundle.resources`. The current configuration includes `config.example.yml`, `commands.example.yml`, `bin/*`, the `src/` module tree, `assets/`, and `node_modules/` (`npm run build` narrows it to production dependencies via a generated overlay, see `scripts/prune-resources.js`) - deliberately **not** `config.yml`, `commands.yml`, or `data/**`, which are gitignored and hold real credentials (see "Never ship secrets in the installer" in AGENTS.md). Add new paths there to ship additional assets with the Tauri build, and make sure any addition can't sweep in gitignored files.
 - Shell permissions (spawning/killing the Node server) are defined in `src-tauri/capabilities/default.json`.
-- Tauri uses the native system tray instead of the custom HTML popover used by Electron, so tray menus and balloon behaviors follow the host OS conventions.
+- The app uses the native system tray, so tray menus and balloon behaviors follow the host OS conventions.
 - The tray menu opens with a disabled `vX.Y.Z · 05:29` header - the version plus the build time, so a deploy that replaces the binary in place can be checked from the tray alone. A build made on an earlier day carries its date too (`vX.Y.Z · 2026-08-15 23:05`); a build made with `WINDOWS_MQTT_RELEASE=1` shows the version alone. The stamp is baked in by `src-tauri/build.rs`, which lists every build input living outside the crate (`../src`, `../frontend`) in its `rerun-if-changed` set - miss one and the menu keeps showing the previous deploy's time. `Settings -> About` opens a small About window (`about.html`) with the version, the GitHub link and the license. Both read the version from `tauri.conf.json` via `app.package_info()`, so it always matches the installer.
 - Frontend pages are plain HTML files in the repo root, copied into `frontend/` by `scripts/prepare-frontend.js` before every dev run and build. A new page needs a copy line there, an entry in `app.windows` in `tauri.conf.json`, and its window label in `src-tauri/capabilities/default.json` (otherwise its webview may not call `invoke`).
 
