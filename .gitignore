@@ -11,6 +11,7 @@ TEMP/
 bin/*
 !bin/.gitkeep
 audio-watcher/target/
+src-tauri/tauri.build.conf.json
 
 # brainstorming visual companion
 .superpowers/

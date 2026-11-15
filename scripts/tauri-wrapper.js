@@ -1,6 +1,7 @@
 import { spawnSync } from 'child_process';
 import path from 'path';
 import { build as buildAudioWatcher } from './build-audio-watcher.js';
+import { writeOverlay } from './prune-resources.js';
 
 const args = process.argv.slice(2);
 if (args.length === 0) {
@@ -12,15 +13,21 @@ const projectRoot = path.resolve(import.meta.dirname, '..');
 
 // The full `resources` list (incl. `../node_modules/**/*`) lives in the base
 // tauri.conf.json so a plain `npx tauri build` still produces a complete bundle.
-// For `dev` we overlay tauri.dev.conf.json, whose empty `resources` array
-// REPLACES the base list (Tauri v2 `--config` merge replaces arrays rather than
-// appending): `dev` runs from the working tree and reads node_modules in place,
-// so copying its thousands of files into the bundle would only cost time.
-// Path is relative to cwd (projectRoot) to avoid spaces.
+// Both subcommands overlay it; an overlay's `resources` array REPLACES the base
+// list (Tauri v2 `--config` merge replaces arrays rather than appending).
+// - `dev`: tauri.dev.conf.json empties it — `dev` runs from the working tree
+//   and reads node_modules in place, so copying its thousands of files into the
+//   bundle would only cost time.
+// - `build`: a generated overlay narrows node_modules to production packages
+//   (see prune-resources.js), keeping devDependencies out of the installer.
+// Paths are relative to cwd (projectRoot) to avoid spaces.
 const isBuild = args[0] === 'build';
 const isDev = args[0] === 'dev';
 if (isDev) {
   args.push('--config', 'src-tauri/tauri.dev.conf.json');
+}
+if (isBuild) {
+  args.push('--config', writeOverlay());
 }
 
 function runTauri() {
